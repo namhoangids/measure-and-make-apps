@@ -249,6 +249,13 @@ input,select,textarea{font:inherit;color:inherit}
 .vcard b{font-family:"Barlow Condensed",sans-serif;font-size:15px}
 .vcard .m{font-size:11.5px;color:var(--ink-3);margin-top:3px}
 
+.prjgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.prjcard{border:1px solid var(--line-2);background:var(--surface);padding:18px 16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;font:inherit;color:inherit}
+.prjcard:hover{border-color:var(--accent)}
+.prjcard b{font-family:"Barlow Condensed",sans-serif;font-size:16px}
+.prjcard .m{font-size:11.5px;color:var(--ink-3)}
+.prjcard-new{align-items:center;justify-content:center;color:var(--accent);font-weight:600;border-style:dashed}
+
 /* item detail */
 .dhead{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
 .dhead .bc{font-size:12px;color:var(--ink-3)}
@@ -449,7 +456,6 @@ const DEFAULT_ITEMS = [
 ];
 
 // ── state ──────────────────────────────────────────────────────
-const KEY = "ffe_hado_toto_v1";
 const DEFAULT_VENDORS = ["TOTO","Flaminia","Zavak"];
 // Thư viện vật tư (mã cố định → tự điền, dùng lại nhiều dự án): dựng sẵn từ các mã model đã xuất
 // hiện trong dữ liệu gốc (TOTO...) — mỗi model chỉ giữ 1 dòng, để lần đầu mở app đã có ví dụ thật
@@ -501,8 +507,11 @@ const db = firebase.firestore();
 // sửa lại hàng chục chỗ trong code đang dùng "field||undefined" để biểu diễn "chưa có giá trị".
 db.settings({ ignoreUndefinedProperties: true });
 const fbStorage = firebase.storage();
-const PROJECT_DOC = db.collection("ffe_projects").doc("hado-charm-villas");
+function projectDocRef(id){ return db.collection("ffe_projects").doc(id); }
 
+// ── Nhiều dự án: danh sách dự án + dự án đang mở ──
+let currentProjectId = null, currentProjectName = "";
+let projects = [], projectsUnsub = null;
 let docUnsub = null, saveTimer = null, pendingSave = false, firstSnapshot = true;
 
 // Ghi lên Firestore có debounce 500ms (gộp nhiều sửa liên tiếp thành 1 lần ghi) — trả về true ngay
@@ -514,24 +523,110 @@ function save(){
   return true;
 }
 function flushSave(){
-  if(!pendingSave) return;
+  if(!pendingSave || !currentProjectId) return;
   pendingSave = false;
-  PROJECT_DOC.set({
-    rooms, items, vendors, catalog,
+  projectDocRef(currentProjectId).set({
+    name: currentProjectName, rooms, items, vendors, catalog,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
   }).catch(err=> toast("Không lưu được lên server — "+err.message));
 }
 window.addEventListener("beforeunload", ()=>{ if(pendingSave) flushSave(); });
 
-function localSeed(){
-  // Lần đầu tiên chưa có gì trên Firestore: dùng bản đã lưu sẵn trong máy này (nếu có, để không mất
-  // dữ liệu Nam đã sửa trước khi nối server), không thì dùng bộ dữ liệu mẫu TOTO gốc.
+function slugifyVi(s){
+  return String(s||"").replace(/đ/g,"d").replace(/Đ/g,"D")
+    .normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60);
+}
+function uniqueProjectId(name){
+  const base = slugifyVi(name) || "du-an";
+  const existing = new Set(projects.map(p=>p.id));
+  let id = base, n = 2;
+  while(existing.has(id)){ id = base+"-"+n; n++; }
+  return id;
+}
+
+// ── Điều hướng qua URL hash: #/<projectId>/<tab>/<mãHạngMục?> — để F5 giữ nguyên màn đang xem ──
+function parseHash(){
+  const h = location.hash.replace(/^#\/?/, "");
+  if(!h) return null;
+  const parts = h.split("/").map(p=> { try{ return decodeURIComponent(p); }catch(e){ return p; } });
+  return { projectId: parts[0]||null, tab: parts[1]||"schedule", detail: parts[2]||null };
+}
+function updateHash(){
+  if(!currentProjectId){
+    if(location.hash) history.replaceState(null,"", location.pathname+location.search);
+    return;
+  }
+  let h = "#/"+encodeURIComponent(currentProjectId)+"/"+ui.tab;
+  if(ui.tab==="schedule" && ui.detail) h += "/"+encodeURIComponent(ui.detail);
+  if(location.hash !== h) history.replaceState(null,"", h);
+}
+
+function subscribeProjectsList(){
+  if(projectsUnsub) return;
+  projectsUnsub = db.collection("ffe_projects").onSnapshot(snap=>{
+    projects = snap.docs.map(d=>{
+      const data = d.data();
+      return { id:d.id, name: data.name||d.id, itemCount: Array.isArray(data.items)?data.items.length:0, updatedAt: data.updatedAt };
+    }).sort((a,b)=> a.name.localeCompare(b.name,"vi"));
+    if(!currentProjectId) render();
+  }, err=>{ toast("Không tải được danh sách dự án — "+err.message); });
+}
+
+function goHome(){
+  if(docUnsub){ docUnsub(); docUnsub=null; }
+  currentProjectId = null; currentProjectName = "";
+  rooms=[]; items=[]; vendors=[]; catalog=[];
+  ui.detail=null; ui.menu=false; ui.picks.clear();
+  render();
+}
+
+async function openProject(id, opts){
+  opts = opts || {};
+  if(docUnsub){ docUnsub(); docUnsub=null; }
+  ui.tab = ["schedule","budget","orders","library"].includes(opts.tab) ? opts.tab : "schedule";
+  ui.detail = opts.detail || null;
+  ui.menu = false; ui.picks.clear();
+  renderLoading("Đang tải dữ liệu dự án…");
+  const ref = projectDocRef(id);
   try{
-    const raw = localStorage.getItem(KEY);
-    if(raw){ const d = JSON.parse(raw); if(Array.isArray(d.items) && d.items.length) return d; }
-  }catch(e){}
-  return { rooms: DEFAULT_ROOMS.map(r=>({...r})), items: DEFAULT_ITEMS.map(x=>({...x})), vendors:[...DEFAULT_VENDORS], catalog: buildDefaultCatalog() };
+    const snap = await ref.get();
+    if(!snap.exists){
+      toast("Không tìm thấy dự án này"); currentProjectId=null; render(); return;
+    }
+  }catch(err){
+    renderLoading("Không tải được dữ liệu: ["+err.code+"] "+err.message+" — thử tải lại trang (F5).");
+    return;
+  }
+  currentProjectId = id;
+  docUnsub = ref.onSnapshot(snap=>{
+    if(!snap.exists) return;
+    const d = snap.data();
+    currentProjectName = d.name || (id==="hado-charm-villas" ? "Hà Đô Charm Villas — TOTO" : id);
+    if(!d.name && !RO()) ref.update({name: currentProjectName}).catch(()=>{});
+    rooms = Array.isArray(d.rooms) ? d.rooms : [];
+    items = Array.isArray(d.items) ? d.items : [];
+    vendors = Array.isArray(d.vendors) ? d.vendors : [];
+    catalog = Array.isArray(d.catalog) ? d.catalog : [];
+    ensureOrdAndCategory();
+    if(ui.detail && !items.some(i=>i.code===ui.detail)) ui.detail = null;
+    if(!ui.selected || !items.some(i=>i.code===ui.selected)) ui.selected = items[0]?.code || null;
+    render();
+  }, err=>{
+    renderLoading("Mất kết nối tới server: ["+err.code+"] "+err.message+" — thử tải lại trang (F5).");
+  });
+}
+
+function initRouting(){
+  subscribeProjectsList();
+  const parsed = parseHash();
+  if(parsed && parsed.projectId){
+    openProject(parsed.projectId, {tab:parsed.tab, detail:parsed.detail});
+  } else {
+    currentProjectId = null;
+    renderLoading("Đang tải danh sách dự án…");
+  }
 }
 
 function renderLoading(msg){
@@ -563,31 +658,16 @@ function authErrorText(err){
 }
 function signOutApp(){ fbAuth.signOut(); }
 
-function startApp(){
-  renderLoading("Đang tải dữ liệu…");
-  if(docUnsub) docUnsub();
-  docUnsub = PROJECT_DOC.onSnapshot(snap=>{
-    if(!snap.exists){
-      if(firstSnapshot){ firstSnapshot=false; PROJECT_DOC.set({...localSeed(), updatedAt:firebase.firestore.FieldValue.serverTimestamp()}); }
-      return;
-    }
-    const d = snap.data();
-    rooms = Array.isArray(d.rooms) ? d.rooms : DEFAULT_ROOMS.map(r=>({...r}));
-    items = Array.isArray(d.items) ? d.items : [];
-    vendors = Array.isArray(d.vendors) ? d.vendors : [...DEFAULT_VENDORS];
-    catalog = Array.isArray(d.catalog) ? d.catalog : buildDefaultCatalog();
-    ensureOrdAndCategory();
-    if(!ui.selected || !items.some(i=>i.code===ui.selected)) ui.selected = items[0]?.code || null;
-    render();
-  }, err=>{
-    toast("Mất kết nối tới server: "+err.message);
-  });
-}
-
 renderLoading("Đang kiểm tra đăng nhập…");
 fbAuth.onAuthStateChanged(user=>{
-  if(user){ startApp(); }
-  else{ if(docUnsub){ docUnsub(); docUnsub=null; } renderLogin(); }
+  if(user){ initRouting(); }
+  else{
+    if(docUnsub){ docUnsub(); docUnsub=null; }
+    if(projectsUnsub){ projectsUnsub(); projectsUnsub=null; }
+    currentProjectId=null; currentProjectName=""; projects=[];
+    rooms=[]; items=[]; vendors=[]; catalog=[];
+    renderLogin();
+  }
 });
 function findMaterial(code){ const c=(code||"").trim().toUpperCase(); return c ? (catalog.find(m=>m.code===c)||null) : null; }
 function materialList(){ return catalog.slice().sort((a,b)=>a.code.localeCompare(b.code)); }
@@ -660,16 +740,82 @@ function render(){
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
   const app = $("#app");
-  app.innerHTML = topbar() + (ui.tab==="schedule" ? (ui.detail ? detailScreen(ui.detail) : scheduleView()) : panelView());
+  app.innerHTML = !currentProjectId ? projectListScreen()
+    : topbar() + (ui.tab==="schedule" ? (ui.detail ? detailScreen(ui.detail) : scheduleView()) : panelView());
   wire();
+  updateHash();
   window.scrollTo(0,y);
+}
+
+function fmtDate(ts){
+  try{ const d = ts && ts.toDate ? ts.toDate() : null; return d ? d.toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""; }catch(e){ return ""; }
+}
+function projectListScreen(){
+  return `<div class="loginwrap" style="align-items:flex-start;padding-top:9vh">
+    <div style="width:min(760px,100%);display:flex;flex-direction:column;gap:22px">
+      <div style="text-align:center">
+        <div class="loginbrand" style="font-size:26px">FF&amp;E</div>
+        <div class="loginsub">Chọn dự án để xem / sửa bảng kê</div>
+      </div>
+      <div class="prjgrid">
+        ${projects.map(p=>`
+          <button class="prjcard" data-open-project="${esc(p.id)}">
+            <b>${esc(p.name)}</b>
+            <div class="m">${p.itemCount} hạng mục${p.updatedAt?" · cập nhật "+fmtDate(p.updatedAt):""}</div>
+          </button>`).join("")}
+        ${RO() ? "" : `<button class="prjcard prjcard-new" id="newProjectBtn">+ Tạo dự án mới</button>`}
+      </div>
+      ${!projects.length ? `<p class="lead" style="text-align:center">Chưa có dự án nào.</p>` : ""}
+      <div style="text-align:center">
+        <button class="btn btn-sm" id="signoutHome" style="margin:0 auto">Đăng xuất (${esc((fbAuth.currentUser&&fbAuth.currentUser.email)||"")})</button>
+      </div>
+    </div>
+  </div>`;
+}
+function openNewProjectDialog(){
+  ui.dialog = {type:"newproject"};
+  paintDialog(`
+    <header><h3>Tạo dự án mới</h3></header>
+    <div class="dform">
+      <div class="full"><label>Tên dự án</label><input id="np_name" placeholder="vd. Project B — Vinhomes Ocean Park"></div>
+      <div class="full"><label>Dữ liệu ban đầu</label>
+        <select id="np_source">
+          <option value="blank">Dự án trống — tự nhập từ đầu</option>
+          <option value="mock">Dữ liệu mẫu TOTO (giống Hà Đô Charm Villas) — sửa lại sau</option>
+        </select>
+      </div>
+    </div>
+    <footer><button class="btn btn-sm" data-close>Huỷ</button><button class="btn btn-primary btn-sm" id="np_save">Tạo dự án</button></footer>`);
+  $("#np_save").onclick = async ()=>{
+    const name = $("#np_name").value.trim();
+    if(!name){ $("#np_name").focus(); $("#np_name").style.borderColor="var(--danger)"; return; }
+    const id = uniqueProjectId(name);
+    const source = $("#np_source").value;
+    const data = source==="mock"
+      ? { rooms: DEFAULT_ROOMS.map(r=>({...r})), items: DEFAULT_ITEMS.map(x=>({...x})), vendors:[...DEFAULT_VENDORS], catalog: buildDefaultCatalog() }
+      : { rooms: [], items: [], vendors: [], catalog: [] };
+    $("#np_save").disabled = true; $("#np_save").textContent = "Đang tạo…";
+    try{
+      await db.collection("ffe_projects").doc(id).set({
+        name, ...data,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+      });
+      closeDialog();
+      toast("Đã tạo dự án “"+name+"”");
+      openProject(id, {tab:"schedule"});
+    }catch(err){
+      toast("Không tạo được dự án — "+err.message);
+      $("#np_save").disabled = false; $("#np_save").textContent = "Tạo dự án";
+    }
+  };
 }
 
 function topbar(){
   return `
   <div class="topbar">
-    <button class="brand" id="homeBtn" title="Về trang chính">FF&amp;E</button>
-    <span class="crumb">Hà Đô Charm Villas · Thiết bị vệ sinh TOTO</span>
+    <button class="brand" id="homeBtn" title="Về danh sách dự án">FF&amp;E</button>
+    <span class="crumb">${esc(currentProjectName)}</span>
     <nav class="tabs">
       ${[["schedule","Bảng kê"],["budget","Ngân sách"],["orders","Đơn hàng"],["library","Nhà cung cấp"]].map(([t,l])=>
         `<button class="tab" data-tab="${t}" ${ui.tab===t?'aria-current="page"':""}>${l}</button>`).join("")}
@@ -1516,7 +1662,7 @@ function matPickImages(){
       if(matDraft.images.length>=6){ toast("Tối đa 6 ảnh mỗi mã"); break; }
       try{
         const blob = await resizeImageBlob(f);
-        const path = `ffe/hado-charm-villas/materials/${slug(matDraft.uploadKey)}/${Date.now()}.jpg`;
+        const path = `ffe/${currentProjectId}/materials/${slug(matDraft.uploadKey)}/${Date.now()}.jpg`;
         matDraft.images.push(await uploadToStorage(path, blob, "image/jpeg"));
         paintMatMedia();
       }catch(e){ toast("Không tải được ảnh lên: "+e.message); }
@@ -1853,7 +1999,7 @@ async function addImages(code, fileList){
     if(it.images.length >= 6){ toast("Tối đa 6 ảnh mỗi hạng mục"); break; }
     try{
       const blob = await resizeImageBlob(f);
-      const path = `ffe/hado-charm-villas/items/${slug(code)}/${Date.now()}_${added}.jpg`;
+      const path = `ffe/${currentProjectId}/items/${slug(code)}/${Date.now()}_${added}.jpg`;
       it.images.push(await uploadToStorage(path, blob, "image/jpeg"));
       added++; render();
     }catch(e){ toast("Không tải được ảnh lên: "+e.message); }
@@ -1886,7 +2032,7 @@ async function addFiles(code, fileList){
     if(it.files.length >= 8){ toast("Tối đa 8 tệp mỗi hạng mục"); break; }
     if(f.size > 15*1048576){ toast(`"${f.name}" quá lớn (> 15 MB) — bỏ qua`); continue; }
     try{
-      const path = `ffe/hado-charm-villas/items/${slug(code)}/files/${Date.now()}_${slug(f.name)}`;
+      const path = `ffe/${currentProjectId}/items/${slug(code)}/files/${Date.now()}_${slug(f.name)}`;
       const url = await uploadToStorage(path, f, f.type || undefined);
       it.files.push({name:f.name, type:f.type||"", size:f.size, url});
       added++; render();
@@ -1997,8 +2143,14 @@ document.addEventListener("keydown", detailKeys);
 document.addEventListener("paste", pasteImage);
 
 function wire(){
+  if(!currentProjectId){
+    document.querySelectorAll("[data-open-project]").forEach(b=> b.onclick = ()=> openProject(b.dataset.openProject));
+    $("#newProjectBtn") && ($("#newProjectBtn").onclick = openNewProjectDialog);
+    $("#signoutHome") && ($("#signoutHome").onclick = signOutApp);
+    return;
+  }
   document.querySelectorAll("[data-tab]").forEach(b=> b.onclick = ()=>{ ui.tab=b.dataset.tab; ui.menu=false; render(); });
-  $("#homeBtn") && ($("#homeBtn").onclick = ()=>{ ui.tab="schedule"; ui.detail=null; ui.menu=false; ui.q="";ui.room="";ui.status="";ui.vendor="";ui.cat="";ui.leadOnly=false; ui.picks.clear(); render(); });
+  $("#homeBtn") && ($("#homeBtn").onclick = goHome);
   $("#themeBtn") && ($("#themeBtn").onclick = toggleTheme);
   $("#menuBtn") && ($("#menuBtn").onclick = ()=>{ ui.menu=!ui.menu; render(); });
   $("#exitClient") && ($("#exitClient").onclick = ()=> setMode("admin"));
