@@ -252,6 +252,7 @@ input,select,textarea{font:inherit;color:inherit}
 .prjgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
 .prjcard{border:1px solid var(--line-2);background:var(--surface);padding:18px 16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;font:inherit;color:inherit}
 .prjcard:hover{border-color:var(--accent)}
+.prjcard.picked{border-color:var(--accent);background:var(--panel)}
 .prjcard b{font-family:"Barlow Condensed",sans-serif;font-size:16px}
 .prjcard .m{font-size:11.5px;color:var(--ink-3)}
 .prjcard-new{align-items:center;justify-content:center;color:var(--accent);font-weight:600;border-style:dashed}
@@ -486,6 +487,7 @@ let ui = {
   sortKey:"ord", sortDir:1,
   selected:null, detail:null, picks:new Set(), menu:false, dialog:null,
   mode:(()=>{ try{ return localStorage.getItem("ffe_mode")==="client" ? "client" : "admin"; }catch(e){ return "admin"; } })(),
+  projectQ:"", projectSelectMode:false, projectPicks:new Set(),
 };
 const RO = () => ui.mode==="client";
 
@@ -546,12 +548,14 @@ function uniqueProjectId(name){
   return id;
 }
 
-// ── Điều hướng qua URL hash: #/<projectId>/<tab>/<mãHạngMục?> — để F5 giữ nguyên màn đang xem ──
+// ── Điều hướng qua URL hash: #/<projectId>/<tab>?view=&item= — để F5 giữ nguyên màn đang xem ──
 function parseHash(){
-  const h = location.hash.replace(/^#\/?/, "");
-  if(!h) return null;
-  const parts = h.split("/").map(p=> { try{ return decodeURIComponent(p); }catch(e){ return p; } });
-  return { projectId: parts[0]||null, tab: parts[1]||"schedule", detail: parts[2]||null };
+  const raw = location.hash.replace(/^#\/?/, "");
+  if(!raw) return null;
+  const [pathPart, queryPart] = raw.split("?");
+  const parts = pathPart.split("/").map(p=> { try{ return decodeURIComponent(p); }catch(e){ return p; } });
+  const params = new URLSearchParams(queryPart||"");
+  return { projectId: parts[0]||null, tab: parts[1]||"schedule", view: params.get("view")||"table", detail: params.get("item")||null };
 }
 function updateHash(){
   if(!currentProjectId){
@@ -559,7 +563,13 @@ function updateHash(){
     return;
   }
   let h = "#/"+encodeURIComponent(currentProjectId)+"/"+ui.tab;
-  if(ui.tab==="schedule" && ui.detail) h += "/"+encodeURIComponent(ui.detail);
+  if(ui.tab==="schedule"){
+    const params = new URLSearchParams();
+    if(ui.view && ui.view!=="table") params.set("view", ui.view);
+    if(ui.detail) params.set("item", ui.detail);
+    const qs = params.toString();
+    if(qs) h += "?"+qs;
+  }
   if(location.hash !== h) history.replaceState(null,"", h);
 }
 
@@ -568,8 +578,9 @@ function subscribeProjectsList(){
   projectsUnsub = db.collection("ffe_projects").onSnapshot(snap=>{
     projects = snap.docs.map(d=>{
       const data = d.data();
-      return { id:d.id, name: data.name||d.id, itemCount: Array.isArray(data.items)?data.items.length:0, updatedAt: data.updatedAt };
+      return { id:d.id, name: data.name||d.id, itemCount: Array.isArray(data.items)?data.items.length:0, updatedAt: data.updatedAt, _raw: data };
     }).sort((a,b)=> a.name.localeCompare(b.name,"vi"));
+    ui.projectPicks && [...ui.projectPicks].forEach(id=>{ if(!projects.some(p=>p.id===id)) ui.projectPicks.delete(id); });
     if(!currentProjectId) render();
   }, err=>{ toast("Không tải được danh sách dự án — "+err.message); });
 }
@@ -586,8 +597,13 @@ async function openProject(id, opts){
   opts = opts || {};
   if(docUnsub){ docUnsub(); docUnsub=null; }
   ui.tab = ["schedule","budget","orders","library"].includes(opts.tab) ? opts.tab : "schedule";
+  ui.view = ["table","cards","board"].includes(opts.view) ? opts.view : "table";
   ui.detail = opts.detail || null;
   ui.menu = false; ui.picks.clear();
+  // Mỗi dự án là 1 tập dữ liệu riêng — xoá bộ lọc/sắp xếp của dự án trước để không bị hiểu nhầm
+  // là dự án mới "rỗng" khi bộ lọc cũ (phòng/NCC/nhóm...) không khớp dữ liệu dự án này.
+  ui.q=""; ui.room=""; ui.status=""; ui.vendor=""; ui.cat=""; ui.leadOnly=false;
+  ui.sortKey="ord"; ui.sortDir=1;
   renderLoading("Đang tải dữ liệu dự án…");
   const ref = projectDocRef(id);
   try{
@@ -622,7 +638,7 @@ function initRouting(){
   subscribeProjectsList();
   const parsed = parseHash();
   if(parsed && parsed.projectId){
-    openProject(parsed.projectId, {tab:parsed.tab, detail:parsed.detail});
+    openProject(parsed.projectId, {tab:parsed.tab, view:parsed.view, detail:parsed.detail});
   } else {
     currentProjectId = null;
     renderLoading("Đang tải danh sách dự án…");
@@ -750,27 +766,85 @@ function render(){
 function fmtDate(ts){
   try{ const d = ts && ts.toDate ? ts.toDate() : null; return d ? d.toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""; }catch(e){ return ""; }
 }
+function filteredProjects(){
+  const q = ui.projectQ.trim().toLowerCase();
+  if(!q) return projects;
+  return projects.filter(p=> p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+}
 function projectListScreen(){
+  const list = filteredProjects();
+  const selMode = ui.projectSelectMode && !RO();
   return `<div class="loginwrap" style="align-items:flex-start;padding-top:9vh">
-    <div style="width:min(760px,100%);display:flex;flex-direction:column;gap:22px">
+    <div style="width:min(760px,100%);display:flex;flex-direction:column;gap:18px">
       <div style="text-align:center">
         <div class="loginbrand" style="font-size:26px">FF&amp;E</div>
         <div class="loginsub">Chọn dự án để xem / sửa bảng kê</div>
       </div>
-      <div class="prjgrid">
-        ${projects.map(p=>`
-          <button class="prjcard" data-open-project="${esc(p.id)}">
-            <b>${esc(p.name)}</b>
-            <div class="m">${p.itemCount} hạng mục${p.updatedAt?" · cập nhật "+fmtDate(p.updatedAt):""}</div>
-          </button>`).join("")}
-        ${RO() ? "" : `<button class="prjcard prjcard-new" id="newProjectBtn">+ Tạo dự án mới</button>`}
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="search" id="prjSearch" placeholder="Tìm dự án theo tên hoặc mã…" value="${esc(ui.projectQ)}" autocomplete="off" style="width:100%;flex:1">
+        ${RO() ? "" : `<button class="btn btn-sm" id="prjSelectToggle">${selMode?"Xong":"Chọn nhiều"}</button>`}
       </div>
-      ${!projects.length ? `<p class="lead" style="text-align:center">Chưa có dự án nào.</p>` : ""}
+      <div class="prjgrid">
+        ${list.map(p=>{
+          const picked = ui.projectPicks.has(p.id);
+          return `<div class="prjcard${picked?" picked":""}">
+            ${selMode
+              ? `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-pickprj="${esc(p.id)}" ${picked?"checked":""}><b>${esc(p.name)}</b></label>`
+              : `<b class="prjname" data-open-project="${esc(p.id)}" style="cursor:pointer">${esc(p.name)}</b>`}
+            <div class="m">${p.itemCount} hạng mục${p.updatedAt?" · cập nhật "+fmtDate(p.updatedAt):""}</div>
+            ${(!selMode && !RO()) ? `<div style="display:flex;gap:12px;margin-top:2px">
+              <button class="btn btn-sm" data-renameprj="${esc(p.id)}">Đổi tên</button>
+              <button class="btn btn-sm btn-danger" data-delprj="${esc(p.id)}">Xoá</button>
+            </div>` : ""}
+          </div>`;
+        }).join("")}
+        ${(!selMode && !RO()) ? `<button class="prjcard prjcard-new" id="newProjectBtn">+ Tạo dự án mới</button>` : ""}
+      </div>
+      ${!list.length ? `<p class="lead" style="text-align:center">${projects.length?"Không tìm thấy dự án nào khớp.":"Chưa có dự án nào."}</p>` : ""}
+      ${selMode ? prjSelbar() : ""}
       <div style="text-align:center">
         <button class="btn btn-sm" id="signoutHome" style="margin:0 auto">Đăng xuất (${esc((fbAuth.currentUser&&fbAuth.currentUser.email)||"")})</button>
       </div>
     </div>
   </div>`;
+}
+function prjSelbar(){
+  const n = ui.projectPicks.size;
+  return `<div class="selbar">
+    <b>${n} đang chọn</b>
+    <button class="btn btn-white btn-sm" id="prjCopy" ${n?"":"disabled"}>Chép</button>
+    <button class="btn btn-sm" id="prjBulkDelete" ${n?"":"disabled"}>Xoá</button>
+    <button class="link" id="prjClearPicks">Bỏ chọn</button>
+  </div>`;
+}
+async function renameProject(id){
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  const name = prompt("Tên mới cho dự án:", p.name);
+  if(!name || !name.trim() || name.trim()===p.name) return;
+  try{ await projectDocRef(id).update({name: name.trim()}); toast("Đã đổi tên dự án"); }
+  catch(err){ toast("Không đổi được tên — "+err.message); }
+}
+async function deleteProjectsBulk(ids){
+  try{
+    await Promise.all(ids.map(id=> projectDocRef(id).delete()));
+    toast(ids.length>1 ? `Đã xoá ${ids.length} dự án` : "Đã xoá dự án");
+  }catch(err){ toast("Không xoá được — "+err.message); }
+}
+async function duplicateProjectsBulk(ids){
+  try{
+    for(const id of ids){
+      const p = projects.find(x=>x.id===id); if(!p) continue;
+      const raw = p._raw || {};
+      const newName = (raw.name||p.name) + " (bản sao)";
+      const newId = uniqueProjectId(newName);
+      await db.collection("ffe_projects").doc(newId).set({
+        name: newName, rooms: raw.rooms||[], items: raw.items||[], vendors: raw.vendors||[], catalog: raw.catalog||[],
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+      });
+    }
+    toast(ids.length>1 ? `Đã chép ${ids.length} dự án` : "Đã chép dự án");
+  }catch(err){ toast("Không chép được — "+err.message); }
 }
 function openNewProjectDialog(){
   ui.dialog = {type:"newproject"};
@@ -835,8 +909,7 @@ function topbar(){
         <button data-act="autocat">Tự động phân nhóm lại</button>
         <hr>
         <button data-act="client">Xem như khách hàng</button>
-        <button data-act="csv">Chép bảng kê (CSV)</button>
-        <button data-act="reset">Khôi phục dữ liệu gốc</button>`}
+        <button data-act="csv">Chép bảng kê (CSV)</button>`}
       <hr>
       <button data-act="signout">Đăng xuất</button>
     </div>`:""}
@@ -2147,6 +2220,32 @@ function wire(){
     document.querySelectorAll("[data-open-project]").forEach(b=> b.onclick = ()=> openProject(b.dataset.openProject));
     $("#newProjectBtn") && ($("#newProjectBtn").onclick = openNewProjectDialog);
     $("#signoutHome") && ($("#signoutHome").onclick = signOutApp);
+    const ps = $("#prjSearch");
+    if(ps){ ps.oninput = e=>{ ui.projectQ = e.target.value; ps._keep = true; softRerender(); }; if(ps._keep){ ps.focus(); const v=ps.value; ps.setSelectionRange(v.length,v.length); } }
+    $("#prjSelectToggle") && ($("#prjSelectToggle").onclick = ()=>{ ui.projectSelectMode = !ui.projectSelectMode; ui.projectPicks.clear(); render(); });
+    document.querySelectorAll("[data-pickprj]").forEach(c=> c.onchange = ()=>{
+      const id = c.dataset.pickprj;
+      if(ui.projectPicks.has(id)) ui.projectPicks.delete(id); else ui.projectPicks.add(id);
+      render();
+    });
+    document.querySelectorAll("[data-renameprj]").forEach(b=> b.onclick = e=>{ e.stopPropagation(); renameProject(b.dataset.renameprj); });
+    document.querySelectorAll("[data-delprj]").forEach(b=> b.onclick = async e=>{
+      e.stopPropagation();
+      const id = b.dataset.delprj, p = projects.find(x=>x.id===id);
+      if(confirm(`Xoá dự án "${p?p.name:id}"? Toàn bộ hạng mục, ảnh & dữ liệu sẽ mất, không khôi phục được.`)) await deleteProjectsBulk([id]);
+    });
+    $("#prjCopy") && ($("#prjCopy").onclick = async ()=>{
+      if(!ui.projectPicks.size) return;
+      await duplicateProjectsBulk([...ui.projectPicks]);
+      ui.projectPicks.clear(); ui.projectSelectMode = false; render();
+    });
+    $("#prjBulkDelete") && ($("#prjBulkDelete").onclick = async ()=>{
+      if(!ui.projectPicks.size) return;
+      if(!confirm(`Xoá ${ui.projectPicks.size} dự án đã chọn? Toàn bộ dữ liệu sẽ mất, không khôi phục được.`)) return;
+      await deleteProjectsBulk([...ui.projectPicks]);
+      ui.projectPicks.clear(); ui.projectSelectMode = false; render();
+    });
+    $("#prjClearPicks") && ($("#prjClearPicks").onclick = ()=>{ ui.projectPicks.clear(); render(); });
     return;
   }
   document.querySelectorAll("[data-tab]").forEach(b=> b.onclick = ()=>{ ui.tab=b.dataset.tab; ui.menu=false; render(); });
@@ -2165,7 +2264,6 @@ function wire(){
       else if(a==="client") setMode("client");
       else if(a==="admin") setMode("admin");
       else if(a==="csv"){ exportCsv(); render(); }
-      else if(a==="reset"){ if(confirm("Khôi phục về bảng kê TOTO gốc? Mọi thay đổi & ảnh sẽ mất.")){ rooms=DEFAULT_ROOMS.map(r=>({...r})); items=DEFAULT_ITEMS.map(x=>({...x})); vendors=[...DEFAULT_VENDORS]; catalog=buildDefaultCatalog(); let n=0; items.forEach(it=>{it.ord=++n; it.category=guessCategory(it);}); ui.picks.clear(); ui.selected=items[0].code; ui.detail=null; save(); } render(); }
       else if(a==="signout"){ signOutApp(); }
       else render();
     });
