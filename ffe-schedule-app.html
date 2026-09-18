@@ -480,6 +480,16 @@ function ensureOrdAndCategory(){
     if(!it.category || !CATEGORIES.includes(it.category)) it.category = guessCategory(it);
   });
 }
+// Hạng mục cũ (trước khi có Thư viện vật tư chung) chỉ có "model" (mã NCC), chưa có "matCode" (mã vật tư).
+// Nếu model trùng đúng 1 mã đã có sẵn trong thư viện thì tự nối lại — chỉ trong bộ nhớ, lưu thật khi Nam sửa gì đó.
+function linkMatCodesFromModel(){
+  if(!catalog.length) return;
+  items.forEach(it=>{
+    if(it.matCode || !it.model) return;
+    const guess = it.model.trim().toUpperCase();
+    if(catalog.some(m=>m.code===guess)) it.matCode = guess;
+  });
+}
 
 let ui = {
   tab:"schedule", view:"table",
@@ -510,11 +520,37 @@ const db = firebase.firestore();
 db.settings({ ignoreUndefinedProperties: true });
 const fbStorage = firebase.storage();
 function projectDocRef(id){ return db.collection("ffe_projects").doc(id); }
+const CATALOG_COL = db.collection("ffe_material_catalog");
 
 // ── Nhiều dự án: danh sách dự án + dự án đang mở ──
 let currentProjectId = null, currentProjectName = "";
 let projects = [], projectsUnsub = null;
 let docUnsub = null, saveTimer = null, pendingSave = false, firstSnapshot = true;
+
+// ── Thư viện vật tư (mã vật tư): dùng CHUNG cho mọi dự án, KHÔNG lưu theo từng dự án nữa
+// (trước đó catalog nằm trong doc của từng dự án → mỗi dự án 1 bản riêng, không dùng lại được).
+let catalogUnsub = null, catalogSeeded = false;
+function subscribeCatalog(){
+  if(catalogUnsub) return;
+  catalogUnsub = CATALOG_COL.onSnapshot(snap=>{
+    if(snap.empty && !catalogSeeded){ catalogSeeded = true; seedGlobalCatalog(); }
+    catalog = snap.docs.map(d=>d.data());
+    render();
+  }, err=>{ toast("Không tải được thư viện vật tư — "+err.message); });
+}
+// Lần đầu tiên chuyên mục này còn trống: lấy đúng bản catalog đang có sẵn trong dự án Hà Đô Charm Villas
+// (đề phòng Nam đã tự sửa/thêm ảnh cho vài mã), không có thì mới dùng bộ mặc định TOTO.
+async function seedGlobalCatalog(){
+  let seedList = null;
+  try{
+    const legacy = await projectDocRef("hado-charm-villas").get();
+    if(legacy.exists && Array.isArray(legacy.data().catalog) && legacy.data().catalog.length) seedList = legacy.data().catalog;
+  }catch(e){}
+  const list = seedList || buildDefaultCatalog();
+  const batch = db.batch();
+  list.forEach(m=>{ if(m && m.code) batch.set(CATALOG_COL.doc(slug(m.code)), m); });
+  try{ await batch.commit(); }catch(e){}
+}
 
 // Ghi lên Firestore có debounce 500ms (gộp nhiều sửa liên tiếp thành 1 lần ghi) — trả về true ngay
 // (lạc quan: coi như ghi được), báo lỗi qua toast nếu sau đó thật sự ghi thất bại (mất mạng...).
@@ -528,7 +564,7 @@ function flushSave(){
   if(!pendingSave || !currentProjectId) return;
   pendingSave = false;
   projectDocRef(currentProjectId).set({
-    name: currentProjectName, rooms, items, vendors, catalog,
+    name: currentProjectName, rooms, items, vendors,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
   }).catch(err=> toast("Không lưu được lên server — "+err.message));
@@ -624,7 +660,6 @@ async function openProject(id, opts){
     rooms = Array.isArray(d.rooms) ? d.rooms : [];
     items = Array.isArray(d.items) ? d.items : [];
     vendors = Array.isArray(d.vendors) ? d.vendors : [];
-    catalog = Array.isArray(d.catalog) ? d.catalog : [];
     ensureOrdAndCategory();
     if(ui.detail && !items.some(i=>i.code===ui.detail)) ui.detail = null;
     if(!ui.selected || !items.some(i=>i.code===ui.selected)) ui.selected = items[0]?.code || null;
@@ -636,6 +671,7 @@ async function openProject(id, opts){
 
 function initRouting(){
   subscribeProjectsList();
+  subscribeCatalog();
   const parsed = parseHash();
   if(parsed && parsed.projectId){
     openProject(parsed.projectId, {tab:parsed.tab, view:parsed.view, detail:parsed.detail});
@@ -652,7 +688,7 @@ function renderLogin(errorMsg){
   document.getElementById("app").innerHTML = `
     <div class="loginwrap"><form class="loginbox" id="loginForm">
       <div class="loginbrand">FF&amp;E</div>
-      <div class="loginsub">Hà Đô Charm Villas · đăng nhập để xem / sửa bảng kê</div>
+      <div class="loginsub">Specification of Furniture - IndustDesign · Đăng nhập để xem / sửa bảng kê</div>
       <div class="field"><label>Email</label><input id="loginEmail" type="email" required autocomplete="username"></div>
       <div class="field"><label>Mật khẩu</label><input id="loginPass" type="password" required autocomplete="current-password"></div>
       ${errorMsg?`<div class="loginerr">${esc(errorMsg)}</div>`:""}
@@ -680,6 +716,8 @@ fbAuth.onAuthStateChanged(user=>{
   else{
     if(docUnsub){ docUnsub(); docUnsub=null; }
     if(projectsUnsub){ projectsUnsub(); projectsUnsub=null; }
+    if(catalogUnsub){ catalogUnsub(); catalogUnsub=null; }
+    catalogSeeded = false;
     currentProjectId=null; currentProjectName=""; projects=[];
     rooms=[]; items=[]; vendors=[]; catalog=[];
     renderLogin();
@@ -722,7 +760,7 @@ function filtered(){
     if(ui.cat && (it.category||"Khác")!==ui.cat) return false;
     if(ui.leadOnly && !(it.lead>8)) return false;
     if(ui.q){
-      const s = (it.code+" "+it.name+" "+(it.vendor||"")+" "+(it.model||"")+" "+(it.room||"")+" "+(it.category||"")).toLowerCase();
+      const s = (it.code+" "+(it.matCode||"")+" "+it.name+" "+(it.vendor||"")+" "+(it.model||"")+" "+(it.room||"")+" "+(it.category||"")).toLowerCase();
       if(!s.includes(ui.q.toLowerCase())) return false;
     }
     return true;
@@ -753,6 +791,7 @@ function stats(){
 // ── render ─────────────────────────────────────────────────────
 function render(){
   const y = window.scrollY;
+  if(currentProjectId) linkMatCodesFromModel();
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
   const app = $("#app");
@@ -838,7 +877,7 @@ async function duplicateProjectsBulk(ids){
       const newName = (raw.name||p.name) + " (bản sao)";
       const newId = uniqueProjectId(newName);
       await db.collection("ffe_projects").doc(newId).set({
-        name: newName, rooms: raw.rooms||[], items: raw.items||[], vendors: raw.vendors||[], catalog: raw.catalog||[],
+        name: newName, rooms: raw.rooms||[], items: raw.items||[], vendors: raw.vendors||[],
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
       });
@@ -866,8 +905,8 @@ function openNewProjectDialog(){
     const id = uniqueProjectId(name);
     const source = $("#np_source").value;
     const data = source==="mock"
-      ? { rooms: DEFAULT_ROOMS.map(r=>({...r})), items: DEFAULT_ITEMS.map(x=>({...x})), vendors:[...DEFAULT_VENDORS], catalog: buildDefaultCatalog() }
-      : { rooms: [], items: [], vendors: [], catalog: [] };
+      ? { rooms: DEFAULT_ROOMS.map(r=>({...r})), items: DEFAULT_ITEMS.map(x=>({...x})), vendors:[...DEFAULT_VENDORS] }
+      : { rooms: [], items: [], vendors: [] };
     $("#np_save").disabled = true; $("#np_save").textContent = "Đang tạo…";
     try{
       await db.collection("ffe_projects").doc(id).set({
@@ -1006,7 +1045,7 @@ function tableView(){
     <div class="thead">
       <span></span>
       <span class="stt">STT</span>
-      ${sortBtn("code","Mã")}
+      ${sortBtn("matCode","Mã vật tư")}
       ${sortBtn("name","Hạng mục")}
       ${sortBtn("category","Nhóm")}
       ${sortBtn("vendor","NCC")}
@@ -1034,7 +1073,7 @@ function tableRow(it, stt){
   return `<div class="trow ${it.status==="Unspecified"?"unspec":""}" data-code="${it.code}" aria-selected="${sel}" tabindex="0">
     ${ro ? `<span></span>` : `<span class="cbox" data-pick="${it.code}" data-on="${on?1:0}" role="checkbox" aria-checked="${on}" tabindex="0"><svg viewBox="0 0 10 10"><path d="M1 5l3 3 5-7" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></span>`}
     <span class="stt" data-open="${it.code}">${stt}</span>
-    <span class="cell-ell">${edCell(it.code,"code",`<span class="code">${esc(it.code)}</span>`)}</span>
+    <span class="cell-ell">${edCell(it.code,"matCode",`<span class="code">${esc(it.matCode||"—")}</span>`)}</span>
     <span class="name cell-ell">${edCell(it.code,"name",`<b>${esc(it.name)}</b>`)}</span>
     <span class="cell-ell">${edCell(it.code,"category",esc(it.category||"Khác"))}</span>
     <span class="cell-ell">${edCell(it.code,"vendor",esc(it.vendor||""))}</span>
@@ -1236,7 +1275,7 @@ function detailScreen(code){
         <div class="dsec">Thông số</div>
         <dl class="dgrid">
           <dt>Nhóm</dt><dd>${esc(it.category||"Khác")}</dd>
-          <dt>Mã / model</dt><dd>${esc(it.model||"—")}</dd>
+          <dt>Mã NCC</dt><dd>${esc(it.model||"—")}</dd>
           <dt>Kích thước</dt><dd>${esc(it.dims||"—")}</dd>
           <dt>ĐVT</dt><dd>${esc(it.uom||"—")}</dd>
           <dt>Hoàn thiện</dt><dd>${esc(it.finish||"—")}</dd>
@@ -1370,14 +1409,14 @@ function openEdit(code){
     <header><h3>Sửa thông số</h3><span class="kick">${it.code}</span></header>
     <div class="dform">
       <div class="full" style="display:flex;gap:8px;align-items:flex-end">
-        <div style="flex:1"><label>Mã vật tư (thư viện — gõ mã để tự điền)</label><input id="d_matcode" list="matlist" value="${esc(it.matCode||"")}" placeholder="vd. LW575JW/F4W"></div>
+        <div style="flex:1"><label>Mã vật tư (thư viện — gõ mã để tự điền)</label><input id="d_matcode" list="matlist" value="${esc(it.matCode||"")}" placeholder="vd. LW575JW-F4W"></div>
         <button class="btn btn-sm" id="d_matapply" type="button">Áp dụng</button>
       </div>
       <div class="full"><label>Tên hạng mục</label><input id="d_name" value="${esc(it.name)}"></div>
       <div><label>Phòng</label><select id="d_room">${roomOpts(it.room)}</select></div>
       <div><label>Nhóm</label><select id="d_cat">${CATEGORIES.map(c=>`<option ${((it.category||"Khác")===c)?"selected":""}>${c}</option>`).join("")}</select></div>
       <div><label>Nhà cung cấp</label><input id="d_vendor" list="vendorlist" value="${esc(it.vendor||"")}"></div>
-      <div><label>Mã / model</label><input id="d_model" value="${esc(it.model||"")}"></div>
+      <div><label>Mã NCC</label><input id="d_model" value="${esc(it.model||"")}"></div>
       <div><label>ĐVT</label><input id="d_uom" value="${esc(it.uom||"")}" placeholder="chiếc"></div>
       <div><label>Số lượng</label><input id="d_qty" type="number" min="1" value="${it.qty}"></div>
       <div><label>Đơn giá (₫)</label><input id="d_unit" type="number" min="0" value="${it.unit??""}" placeholder="allowance"></div>
@@ -1436,15 +1475,14 @@ function openAdd(room){
     <header><h3>Thêm hạng mục</h3><span class="kick">Mới</span></header>
     <div class="dform">
       <div class="full" style="display:flex;gap:8px;align-items:flex-end">
-        <div style="flex:1"><label>Mã vật tư (thư viện — gõ mã để tự điền)</label><input id="a_matcode" list="matlist" placeholder="vd. LW575JW/F4W"></div>
+        <div style="flex:1"><label>Mã vật tư (thư viện — gõ mã để tự điền)</label><input id="a_matcode" list="matlist" placeholder="vd. LW575JW-F4W"></div>
         <button class="btn btn-sm" id="a_matapply" type="button">Áp dụng</button>
       </div>
-      <div><label>Mã</label><input id="a_code" value="${nextCode()}"></div>
       <div><label>Phòng</label><select id="a_room">${roomOpts(r)}</select></div>
       <div><label>Nhóm</label><select id="a_cat">${CATEGORIES.map(c=>`<option ${c==="Khác"?"selected":""}>${c}</option>`).join("")}</select></div>
       <div class="full"><label>Tên hạng mục</label><input id="a_name" placeholder="vd. Vòi lavabo gắn tường"></div>
       <div><label>Nhà cung cấp</label><input id="a_vendor" list="vendorlist" placeholder="TOTO"></div>
-      <div><label>Mã / model</label><input id="a_model"></div>
+      <div><label>Mã NCC</label><input id="a_model"></div>
       <div><label>ĐVT</label><input id="a_uom" value="chiếc"></div>
       <div><label>Số lượng</label><input id="a_qty" type="number" min="1" value="1"></div>
       <div><label>Đơn giá (₫)</label><input id="a_unit" type="number" min="0"></div>
@@ -1456,8 +1494,7 @@ function openAdd(room){
   $("#a_save").onclick = ()=>{
     const name = $("#a_name").value.trim();
     if(!name){ $("#a_name").focus(); $("#a_name").style.borderColor="var(--danger)"; return; }
-    let code = $("#a_code").value.trim() || nextCode();
-    if(items.some(i=>i.code===code)) code = nextCode();
+    const code = nextCode();
     const u = $("#a_unit").value.trim(), l = $("#a_lead").value.trim();
     const vend = $("#a_vendor").value.trim() || null;
     addVendor(vend);
@@ -1612,7 +1649,7 @@ function openMaterialLibrary(){
         return `<div class="roomrow" style="grid-template-columns:36px 1fr 90px 52px">
           <span class="slot ${img?"":"bp"}" style="width:32px;height:32px;overflow:hidden;display:block">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover;display:block">`:""}</span>
           <span><b style="font-family:'Barlow Condensed';font-size:13px">${esc(m.code)}</b>
-            <div style="font-size:11px;color:var(--ink-3)" class="cell-ell">${esc(m.name)}${m.vendor?" · "+esc(m.vendor):""}</div></span>
+            <div style="font-size:11px;color:var(--ink-3)" class="cell-ell">${esc(m.name)}${m.vendor?" · "+esc(m.vendor):""}${m.model?" · Mã NCC: "+esc(m.model):""}</div></span>
           <span class="tnum" style="font-size:11.5px;text-align:right">${money(m.unit)}</span>
           <span class="rx"><button data-medit="${esc(m.code)}" title="Sửa">✎</button><button class="del" data-mdel="${esc(m.code)}" title="Xoá">×</button></span>
         </div>`;
@@ -1623,11 +1660,11 @@ function openMaterialLibrary(){
   `, true);
   const bd = $("#backdrop");
   bd.querySelectorAll("[data-medit]").forEach(b=> b.onclick = ()=> openMaterialEditor(b.dataset.medit));
-  bd.querySelectorAll("[data-mdel]").forEach(b=> b.onclick = ()=>{
+  bd.querySelectorAll("[data-mdel]").forEach(b=> b.onclick = async ()=>{
     const code = b.dataset.mdel, cnt = items.filter(i=>i.matCode===code).length;
     if(!confirm(`Xoá mã "${code}" khỏi thư viện?`+(cnt?` ${cnt} hạng mục đang dùng mã này vẫn giữ nguyên số liệu, chỉ mất liên kết tới thư viện.`:""))) return;
-    catalog = catalog.filter(m=>m.code!==code);
-    save(); openMaterialLibrary(); toast("Đã xoá mã vật tư");
+    try{ await CATALOG_COL.doc(slug(code)).delete(); openMaterialLibrary(); toast("Đã xoá mã vật tư"); }
+    catch(err){ toast("Không xoá được — "+err.message); }
   });
   $("#m_add").onclick = ()=> openMaterialEditor(null);
 }
@@ -1642,10 +1679,10 @@ function openMaterialEditor(code){
   paintDialog(`
     <header><h3>${m?"Sửa mã "+esc(m.code):"Thêm mã vật tư"}</h3><span class="kick">Thư viện</span></header>
     <div class="dform">
-      <div><label>Mã (cố định)</label><input id="m_code" value="${esc(m?m.code:"")}" placeholder="vd. LW575JW/F4W"></div>
+      <div><label>Mã vật tư (cố định — dùng chung mọi dự án)</label><input id="m_code" value="${esc(m?m.code:"")}" placeholder="vd. LW575JW-F4W"></div>
       <div><label>Nhà cung cấp</label><input id="m_vendor" list="vendorlist" value="${esc(m&&m.vendor||"")}"></div>
       <div class="full"><label>Tên hạng mục</label><input id="m_name" value="${esc(m?m.name:"")}"></div>
-      <div><label>Mã / model NCC</label><input id="m_model" value="${esc(m&&m.model||"")}"></div>
+      <div><label>Mã NCC (model của nhà cung cấp)</label><input id="m_model" value="${esc(m&&m.model||"")}"></div>
       <div><label>ĐVT</label><input id="m_uom" value="${esc(m&&m.uom||"chiếc")}"></div>
       <div><label>Đơn giá tham khảo (₫)</label><input id="m_unit" type="number" min="0" value="${m&&m.unit!=null?m.unit:""}"></div>
       <div class="full"><label>Kích thước</label><input id="m_dims" value="${esc(m&&m.dims||"")}"></div>
@@ -1677,19 +1714,19 @@ function openMaterialEditor(code){
     matDraft.links.push({url, label});
     paintMatLinks();
   };
-  if(m) $("#m_del").onclick = ()=>{
+  if(m) $("#m_del").onclick = async ()=>{
     if(!confirm(`Xoá mã "${m.code}" khỏi thư viện?`)) return;
-    catalog = catalog.filter(x=>x.code!==m.code);
-    save(); closeDialog(); openMaterialLibrary(); toast("Đã xoá mã vật tư");
+    try{ await CATALOG_COL.doc(slug(m.code)).delete(); closeDialog(); openMaterialLibrary(); toast("Đã xoá mã vật tư"); }
+    catch(err){ toast("Không xoá được — "+err.message); }
   };
-  $("#m_save").onclick = ()=>{
+  $("#m_save").onclick = async ()=>{
     const codeVal = $("#m_code").value.trim().toUpperCase();
     const nameVal = $("#m_name").value.trim();
-    if(!codeVal || !nameVal){ toast("Cần nhập Mã và Tên hạng mục"); return; }
+    if(!codeVal || !nameVal){ toast("Cần nhập Mã vật tư và Tên hạng mục"); return; }
     const dup = catalog.find(x=>x.code===codeVal);
     if(dup && dup.code!==matOriginalCode){ toast(`Mã "${codeVal}" đã tồn tại`); return; }
     const vend = $("#m_vendor").value.trim() || null;
-    addVendor(vend);
+    addVendor(vend); save();
     const u = $("#m_unit").value.trim();
     const rec = {
       code:codeVal, name:nameVal, vendor:vend,
@@ -1699,12 +1736,17 @@ function openMaterialEditor(code){
       dims:$("#m_dims").value.trim()||undefined,
       finish:$("#m_finish").value.trim()||undefined,
       images:(matDraft.images||[]).slice(), links:(matDraft.links||[]).slice(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
     };
-    const idx = matOriginalCode ? catalog.findIndex(x=>x.code===matOriginalCode) : -1;
-    if(idx>-1) catalog[idx] = rec; else catalog.push(rec);
-    if(!save()){ toast("Bộ nhớ trình duyệt đầy — xoá bớt ảnh hoặc dùng ảnh nhỏ hơn"); return; }
-    closeDialog(); openMaterialLibrary();
-    toast(matOriginalCode?"Đã lưu mã "+codeVal:"Đã thêm mã "+codeVal+" vào thư viện");
+    $("#m_save").disabled = true;
+    try{
+      const newId = slug(codeVal), oldId = matOriginalCode ? slug(matOriginalCode) : null;
+      if(oldId && oldId!==newId) await CATALOG_COL.doc(oldId).delete();
+      await CATALOG_COL.doc(newId).set(rec);
+      closeDialog(); openMaterialLibrary();
+      toast(matOriginalCode?"Đã lưu mã "+codeVal:"Đã thêm mã "+codeVal+" vào thư viện");
+    }catch(err){ toast("Không lưu được — "+err.message); $("#m_save").disabled=false; }
   };
 }
 
@@ -1735,7 +1777,7 @@ function matPickImages(){
       if(matDraft.images.length>=6){ toast("Tối đa 6 ảnh mỗi mã"); break; }
       try{
         const blob = await resizeImageBlob(f);
-        const path = `ffe/${currentProjectId}/materials/${slug(matDraft.uploadKey)}/${Date.now()}.jpg`;
+        const path = `ffe/_catalog/materials/${slug(matDraft.uploadKey)}/${Date.now()}.jpg`;
         matDraft.images.push(await uploadToStorage(path, blob, "image/jpeg"));
         paintMatMedia();
       }catch(e){ toast("Không tải được ảnh lên: "+e.message); }
@@ -1983,6 +2025,7 @@ function beginInline(cell){
   } else {
     el = document.createElement("input"); el.type="text";
     if(field==="vendor") el.setAttribute("list","vendorlist");
+    if(field==="matCode") el.setAttribute("list","matlist");
     el.value = roomMode ? cell.dataset.room : (it[field]??"");
   }
   el.className = "ed-input";
@@ -2010,15 +2053,20 @@ function commitItem(code, field, raw){
   else if(field==="name") it.name = v || it.name;
   else if(field==="category") it.category = CATEGORIES.includes(raw) ? raw : it.category;
   else if(field==="po"){ it.po = v || undefined; if(it.po && it.stage==null){ it.stage=2; if(it.status!=="Ordered") it.status="Ordered"; } }
-  else if(field==="code"){
-    const nc = v;
-    if(nc && nc!==it.code){
-      if(items.some(x=>x.code===nc)){ toast("Mã “"+nc+"” đã tồn tại"); render(); return; }
-      const old = it.code;
-      if(ui.selected===old) ui.selected = nc;
-      if(ui.detail===old) ui.detail = nc;
-      if(ui.picks.has(old)){ ui.picks.delete(old); ui.picks.add(nc); }
-      it.code = nc;
+  else if(field==="matCode"){
+    const mc = v.toUpperCase();
+    it.matCode = mc || undefined;
+    if(mc){
+      const m = findMaterial(mc);
+      if(m){
+        it.name = m.name || it.name;
+        if(m.vendor){ it.vendor = m.vendor; addVendor(it.vendor); }
+        it.model = m.model || it.model;
+        it.uom = m.uom || it.uom;
+        if(m.unit!=null && !it.priceOverridden) it.unit = m.unit;
+        it.dims = m.dims || it.dims;
+        it.finish = m.finish || it.finish;
+      } else toast(`Không tìm thấy mã "${mc}" trong thư viện — vẫn lưu mã, thêm mã này vào Thư viện vật tư sau`);
     }
   }
   save(); render();
