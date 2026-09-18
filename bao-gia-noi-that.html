@@ -2234,12 +2234,12 @@
     document.getElementById("btnExportPdf").addEventListener("click", function () { printQuote(q); });
     document.getElementById("btnOpenCatalog").addEventListener("click", function () { view.screen = "catalog"; renderCatalogScreen(); renderNav(); });
 
-    document.getElementById("fName").addEventListener("input", function (e) { q.name = e.target.value; q.updatedDate = isoToday(); });
-    document.getElementById("fProject").addEventListener("change", function (e) { q.projectId = e.target.value; renderDetail(); });
-    document.getElementById("fDate").addEventListener("change", function (e) { q.createdDate = e.target.value; });
-    document.getElementById("fStatus").addEventListener("change", function (e) { q.status = e.target.value; q.updatedDate = isoToday(); renderDetail(); });
-    document.getElementById("fVat").addEventListener("input", function (e) { q.vat = Number(e.target.value) || 0; refreshTotalsOnly(q); });
-    document.getElementById("fSummaryNote").addEventListener("input", function (e) { q.summaryNote = e.target.value; q.updatedDate = isoToday(); });
+    document.getElementById("fName").addEventListener("input", function (e) { q.name = e.target.value; q.updatedDate = isoToday(); saveState(); });
+    document.getElementById("fProject").addEventListener("change", function (e) { q.projectId = e.target.value; q.updatedDate = isoToday(); saveState(); renderDetail(); });
+    document.getElementById("fDate").addEventListener("change", function (e) { q.createdDate = e.target.value; saveState(); });
+    document.getElementById("fStatus").addEventListener("change", function (e) { q.status = e.target.value; q.updatedDate = isoToday(); saveState(); renderDetail(); });
+    document.getElementById("fVat").addEventListener("input", function (e) { q.vat = Number(e.target.value) || 0; saveState(); refreshTotalsOnly(q); });
+    document.getElementById("fSummaryNote").addEventListener("input", function (e) { q.summaryNote = e.target.value; q.updatedDate = isoToday(); saveState(); });
 
     document.querySelectorAll(".summary-row-link").forEach(function (row) {
       row.addEventListener("click", function () {
@@ -2251,6 +2251,7 @@
     document.getElementById("btnAddCat").addEventListener("click", function () {
       q.sections.push({ id: uid("c"), name: "Hạng mục mới", note: "", groups: [blankGroup()] });
       q.updatedDate = isoToday();
+      saveState();
       renderDetail();
     });
 
@@ -2260,6 +2261,7 @@
         if (sec && confirm('Xoá hạng mục "' + sec.name + '"?')) {
           q.sections = q.sections.filter(function (s) { return s.id !== btn.dataset.delSection; });
           q.updatedDate = isoToday();
+          saveState();
           renderDetail();
         }
       });
@@ -2270,6 +2272,7 @@
         var sec = q.sections.filter(function (s) { return s.id === inp.dataset.catName; })[0];
         if (sec) sec.name = inp.value;
         q.updatedDate = isoToday();
+        saveState();
         var summaryName = document.querySelector('[data-summary-name="' + inp.dataset.catName + '"]');
         if (summaryName) summaryName.textContent = inp.value;
       });
@@ -2280,6 +2283,7 @@
         var sec = q.sections.filter(function (s) { return s.id === inp.dataset.sectionNote; })[0];
         if (sec) sec.note = inp.value;
         q.updatedDate = isoToday();
+        saveState();
         var summaryNote = document.querySelector('[data-summary-note="' + inp.dataset.sectionNote + '"]');
         if (summaryNote) summaryNote.textContent = inp.value;
       });
@@ -2290,6 +2294,7 @@
         var sec = q.sections.filter(function (s) { return s.id === btn.dataset.addGroup; })[0];
         if (sec) sec.groups.push(blankGroup());
         q.updatedDate = isoToday();
+        saveState();
         renderDetail();
       });
     });
@@ -2299,6 +2304,7 @@
         var sec = q.sections.filter(function (s) { return s.id === btn.dataset.section; })[0];
         if (sec) sec.groups = sec.groups.filter(function (g) { return g.id !== btn.dataset.delGroup; });
         q.updatedDate = isoToday();
+        saveState();
         renderDetail();
       });
     });
@@ -2309,6 +2315,7 @@
         var g = sec && sec.groups.filter(function (x) { return x.id === inp.dataset.groupName; })[0];
         if (g) g.name = inp.value;
         q.updatedDate = isoToday();
+        saveState();
       });
     });
 
@@ -2318,6 +2325,7 @@
         var g = sec && sec.groups.filter(function (x) { return x.id === btn.dataset.addItem; })[0];
         if (g) g.items.push(blankItem());
         q.updatedDate = isoToday();
+        saveState();
         renderDetail();
       });
     });
@@ -2328,6 +2336,7 @@
         var g = sec && sec.groups.filter(function (x) { return x.id === btn.dataset.group; })[0];
         if (g) g.items = g.items.filter(function (it) { return it.id !== btn.dataset.delItem; });
         q.updatedDate = isoToday();
+        saveState();
         renderDetail();
       });
     });
@@ -2370,6 +2379,7 @@
           var rawDigits = f === "price" ? inp.value.replace(/[^0-9]/g, "") : inp.value.replace(/[^0-9.]/g, "");
           it[f] = isNumeric ? (Number(rawDigits) || 0) : inp.value;
           q.updatedDate = isoToday();
+          saveState();
           if (inp.tagName === "TEXTAREA") autoResizeTextarea(inp);
           if (f === "price") {
             inp.value = moneyPlain(it.price);
