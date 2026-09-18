@@ -578,13 +578,13 @@
       <div class="brand-word">measure<span>&amp;</span>make</div>
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="sidebar-foot">
-      <div class="avatar">NH</div>
+    <button class="sidebar-foot" id="sidebarFoot" type="button" title="Đăng xuất" style="text-align:left;border:none;background:transparent;cursor:pointer;width:100%">
+      <div class="avatar" id="sidebarFootAvatar">NH</div>
       <div class="sidebar-foot-text">
-        <div class="sidebar-foot-name">Nam Hoàng</div>
-        <div class="sidebar-foot-role"><span class="sync-dot"></span>PM · Indust Design</div>
+        <div class="sidebar-foot-name" id="sidebarFootName">Nam Hoàng</div>
+        <div class="sidebar-foot-role"><span class="sync-dot"></span><span id="sidebarFootRole">PM · Indust Design</span></div>
       </div>
-    </div>
+    </button>
   </aside>
   <div class="sidebar-scrim" id="sidebarScrim"></div>
 
@@ -607,6 +607,10 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
 <script>
 (function () {
   "use strict";
@@ -816,21 +820,154 @@
   };
 
   var STORAGE_KEY = "mm_baogia_demo_v2";
-
-  function loadState() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return { quotes: seedQuotes() };
-  }
-
-  function saveState() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-  }
-
-  var state = loadState();
+  var state = { quotes: [] };
   var view = { screen: "list", tab: "active", search: "", editingId: null };
+
+  /* ===================== FIREBASE: đăng nhập + đọc/ghi Firestore (nhiều người dùng chung 1 nguồn) ===================== */
+  // Dùng chung 1 project Firebase với app FF&E Schedule — xem project_ffe-schedule-marlow.md.
+  var firebaseConfig = {
+    apiKey: "AIzaSyA_Y6PO-kZdxJWguNreckXSLmv0uuhnIhg",
+    authDomain: "measure-and-make.firebaseapp.com",
+    projectId: "measure-and-make",
+    storageBucket: "measure-and-make.firebasestorage.app",
+    messagingSenderId: "479798101633",
+    appId: "1:479798101633:web:fb6f03e3bbac6cf6842f80"
+  };
+  firebase.initializeApp(firebaseConfig);
+  var fbAuth = firebase.auth();
+  var db = firebase.firestore();
+  // Nhiều field trong app này để trống bằng chuỗi rỗng "" (không phải undefined) nên ít rủi ro hơn app FF&E,
+  // nhưng vẫn bật cho chắc — 1 số field optional (vd sizeD/sizeR/sizeC khi rỗng) có thể là undefined.
+  db.settings({ ignoreUndefinedProperties: true });
+  var fbStorage = firebase.storage();
+  var MAIN_DOC = db.collection("baogia").doc("main");
+
+  var docUnsub = null, saveTimer = null, pendingSave = false;
+
+  // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng) — báo lỗi qua toast nếu
+  // sau đó thật sự ghi thất bại. Đây là hàm DUY NHẤT lưu dữ liệu — gộp cả quotes, bảng giá vật tư, công
+  // trình, khách hàng vào 1 tài liệu Firestore (giống cơ chế đã dùng cho app FF&E Schedule).
+  function saveState() {
+    pendingSave = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 500);
+  }
+  function flushSave() {
+    if (!pendingSave) return;
+    pendingSave = false;
+    MAIN_DOC.set({
+      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+    }).catch(function (err) { toast("Không lưu được lên server — " + err.message); });
+  }
+  window.addEventListener("beforeunload", function () { if (pendingSave) flushSave(); });
+
+  function localSeed() {
+    // Lần đầu tiên chưa có gì trên Firestore: dùng bản đã lưu sẵn trong máy này (nếu có, để không mất
+    // dữ liệu Nam đã sửa trước khi nối server), không thì dùng bộ dữ liệu mẫu gốc.
+    var seed = { quotes: seedQuotes(), priceCatalog: DEFAULT_PRICE_CATALOG.slice(), projects: DEFAULT_PROJECTS.slice(), customers: [] };
+    try { var a = localStorage.getItem(STORAGE_KEY); if (a) { var da = JSON.parse(a); if (da && Array.isArray(da.quotes) && da.quotes.length) seed.quotes = da.quotes; } } catch (e) {}
+    try { var b = localStorage.getItem(CATALOG_KEY); if (b) { var db2 = JSON.parse(b); if (db2 && Array.isArray(db2.items) && db2.items.length) seed.priceCatalog = db2.items; } } catch (e) {}
+    try { var c = localStorage.getItem(PROJECTS_KEY); if (c) { var dc = JSON.parse(c); if (dc && Array.isArray(dc.items) && dc.items.length) seed.projects = dc.items; } } catch (e) {}
+    try { var d = localStorage.getItem(CUSTOMERS_KEY); if (d) { var dd = JSON.parse(d); if (dd && Array.isArray(dd.items)) seed.customers = dd.items; } } catch (e) {}
+    return seed;
+  }
+
+  function showAuthOverlay() {
+    if (document.getElementById("authOverlay")) return document.getElementById("authOverlay");
+    var el = document.createElement("div");
+    el.id = "authOverlay";
+    el.style.cssText = "position:fixed;inset:0;background:var(--paper);z-index:100;display:grid;place-items:center;padding:20px";
+    document.body.appendChild(el);
+    return el;
+  }
+  function showLoading(msg) {
+    var el = showAuthOverlay(); el.style.display = "grid";
+    el.innerHTML = '<div style="color:var(--ink-mute);font-size:13px;max-width:360px;text-align:center">' + escapeHtml(msg || "Đang tải…") + '</div>';
+  }
+  function showLogin(errorMsg) {
+    var el = showAuthOverlay(); el.style.display = "grid";
+    el.innerHTML =
+      '<form class="panel" id="loginForm" style="width:min(360px,100%);padding:28px 26px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-lift)">' +
+        '<div style="font-family:\'Barlow\',sans-serif;font-weight:700;font-size:22px;color:var(--ink)">measure<span style="color:var(--ink-mute)">&amp;</span>make</div>' +
+        '<div class="page-sub" style="margin:0">Báo giá nội thất · đăng nhập để xem / sửa dữ liệu</div>' +
+        '<div class="field"><label>Email</label><input id="loginEmail" type="email" required autocomplete="username"></div>' +
+        '<div class="field"><label>Mật khẩu</label><input id="loginPass" type="password" required autocomplete="current-password"></div>' +
+        (errorMsg ? '<div style="font-size:11.5px;color:#b5473f;background:#f6e6e4;padding:7px 9px;border-radius:6px">' + escapeHtml(errorMsg) + '</div>' : "") +
+        '<button class="btn btn-primary" type="submit" style="justify-content:center">Đăng nhập</button>' +
+      '</form>';
+    document.getElementById("loginForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var email = document.getElementById("loginEmail").value.trim();
+      var pass = document.getElementById("loginPass").value;
+      fbAuth.signInWithEmailAndPassword(email, pass).catch(function (err) { showLogin(authErrorText(err)); });
+    });
+  }
+  function hideAuthOverlay() { var el = document.getElementById("authOverlay"); if (el) el.style.display = "none"; }
+  function authErrorText(err) {
+    var m = { "auth/invalid-email": "Email không hợp lệ.", "auth/user-not-found": "Không tìm thấy tài khoản này.",
+      "auth/wrong-password": "Sai mật khẩu.", "auth/invalid-credential": "Sai email hoặc mật khẩu.",
+      "auth/too-many-requests": "Thử sai quá nhiều lần — chờ một lát rồi thử lại." };
+    return m[err.code] || ("Đăng nhập lỗi: " + err.message);
+  }
+  function signOutApp() { fbAuth.signOut(); }
+
+  function renderUserFoot() {
+    var user = fbAuth.currentUser;
+    var email = (user && user.email) || "";
+    document.getElementById("sidebarFootAvatar").textContent = (email.slice(0, 2) || "ID").toUpperCase();
+    document.getElementById("sidebarFootName").textContent = email || "Chưa đăng nhập";
+    document.getElementById("sidebarFootRole").textContent = "Đăng nhập · bấm để đăng xuất";
+  }
+  document.getElementById("sidebarFoot").addEventListener("click", function () { if (confirm("Đăng xuất khỏi ứng dụng?")) signOutApp(); });
+
+  function renderCurrentScreen() {
+    if (view.screen === "list") renderList();
+    else if (view.screen === "detail") renderDetail();
+    else if (view.screen === "customers") renderCustomersScreen();
+    else if (view.screen === "catalog") renderCatalogScreen();
+    else if (view.screen === "print") renderPrintPreview();
+    else renderList();
+    renderNav();
+  }
+
+  function startApp() {
+    showLoading("Đang tải dữ liệu…");
+    if (docUnsub) { docUnsub(); docUnsub = null; }
+    MAIN_DOC.get().then(function (snap) {
+      if (snap.exists) return;
+      showLoading("Lần đầu tiên — đang tạo dữ liệu ban đầu trên server…");
+      var seed = localSeed();
+      return MAIN_DOC.set({
+        quotes: seed.quotes, priceCatalog: seed.priceCatalog, projects: seed.projects, customers: seed.customers,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }).then(function () {
+      docUnsub = MAIN_DOC.onSnapshot(function (snap) {
+        if (!snap.exists) return;
+        var d = snap.data();
+        state.quotes = Array.isArray(d.quotes) ? d.quotes : [];
+        PRICE_CATALOG = (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice();
+        PROJECTS = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
+        CUSTOMERS = Array.isArray(d.customers) ? d.customers : [];
+        if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
+        hideAuthOverlay();
+        renderUserFoot();
+        renderCurrentScreen();
+      }, function (err) {
+        showLoading("Mất kết nối tới server: [" + err.code + "] " + err.message + " — thử tải lại trang (F5).");
+      });
+    }).catch(function (err) {
+      showLoading("Không tải được dữ liệu: [" + err.code + "] " + err.message + " — thử tải lại trang (F5). Nếu vẫn vậy, kiểm tra lại Rules của Firestore đã Publish đúng chưa.");
+    });
+  }
+
+  showLoading("Đang kiểm tra đăng nhập…");
+  fbAuth.onAuthStateChanged(function (user) {
+    if (user) { startApp(); }
+    else { if (docUnsub) { docUnsub(); docUnsub = null; } showLogin(); }
+  });
 
   /* ===================== HELPERS ===================== */
 
@@ -1032,42 +1169,6 @@
   var PRICE_CATALOG = DEFAULT_PRICE_CATALOG.slice();
   var catalogSyncedAt = null;
 
-  function loadPriceCatalog() {
-    try {
-      var raw = localStorage.getItem(CATALOG_KEY);
-      if (raw) {
-        var saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.items) && saved.items.length) {
-          PRICE_CATALOG = saved.items;
-          catalogSyncedAt = saved.updated || null;
-        }
-      }
-    } catch (e) {}
-  }
-  loadPriceCatalog();
-
-  function loadProjects() {
-    try {
-      var raw = localStorage.getItem(PROJECTS_KEY);
-      if (raw) {
-        var saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.items) && saved.items.length) PROJECTS = saved.items;
-      }
-    } catch (e) {}
-  }
-  loadProjects();
-
-  function loadCustomers() {
-    try {
-      var raw = localStorage.getItem(CUSTOMERS_KEY);
-      if (raw) {
-        var saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.items)) CUSTOMERS = saved.items;
-      }
-    } catch (e) {}
-  }
-  loadCustomers();
-
   // Dữ liệu đồng bộ từ Apps Script trả về dạng { updated, priceCatalog:[...], projects:[...], customers:[...] }
   // — cả 3 mảng đều đọc từ 1 file Sheet duy nhất (khác tab). Thiếu mảng nào thì giữ nguyên phần đó, không báo lỗi,
   // để vẫn đồng bộ được các phần khác nếu Nam lỡ sửa Apps Script thiếu 1 nhánh.
@@ -1099,7 +1200,6 @@
       if (items.length) {
         PRICE_CATALOG = items;
         catalogSyncedAt = syncedAt;
-        try { localStorage.setItem(CATALOG_KEY, JSON.stringify({ updated: syncedAt, items: items })); } catch (e) {}
         counts.push(items.length + " mã vật tư");
       }
     }
@@ -1118,7 +1218,6 @@
         });
       if (projects.length) {
         PROJECTS = projects;
-        try { localStorage.setItem(PROJECTS_KEY, JSON.stringify({ updated: syncedAt, items: projects })); } catch (e) {}
         counts.push(projects.length + " công trình");
       }
     }
@@ -1130,11 +1229,11 @@
           return { name: c.name || "", phone: c.phone || "", email: c.email || "", project: c.project || "", note: c.note || "" };
         });
       CUSTOMERS = customers;
-      try { localStorage.setItem(CUSTOMERS_KEY, JSON.stringify({ updated: syncedAt, items: customers })); } catch (e) {}
       if (customers.length) counts.push(customers.length + " khách hàng");
     }
 
     if (!counts.length) throw new Error("Không tìm thấy dữ liệu hợp lệ nào trong JSON (cần ít nhất 1 trong 3 mảng priceCatalog/projects/customers).");
+    saveState(); // đẩy cả 3 mảng vừa đồng bộ lên Firestore, để mọi người dùng chung thấy ngay
     return counts;
   }
 
@@ -1149,12 +1248,10 @@
     return -1;
   }
   function catalogHasMedia(e) { return !!(e && (((e.images || []).length) || ((e.links || []).length))); }
-  function saveCatalog() {
-    try { localStorage.setItem(CATALOG_KEY, JSON.stringify({ updated: catalogSyncedAt, items: PRICE_CATALOG })); return true; }
-    catch (e) { return false; }
-  }
-  // Nén ảnh về canvas (tối đa `max` px cạnh dài, JPEG) rồi trả về data URI — cùng cơ chế đã dùng
-  // cho app FF&E Schedule, để ảnh không làm đầy quota localStorage quá nhanh.
+  function saveCatalog() { saveState(); return true; }
+  // Nén ảnh về canvas (tối đa `max` px cạnh dài, JPEG) rồi trả về Blob — cùng cơ chế đã dùng cho
+  // app FF&E Schedule. Blob này được tải thẳng lên Firebase Storage (xem uploadToStorage bên dưới),
+  // Firestore chỉ giữ URL — không nhét ảnh thô vào tài liệu (Firestore giới hạn 1MB/tài liệu).
   function resizeImageFile(file, max, q) {
     max = max || 900; q = q || 0.72;
     return new Promise(function (resolve, reject) {
@@ -1168,12 +1265,17 @@
           if (Math.max(w, h) > max) { var s = max / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
           var c = document.createElement("canvas"); c.width = w; c.height = h;
           c.getContext("2d").drawImage(img, 0, 0, w, h);
-          resolve(c.toDataURL("image/jpeg", q));
+          c.toBlob(function (b) { b ? resolve(b) : reject(new Error("Không nén được ảnh")); }, "image/jpeg", q);
         };
         img.src = fr.result;
       };
       fr.readAsDataURL(file);
     });
+  }
+  function slug(s) { return (String(s || "").replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 80)) || "x"; }
+  function uploadToStorage(path, blob, contentType) {
+    var ref = fbStorage.ref().child(path);
+    return ref.put(blob, contentType ? { contentType: contentType } : undefined).then(function () { return ref.getDownloadURL(); });
   }
   function openLightbox(src) {
     var lb = document.createElement("div");
@@ -1674,8 +1776,8 @@
     var entry = code ? findCatalogEntry(code) : null;
     ceOriginalCode = entry ? entry.code : null;
     ceDraft = entry
-      ? { images: (entry.images || []).slice(), links: (entry.links || []).map(function (l) { return { url: l.url, label: l.label }; }) }
-      : { images: [], links: [] };
+      ? { images: (entry.images || []).slice(), links: (entry.links || []).map(function (l) { return { url: l.url, label: l.label }; }), uploadKey: entry.code }
+      : { images: [], links: [], uploadKey: "draft_" + Date.now() };
 
     document.getElementById("catalogModalTitle").textContent = entry ? "Sửa mã " + entry.code : "Thêm mã vật tư";
     document.getElementById("ceCode").value = entry ? entry.code : "";
@@ -1695,9 +1797,18 @@
       var files = Array.prototype.slice.call(fileInput.files || []);
       if (!files.length) return;
       var room = 6 - (ceDraft.images || []).length;
-      Promise.all(files.slice(0, Math.max(0, room)).map(function (f) { return resizeImageFile(f); }))
-        .then(function (urls) { ceDraft.images = (ceDraft.images || []).concat(urls); paintCeThumbs(); })
-        .catch(function () { toast("Không đọc được ảnh."); });
+      var batch = files.slice(0, Math.max(0, room));
+      batch.reduce(function (chain, f) {
+        return chain.then(function () {
+          return resizeImageFile(f).then(function (blob) {
+            var path = "baogia/materials/" + slug(ceDraft.uploadKey) + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + ".jpg";
+            return uploadToStorage(path, blob, "image/jpeg");
+          }).then(function (url) {
+            ceDraft.images = (ceDraft.images || []).concat([url]);
+            paintCeThumbs();
+          });
+        });
+      }, Promise.resolve()).catch(function (err) { toast("Không tải được ảnh lên: " + err.message); });
     };
 
     document.getElementById("ceAddLink").onclick = function () {
@@ -1740,7 +1851,7 @@
       var i2 = ceOriginalCode ? findCatalogEntryIndex(ceOriginalCode) : -1;
       if (i2 > -1) PRICE_CATALOG[i2] = rec; else PRICE_CATALOG.push(rec);
 
-      if (!saveCatalog()) { toast("Bộ nhớ trình duyệt đầy — xoá bớt ảnh hoặc dùng ảnh nhỏ hơn."); return; }
+      saveCatalog();
       closeCatalogEditor();
       if (view.screen === "catalog") renderCatalogScreen();
       if (view.screen === "detail") renderDetail();
@@ -1858,7 +1969,7 @@
         "&note=" + encodeURIComponent(c.note);
       this.href = APPS_SCRIPT_URL + "?" + qs; // gán ngay trước khi trình duyệt điều hướng theo click này
       CUSTOMERS.push(c);
-      try { localStorage.setItem(CUSTOMERS_KEY, JSON.stringify({ updated: new Date().toISOString(), items: CUSTOMERS })); } catch (err) {}
+      saveState();
       closeAddCustomerModal();
       toast('Đã thêm "' + c.name + '" — đang lưu lên Google Sheet.');
       if (view.screen === "customers") renderCustomersScreen();
@@ -2119,7 +2230,7 @@
     document.getElementById("crumbCurrent").textContent = q.name;
 
     document.getElementById("btnBack").addEventListener("click", function () { view.screen = "list"; renderList(); });
-    document.getElementById("btnSave").addEventListener("click", function () { saveState(); toast("Đã lưu báo giá (minh hoạ, lưu cục bộ trên trình duyệt)."); });
+    document.getElementById("btnSave").addEventListener("click", function () { saveState(); toast("Đã lưu báo giá lên server."); });
     document.getElementById("btnExportPdf").addEventListener("click", function () { printQuote(q); });
     document.getElementById("btnOpenCatalog").addEventListener("click", function () { view.screen = "catalog"; renderCatalogScreen(); renderNav(); });
 
@@ -2544,8 +2655,6 @@
   /* ===================== INIT ===================== */
 
   setupColumnResize();
-  renderNav();
-  renderList();
 })();
 </script>
 
