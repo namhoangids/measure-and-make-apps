@@ -182,9 +182,12 @@ input,select,textarea{font:inherit;color:inherit}
 
 /* board */
 .board{padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:13px}
-.btile{border:1px solid var(--line-2);display:flex;flex-direction:column}
-.btile:hover{border-color:var(--ink-4)}
+.btile{border:1px solid var(--line-2);display:flex;flex-direction:column;position:relative}
+.btile:hover{border-color:var(--ink-4);z-index:5}
 .btile[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.btile .slot img{transition:transform .15s ease}
+.btile:hover .slot{z-index:1}
+.btile:hover .slot img{transform:scale(2)}
 .btile .cap{padding:8px 9px}
 .btile .cap .top{display:flex;justify-content:space-between;font-size:10px;color:var(--accent)}
 .btile .cap h4{font-size:13px;margin:3px 0;line-height:1.15}
@@ -1655,7 +1658,7 @@ function openMaterialLibrary(){
         </div>`;
       }).join("") : `<div class="empty">Chưa có mã vật tư nào.</div>`}
     </div>
-    <div style="padding:8px 16px"><button class="btn btn-sm" id="m_add">+ Thêm mã vật tư</button></div>
+    <div style="padding:8px 16px;display:flex;gap:8px"><button class="btn btn-sm" id="m_add">+ Thêm mã vật tư</button><button class="btn btn-sm" id="m_import">Nhập từ Excel…</button></div>
     <footer><button class="btn btn-sm" data-close>Đóng</button></footer>
   `, true);
   const bd = $("#backdrop");
@@ -1667,6 +1670,7 @@ function openMaterialLibrary(){
     catch(err){ toast("Không xoá được — "+err.message); }
   });
   $("#m_add").onclick = ()=> openMaterialEditor(null);
+  $("#m_import").onclick = openMaterialExcel;
 }
 
 let matDraft = null, matOriginalCode = null;
@@ -1793,6 +1797,99 @@ function paintMatLinks(){
   wrap.querySelectorAll("[data-mrmlink]").forEach(b=> b.onclick = ()=>{ matDraft.links.splice(+b.dataset.mrmlink,1); paintMatLinks(); });
 }
 
+// ── Thư viện vật tư: nhập nhanh từ Excel/CSV (điền thông tin trước, thêm ảnh sau) ──
+function openMaterialExcel(){
+  ui.dialog = {type:"material-excel"};
+  paintDialog(`
+    <header><h3>Nhập Thư viện vật tư từ Excel</h3></header>
+    <div class="impbox" id="mdropzone">
+      Kéo-thả file <b>.xlsx</b> hoặc <b>.csv</b> vào đây, hoặc <button class="link" id="mPickFile" style="text-decoration:underline;color:var(--accent)">chọn file</button>.<br>
+      <span style="font-size:11px">Cột nhận diện: Mã vật tư, Tên hạng mục, Nhà cung cấp, Mã NCC, ĐVT, Đơn giá, Kích thước, Hoàn thiện. Mã đã có sẵn sẽ được cập nhật thông tin (ảnh đang có không bị mất) — nhập xong chỉ cần bổ sung ảnh cho từng mã.</span>
+    </div>
+    <div style="padding:0 16px 14px"><button class="btn btn-sm" id="mx_template">Tải file mẫu</button></div>
+    <footer><button class="btn btn-sm" data-close>Đóng</button></footer>
+  `);
+  const dz = $("#mdropzone");
+  const openPicker = ()=>{
+    const inp=document.createElement("input"); inp.type="file"; inp.accept=".xlsx,.xls,.csv";
+    inp.onchange=()=>{ if(inp.files[0]) importMaterialFile(inp.files[0]); };
+    inp.click();
+  };
+  $("#mPickFile").onclick = openPicker;
+  dz.ondragover = e=>{ e.preventDefault(); dz.classList.add("drop"); };
+  dz.ondragleave = ()=> dz.classList.remove("drop");
+  dz.ondrop = e=>{ e.preventDefault(); dz.classList.remove("drop"); if(e.dataTransfer.files[0]) importMaterialFile(e.dataTransfer.files[0]); };
+  $("#mx_template").onclick = ()=>{
+    if(typeof XLSX==="undefined"){ toast("Thư viện Excel chưa tải xong"); return; }
+    const data = [{"Mã vật tư":"LW575JW-F4W","Tên hạng mục":"Vòi lavabo gắn tường","Nhà cung cấp":"TOTO","Mã NCC":"LW575JW/F4W","ĐVT":"chiếc","Đơn giá":8500000,"Kích thước":"","Hoàn thiện":"Chrome"}];
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Thu vien vat tu");
+    try{ XLSX.writeFile(wb, "ThuVienVatTu_mau.xlsx"); toast("Đã tải file mẫu"); }
+    catch(e){ toast("Trình duyệt chặn tải file ở đây"); }
+  };
+}
+function importMaterialFile(file){
+  if(typeof XLSX==="undefined"){ toast("Thư viện Excel chưa tải xong"); return; }
+  const fr = new FileReader();
+  fr.onload = async ()=>{
+    let json;
+    try{
+      const wb = XLSX.read(fr.result, {type:"array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      json = XLSX.utils.sheet_to_json(ws, {defval:""});
+    }catch(e){ toast("Không đọc được file"); return; }
+    if(!json.length){ toast("File rỗng"); return; }
+    const keys = Object.keys(json[0]);
+    const alias = {
+      code:["mã vật tư","mã cố định","mã","code"],
+      name:["tên hạng mục","tên","name"],
+      vendor:["nhà cung cấp","ncc","vendor","supplier"],
+      model:["mã ncc","mã / model","mã model","model","vendor ref","ký mã hiệu"],
+      uom:["đvt","đơn vị tính","đơn vị","uom"],
+      unit:["đơn giá","don gia","unit price","giá"],
+      dims:["kích thước","dims","size","kt"],
+      finish:["hoàn thiện","finish"],
+    };
+    const colFor = {};
+    keys.forEach(k=>{ const kl=String(k).toLowerCase().trim();
+      for(const [f,al] of Object.entries(alias)){ if(al.some(a=>kl===a||kl.includes(a))){ if(!colFor[f]) colFor[f]=k; } }
+    });
+    if(!colFor.code || !colFor.name){ toast('Không tìm thấy cột "Mã vật tư" và/hoặc "Tên hạng mục"'); return; }
+    const rows = json.map(r=>{
+      const g = f => colFor[f]!=null ? r[colFor[f]] : "";
+      return {
+        code: String(g("code")||"").trim().toUpperCase(),
+        name: String(g("name")||"").trim(),
+        vendor: String(g("vendor")||"").trim() || null,
+        model: String(g("model")||"").trim() || undefined,
+        uom: String(g("uom")||"").trim() || "chiếc",
+        unit: parseMoneyLike(g("unit")),
+        dims: String(g("dims")||"").trim() || undefined,
+        finish: String(g("finish")||"").trim() || undefined,
+      };
+    }).filter(r=>r.code && r.name);
+    if(!rows.length){ toast("Không có dòng hợp lệ (cần có Mã vật tư và Tên hạng mục)"); return; }
+    try{
+      const CHUNK = 450;
+      for(let i=0;i<rows.length;i+=CHUNK){
+        const batch = db.batch();
+        rows.slice(i,i+CHUNK).forEach(rec=>{
+          batch.set(CATALOG_COL.doc(slug(rec.code)), {
+            ...rec,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+          }, {merge:true});
+        });
+        await batch.commit();
+      }
+      closeDialog(); openMaterialLibrary();
+      toast(`Đã nhập ${rows.length} mã vào thư viện — giờ chỉ cần bổ sung ảnh cho từng mã`);
+    }catch(err){ toast("Không nhập được — "+err.message); }
+  };
+  fr.readAsArrayBuffer(file);
+}
+
 // ── Excel nhập / xuất ─────────────────────────────────────────
 const XCOLS = [
   ["Mã","code"],["Tên hạng mục","name"],["Phòng","room"],["Nhóm","category"],["Nhà cung cấp","vendor"],
@@ -1801,6 +1898,16 @@ const XCOLS = [
   ["Kích thước","dims"],["Ghi chú","note"],
 ];
 const STATUS_FROM_VN = Object.fromEntries(Object.entries(STATUS_LABEL).map(([k,v])=>[v.toLowerCase(),k]));
+// Parse số tiền từ Excel/CSV: chấp nhận "1.200.000", "1200000", "1.200.000,50", "1200000,5"...
+function parseMoneyLike(v){
+  if(v==null || String(v).trim()==="") return null;
+  if(typeof v==="number") return isFinite(v)?v:null;
+  let s = String(v).trim().replace(/[^\d,.\-]/g,"");
+  if(s.includes(",") && s.includes(".")) s = s.replace(/\./g,"").replace(",",".");   // 1.200.000,50
+  else if((s.match(/\./g)||[]).length>1) s = s.replace(/\./g,"");                     // 1.200.000
+  else if(s.includes(",")) s = s.replace(",",".");                                    // 1200000,5
+  const n = Number(s); return isFinite(n) ? n : null;
+}
 function itemsToRows(){
   return items.map(it=>{
     const o = {};
@@ -1896,15 +2003,7 @@ function importFile(file){
     const parsed = json.map(r=>{
       const g = f => colFor[f]!=null ? r[colFor[f]] : "";
       const st = String(g("status")||"").toLowerCase().trim();
-      const numv = v => {
-        if(v==null || String(v).trim()==="") return null;
-        if(typeof v==="number") return isFinite(v)?v:null;
-        let s = String(v).trim().replace(/[^\d,.\-]/g,"");
-        if(s.includes(",") && s.includes(".")) s = s.replace(/\./g,"").replace(",",".");   // 1.200.000,50
-        else if((s.match(/\./g)||[]).length>1) s = s.replace(/\./g,"");                     // 1.200.000
-        else if(s.includes(",")) s = s.replace(",",".");                                    // 1200000,5
-        const n = Number(s); return isFinite(n) ? n : null;
-      };
+      const numv = parseMoneyLike;
       const catRaw = String(g("category")||"").trim();
       const base = {
         code:String(g("code")||"").trim(),
