@@ -498,7 +498,7 @@ function linkMatCodesFromModel(){
 
 let ui = {
   tab:"schedule", view:"table",
-  q:"", room:"", status:"", vendor:"", cat:"", leadOnly:false,
+  q:"", room:"", status:"", vendor:"", cat:"", matCodeFilter:"", leadOnly:false,
   sortKey:"ord", sortDir:1,
   selected:null, detail:null, picks:new Set(), menu:false, dialog:null,
   mode:(()=>{ try{ return localStorage.getItem("ffe_mode")==="client" ? "client" : "admin"; }catch(e){ return "admin"; } })(),
@@ -647,7 +647,7 @@ async function openProject(id, opts){
   ui.menu = false; ui.picks.clear();
   // Mỗi dự án là 1 tập dữ liệu riêng — xoá bộ lọc/sắp xếp của dự án trước để không bị hiểu nhầm
   // là dự án mới "rỗng" khi bộ lọc cũ (phòng/NCC/nhóm...) không khớp dữ liệu dự án này.
-  ui.q=""; ui.room=""; ui.status=""; ui.vendor=""; ui.cat=""; ui.leadOnly=false;
+  ui.q=""; ui.room=""; ui.status=""; ui.vendor=""; ui.cat=""; ui.matCodeFilter=""; ui.leadOnly=false;
   ui.sortKey="ord"; ui.sortDir=1;
   renderLoading("Đang tải dữ liệu dự án…");
   const ref = projectDocRef(id);
@@ -789,6 +789,7 @@ function filtered(){
     if(ui.status && it.status!==ui.status) return false;
     if(ui.vendor && it.vendor!==ui.vendor) return false;
     if(ui.cat && (it.category||"Khác")!==ui.cat) return false;
+    if(ui.matCodeFilter && it.matCode!==ui.matCodeFilter) return false;
     if(ui.leadOnly && !(it.lead>8)) return false;
     if(ui.q){
       const s = (it.code+" "+(it.matCode||"")+" "+it.name+" "+(it.vendor||"")+" "+(it.model||"")+" "+(it.room||"")+" "+(it.category||"")).toLowerCase();
@@ -1005,6 +1006,9 @@ function scheduleView(){
     <span class="selfilter"><select id="fCat" data-default="${ui.cat?"0":"1"}">
       <option value="">Nhóm</option>${CATEGORIES.map(c=>`<option ${ui.cat===c?"selected":""}>${esc(c)}</option>`).join("")}
     </select></span>
+    <span class="selfilter"><select id="fMatCode" data-default="${ui.matCodeFilter?"0":"1"}">
+      <option value="">Mã vật tư</option>${matCodeList().map(c=>`<option value="${esc(c)}" ${ui.matCodeFilter===c?"selected":""}>${esc(c)} (${items.filter(i=>i.matCode===c).length})</option>`).join("")}
+    </select></span>
     ${ui.leadOnly
       ? `<span class="chip">Lead &gt; 8 tuần <button id="clearLead" aria-label="Bỏ lọc">×</button></span>`
       : `<button class="chip ghost" id="addLead">+ Lead &gt; 8 tuần</button>`}
@@ -1042,7 +1046,8 @@ function sortBtn(key,label,right){
 const edCell = (code,field,html)=> RO()
   ? `<span>${html}</span>`
   : `<span class="ed" data-ed="${field}" data-code="${code}">${html}</span>`;
-const anyFilterOn = () => ui.q||ui.room||ui.status||ui.vendor||ui.cat||ui.leadOnly;
+const anyFilterOn = () => ui.q||ui.room||ui.status||ui.vendor||ui.cat||ui.matCodeFilter||ui.leadOnly;
+function matCodeList(){ return [...new Set(items.map(i=>i.matCode).filter(Boolean))].sort((a,b)=>a.localeCompare(b)); }
 
 function tableView(){
   const list = filtered();
@@ -2564,9 +2569,10 @@ function wire(){
   $("#fStatus") && ($("#fStatus").onchange = e=>{ ui.status=e.target.value; render(); });
   $("#fVendor") && ($("#fVendor").onchange = e=>{ ui.vendor=e.target.value; render(); });
   $("#fCat") && ($("#fCat").onchange = e=>{ ui.cat=e.target.value; render(); });
+  $("#fMatCode") && ($("#fMatCode").onchange = e=>{ ui.matCodeFilter=e.target.value; render(); });
   $("#clearLead") && ($("#clearLead").onclick = ()=>{ ui.leadOnly=false; render(); });
   $("#addLead") && ($("#addLead").onclick = ()=>{ ui.leadOnly=true; render(); });
-  $("#clearAll") && ($("#clearAll").onclick = ()=>{ ui.q="";ui.room="";ui.status="";ui.vendor="";ui.cat="";ui.leadOnly=false; render(); });
+  $("#clearAll") && ($("#clearAll").onclick = ()=>{ ui.q="";ui.room="";ui.status="";ui.vendor="";ui.cat="";ui.matCodeFilter="";ui.leadOnly=false; render(); });
   document.querySelectorAll("[data-view]").forEach(b=> b.onclick = ()=>{ ui.view=b.dataset.view; render(); });
   $("#addItem") && ($("#addItem").onclick = ()=> openAdd());
   $("#addRoom") && ($("#addRoom").onclick = openRooms);
