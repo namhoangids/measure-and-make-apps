@@ -278,6 +278,11 @@ input,select,textarea{font:inherit;color:inherit}
 .dhero .phlabel{font-family:"Barlow Condensed",sans-serif;font-size:13px;color:var(--ink-4)}
 .dhero .hint{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;font-size:10px;text-align:center;color:#fff;background:color-mix(in srgb,#000 55%,transparent);opacity:0;transition:opacity .12s}
 .dhero:hover .hint{opacity:1}
+.posbtn{position:absolute;top:6px;right:6px;width:24px;height:24px;display:grid;place-items:center;background:color-mix(in srgb,#000 55%,transparent);color:#fff;font-size:12px;z-index:2;border-radius:2px}
+.posbtn:hover{background:color-mix(in srgb,#000 75%,transparent)}
+.pospick{position:absolute;top:34px;right:6px;z-index:3;display:grid;grid-template-columns:repeat(3,26px);gap:2px;background:var(--surface);border:1px solid var(--line-2);box-shadow:var(--shadow);padding:4px}
+.pospick button{width:26px;height:26px;display:grid;place-items:center;font-size:12px;color:var(--ink-2);border:1px solid transparent}
+.pospick button:hover{border-color:var(--accent);color:var(--accent)}
 .dthumbs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .dthumbs .add{width:54px;height:54px;border:1px dashed var(--line-2);display:grid;place-items:center;color:var(--ink-4);font-size:15px}
 .dthumbs .add:hover{border-color:var(--accent);color:var(--accent)}
@@ -498,6 +503,7 @@ let ui = {
   selected:null, detail:null, picks:new Set(), menu:false, dialog:null,
   mode:(()=>{ try{ return localStorage.getItem("ffe_mode")==="client" ? "client" : "admin"; }catch(e){ return "admin"; } })(),
   projectQ:"", projectSelectMode:false, projectPicks:new Set(),
+  posPicker:false,
 };
 const RO = () => ui.mode==="client";
 
@@ -594,19 +600,22 @@ function parseHash(){
   return { projectId: parts[0]||null, tab: parts[1]||"schedule", view: params.get("view")||"table", detail: params.get("item")||null };
 }
 function updateHash(){
-  if(!currentProjectId){
-    if(location.hash) history.replaceState(null,"", location.pathname+location.search);
-    return;
-  }
-  let h = "#/"+encodeURIComponent(currentProjectId)+"/"+ui.tab;
-  if(ui.tab==="schedule"){
-    const params = new URLSearchParams();
-    if(ui.view && ui.view!=="table") params.set("view", ui.view);
-    if(ui.detail) params.set("item", ui.detail);
-    const qs = params.toString();
-    if(qs) h += "?"+qs;
-  }
-  if(location.hash !== h) history.replaceState(null,"", h);
+  // history.replaceState có thể ném lỗi trong vài sandbox đặc biệt (vd. trang data:) — không để lỗi này làm hỏng cả render().
+  try{
+    if(!currentProjectId){
+      if(location.hash) history.replaceState(null,"", location.pathname+location.search);
+      return;
+    }
+    let h = "#/"+encodeURIComponent(currentProjectId)+"/"+ui.tab;
+    if(ui.tab==="schedule"){
+      const params = new URLSearchParams();
+      if(ui.view && ui.view!=="table") params.set("view", ui.view);
+      if(ui.detail) params.set("item", ui.detail);
+      const qs = params.toString();
+      if(qs) h += "?"+qs;
+    }
+    if(location.hash !== h) history.replaceState(null,"", h);
+  }catch(e){}
 }
 
 function subscribeProjectsList(){
@@ -624,7 +633,7 @@ function subscribeProjectsList(){
 function goHome(){
   if(docUnsub){ docUnsub(); docUnsub=null; }
   currentProjectId = null; currentProjectName = "";
-  rooms=[]; items=[]; vendors=[]; catalog=[];
+  rooms=[]; items=[]; vendors=[];  // KHÔNG xoá catalog — thư viện vật tư dùng chung mọi dự án, không thuộc riêng dự án nào
   ui.detail=null; ui.menu=false; ui.picks.clear();
   render();
 }
@@ -726,6 +735,16 @@ fbAuth.onAuthStateChanged(user=>{
 function findMaterial(code){ const c=(code||"").trim().toUpperCase(); return c ? (catalog.find(m=>m.code===c)||null) : null; }
 function materialList(){ return catalog.slice().sort((a,b)=>a.code.localeCompare(b.code)); }
 function lineTotal(it){ return it.unit==null ? null : it.qty*it.unit; }
+// Vị trí crop của ảnh (object-position) — lưu theo URL trên chính hạng mục/mã vật tư, không đổi cấu trúc mảng images[].
+function imgPos(entity, url){ return (entity && entity.imagePos && entity.imagePos[url]) || "center center"; }
+const IMG_POSITIONS = [
+  ["left top","↖"],["center top","↑"],["right top","↗"],
+  ["left center","←"],["center center","•"],["right center","→"],
+  ["left bottom","↙"],["center bottom","↓"],["right bottom","↘"],
+];
+function positionPickerHtml(){
+  return `<div class="pospick">${IMG_POSITIONS.map(([v,ic])=>`<button data-setpos="${v}" title="Vị trí: ${v}">${ic}</button>`).join("")}</div>`;
+}
 function vendorList(){
   return [...new Set([...(vendors||[]), ...items.map(i=>i.vendor).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,"vi"));
 }
@@ -1102,7 +1121,7 @@ function cardsView(){
     for(const it of g){
       const t = lineTotal(it), img = it.images&&it.images[0];
       out += `<div class="cardrow" data-code="${it.code}" aria-selected="${ui.selected===it.code}" tabindex="0">
-        <div class="thumb ${img?"":"slot bp"}">${img?`<img src="${img}" alt="">`:`<i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>`}</div>
+        <div class="thumb ${img?"":"slot bp"}">${img?`<img src="${img}" alt="" style="object-position:${imgPos(it,img)}">`:`<i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>`}</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:10.5px;color:var(--accent)">${it.code}</span>
             <span style="font-family:'Barlow Condensed';font-weight:600;font-size:15px" class="cell-ell">${esc(it.name)}</span></div>
@@ -1133,7 +1152,7 @@ function boardView(){
       const img = it.images&&it.images[0];
       out += `<div class="btile bp" data-code="${it.code}" aria-selected="${ui.selected===it.code}" tabindex="0">
         <i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>
-        <div class="slot" style="height:120px;border:0;border-bottom:1px solid var(--line-2)">${img?`<img src="${img}" alt="">`:""}</div>
+        <div class="slot" style="height:120px;border:0;border-bottom:1px solid var(--line-2)">${img?`<img src="${img}" alt="" style="object-position:${imgPos(it,img)}">`:""}</div>
         <div class="cap">
           <div class="top"><span>${it.code}</span><span>×${it.qty}</span></div>
           <h4>${esc(it.name)}</h4>
@@ -1168,7 +1187,7 @@ function rail(){
   return `<aside class="rail">
     <div class="kick">${it.code} · Đang chọn</div>
     ${img
-      ? `<div class="slot" id="railHero" data-full="${img}" style="height:150px;overflow:hidden;cursor:zoom-in"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
+      ? `<div class="slot" id="railHero" data-full="${img}" data-pos="${imgPos(it,img)}" style="height:150px;overflow:hidden;cursor:zoom-in"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:${imgPos(it,img)};display:block"></div>`
       : `<div class="slot bp" style="height:150px"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i></div>`}
     <h3>${esc(it.name)}</h3>
     <div class="vend">${[it.vendor,it.model].filter(Boolean).map(esc).join(" · ")||"Chưa có NCC"}</div>
@@ -1246,12 +1265,12 @@ function detailScreen(code){
     <div class="dbody">
       <div class="dleft">
         ${im[0]
-          ? `<div class="dhero" ${ro?"":`data-pick-img="1"`} title="${ro?"":"Đổi ảnh chính"}"><img src="${im[0]}" alt="${esc(it.name)}">${ro?"":`<span class="hint">Bấm để đổi · kéo-thả / dán để thêm</span>`}</div>`
+          ? `<div class="dhero" ${ro?"":`data-pick-img="1"`} title="${ro?"":"Đổi ảnh chính"}"><img src="${im[0]}" alt="${esc(it.name)}" style="object-position:${imgPos(it,im[0])}">${ro?"":`<span class="hint">Bấm để đổi · kéo-thả / dán để thêm</span><button class="posbtn" data-togglepos="1" title="Chỉnh vị trí ảnh">⤢</button>${ui.posPicker?positionPickerHtml():""}`}</div>`
           : (ro
             ? `<div class="dhero slot bp ph"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i><span class="phlabel">Chưa có ảnh</span></div>`
             : `<div class="dhero slot bp ph" data-pick-img="1"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i><span class="phlabel">+ Thêm ảnh</span></div>`)}
         ${im.length ? `<div class="dthumbs">
-          ${im.map((src,i)=>`<div class="dthumb ${i===0?"active":""}" ${ro?"":`data-thumb="${i}"`} title="${i===0?"Ảnh chính":"Đặt làm ảnh chính"}"><img src="${src}" alt="">${ro?"":`<button class="dthumb-x" data-rmimg="${i}" aria-label="Xoá ảnh">×</button>`}</div>`).join("")}
+          ${im.map((src,i)=>`<div class="dthumb ${i===0?"active":""}" ${ro?"":`data-thumb="${i}"`} title="${i===0?"Ảnh chính":"Đặt làm ảnh chính"}"><img src="${src}" alt="" style="object-position:${imgPos(it,src)}">${ro?"":`<button class="dthumb-x" data-rmimg="${i}" aria-label="Xoá ảnh">×</button>`}</div>`).join("")}
           ${!ro && im.length<6?`<button class="add" data-pick-img="1" aria-label="Thêm ảnh">+</button>`:""}
         </div>` : ""}
         ${ro?"":`<div class="imghint">Bấm / kéo-thả / dán (Ctrl+V) ảnh vào đây. Bấm thumbnail để đặt làm ảnh chính. Ảnh lưu trong trình duyệt này.</div>`}
@@ -1648,7 +1667,7 @@ function openMaterialLibrary(){
       ${list.length ? list.map(m=>{
         const img = m.images && m.images[0];
         return `<div class="roomrow" style="grid-template-columns:36px 1fr 90px 52px">
-          <span class="slot ${img?"":"bp"}" style="width:32px;height:32px;overflow:hidden;display:block">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover;display:block">`:""}</span>
+          <span class="slot ${img?"":"bp"}" style="width:32px;height:32px;overflow:hidden;display:block">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover;object-position:${imgPos(m,img)};display:block">`:""}</span>
           <span><b style="font-family:'Barlow Condensed';font-size:13px">${esc(m.code)}</b>
             <div style="font-size:11px;color:var(--ink-3)" class="cell-ell">${esc(m.name)}${m.vendor?" · "+esc(m.vendor):""}${m.model?" · Mã NCC: "+esc(m.model):""}</div></span>
           <span class="tnum" style="font-size:11.5px;text-align:right">${money(m.unit)}</span>
@@ -1671,12 +1690,13 @@ function openMaterialLibrary(){
   $("#m_import").onclick = openMaterialExcel;
 }
 
-let matDraft = null, matOriginalCode = null;
+let matDraft = null, matOriginalCode = null, matPosPickerOpen = false;
 
 function openMaterialEditor(code){
   const m = code ? findMaterial(code) : null;
   matOriginalCode = m ? m.code : null;
-  matDraft = { images:(m&&m.images||[]).slice(), links:(m&&m.links||[]).map(l=>({url:l.url,label:l.label})), uploadKey: matOriginalCode || ("draft_"+Date.now()) };
+  matDraft = { images:(m&&m.images||[]).slice(), links:(m&&m.links||[]).map(l=>({url:l.url,label:l.label})), uploadKey: matOriginalCode || ("draft_"+Date.now()), imagePos: {...(m&&m.imagePos||{})} };
+  matPosPickerOpen = false;
   ui.dialog = {type:"material-edit"};
   paintDialog(`
     <header><h3>${m?"Sửa mã "+esc(m.code):"Thêm mã vật tư"}</h3><span class="kick">Thư viện</span></header>
@@ -1699,13 +1719,14 @@ function openMaterialEditor(code){
       <button class="btn btn-sm" id="m_addlink" type="button" style="margin-top:6px">+ Thêm liên kết</button>
     </div>
     <footer>
-      ${m?`<button class="btn btn-sm btn-danger spacer" id="m_del" type="button">Xoá mã này</button>`:""}
+      ${m?`<button class="btn btn-sm btn-danger spacer" id="m_del" type="button">Xoá mã này</button><button class="btn btn-sm" id="m_history" type="button">Lịch sử…</button>`:""}
       <button class="btn btn-sm" data-close>Huỷ</button>
       <button class="btn btn-primary btn-sm" id="m_save" type="button">Lưu</button>
     </footer>
   `, true);
   paintMatMedia();
   paintMatLinks();
+  if(m) $("#m_history").onclick = ()=> openMaterialHistory(m.code);
 
   $("#m_addlink").onclick = ()=>{
     let url = prompt("URL sản phẩm:"); if(!url) return;
@@ -1737,13 +1758,17 @@ function openMaterialEditor(code){
       unit:u===""?null:Math.max(0,+u),
       dims:$("#m_dims").value.trim()||undefined,
       finish:$("#m_finish").value.trim()||undefined,
-      images:(matDraft.images||[]).slice(), links:(matDraft.links||[]).slice(),
+      images:(matDraft.images||[]).slice(), links:(matDraft.links||[]).slice(), imagePos:{...(matDraft.imagePos||{})},
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
     };
     $("#m_save").disabled = true;
     try{
       const newId = slug(codeVal), oldId = matOriginalCode ? slug(matOriginalCode) : null;
+      if(matOriginalCode){
+        const liveSnap = await CATALOG_COL.doc(oldId).get();
+        if(liveSnap.exists) await archiveMaterialVersion(newId, liveSnap.data());
+      }
       if(oldId && oldId!==newId) await CATALOG_COL.doc(oldId).delete();
       await CATALOG_COL.doc(newId).set(rec);
       closeDialog(); openMaterialLibrary();
@@ -1752,14 +1777,63 @@ function openMaterialEditor(code){
   };
 }
 
+// ── Lịch sử mã vật tư: mỗi lần ghi đè, lưu lại bản trước đó (giống commit history) ──
+async function archiveMaterialVersion(id, dataBeforeOverwrite){
+  const {imagePos, ...rest} = dataBeforeOverwrite; // bớt imagePos cho gọn lịch sử, không cần thiết để xem lại
+  try{
+    await CATALOG_COL.doc(id).collection("history").add({
+      ...rest,
+      _archivedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }catch(e){ /* không chặn luồng lưu chính nếu ghi lịch sử lỗi */ }
+}
+async function openMaterialHistory(code){
+  const id = slug(code);
+  ui.dialog = {type:"material-history"};
+  paintDialog(`<header><h3>Lịch sử "${esc(code)}"</h3></header><div style="padding:16px" id="mh_body">Đang tải…</div><footer><button class="btn btn-sm" data-close>Đóng</button></footer>`);
+  try{
+    const snap = await CATALOG_COL.doc(id).collection("history").orderBy("_archivedAt","desc").limit(20).get();
+    const rows = snap.docs;
+    $("#mh_body").innerHTML = rows.length ? rows.map(d=>{
+      const v = d.data();
+      return `<div class="roomrow" style="grid-template-columns:1fr auto">
+        <span>
+          <b>${esc(v.name||"—")}</b>
+          <div style="font-size:11px;color:var(--ink-3)">${fmtDate(v._archivedAt)}${v.updatedBy?" · "+esc(v.updatedBy):""} — ${v.vendor?esc(v.vendor)+" · ":""}${v.unit!=null?money(v.unit):"—"}</div>
+        </span>
+        <button class="btn btn-sm" data-restore="${d.id}">Khôi phục</button>
+      </div>`;
+    }).join("") : `<div class="empty">Chưa có phiên bản cũ nào — lịch sử bắt đầu từ lần sửa tiếp theo.</div>`;
+    document.querySelectorAll("[data-restore]").forEach(b=> b.onclick = async ()=>{
+      const histDoc = rows.find(d=>d.id===b.dataset.restore); if(!histDoc) return;
+      if(!confirm("Khôi phục về phiên bản này? Bản hiện tại sẽ được lưu vào lịch sử trước khi ghi đè.")) return;
+      try{
+        const liveSnap = await CATALOG_COL.doc(id).get();
+        if(liveSnap.exists) await archiveMaterialVersion(id, liveSnap.data());
+        const {_archivedAt, ...restoreData} = histDoc.data();
+        await CATALOG_COL.doc(id).set({...restoreData, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy:(fbAuth.currentUser&&fbAuth.currentUser.email)||null});
+        closeDialog(); toast("Đã khôi phục mã "+code); openMaterialLibrary();
+      }catch(err){ toast("Không khôi phục được — "+err.message); }
+    });
+  }catch(err){
+    $("#mh_body").innerHTML = `<div class="empty">Không tải được lịch sử — ${esc(err.message)}</div>`;
+  }
+}
+
 function paintMatMedia(){
   const im = matDraft.images || [];
   $("#m_hero").innerHTML = im[0]
-    ? `<div class="dhero" data-mpick="1" style="height:140px" title="Đổi ảnh chính"><img src="${im[0]}" alt=""><span class="hint">Bấm để đổi · thêm nhiều ảnh</span></div>`
+    ? `<div class="dhero" data-mpick="1" style="height:140px" title="Đổi ảnh chính"><img src="${im[0]}" alt="" style="object-position:${imgPos(matDraft,im[0])}"><span class="hint">Bấm để đổi · thêm nhiều ảnh</span><button class="posbtn" data-mtogglepos="1" title="Chỉnh vị trí ảnh">⤢</button>${matPosPickerOpen?positionPickerHtml():""}</div>`
     : `<div class="dhero slot bp ph" data-mpick="1" style="height:140px"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i><span class="phlabel">+ Thêm ảnh</span></div>`;
   $("#m_hero [data-mpick]").onclick = matPickImages;
+  $("#m_hero [data-mtogglepos]") && ($("#m_hero [data-mtogglepos]").onclick = e=>{ e.stopPropagation(); matPosPickerOpen = !matPosPickerOpen; paintMatMedia(); });
+  document.querySelectorAll("#m_hero [data-setpos]").forEach(el=> el.onclick = e=>{
+    e.stopPropagation();
+    matDraft.imagePos = matDraft.imagePos||{}; matDraft.imagePos[im[0]] = el.dataset.setpos;
+    matPosPickerOpen = false; paintMatMedia();
+  });
   const thumbs = $("#m_thumbs");
-  thumbs.innerHTML = im.map((src,i)=>`<div class="dthumb ${i===0?"active":""}" style="width:48px;height:48px" data-mthumb="${i}" title="${i===0?"Ảnh chính":"Đặt làm ảnh chính"}"><img src="${src}" alt=""><button class="dthumb-x" data-mrmimg="${i}">×</button></div>`).join("")
+  thumbs.innerHTML = im.map((src,i)=>`<div class="dthumb ${i===0?"active":""}" style="width:48px;height:48px" data-mthumb="${i}" title="${i===0?"Ảnh chính":"Đặt làm ảnh chính"}"><img src="${src}" alt="" style="object-position:${imgPos(matDraft,src)}"><button class="dthumb-x" data-mrmimg="${i}">×</button></div>`).join("")
     + (im.length<6 ? `<button class="add" style="width:48px;height:48px" data-mpick="1">+</button>` : "");
   thumbs.querySelectorAll("[data-mpick]").forEach(b=> b.onclick = matPickImages);
   thumbs.querySelectorAll("[data-mthumb]").forEach(el=> el.onclick = e=>{
@@ -1840,7 +1914,7 @@ function importMaterialFile(file){
     if(!json.length){ toast("File rỗng"); return; }
     const keys = Object.keys(json[0]);
     const alias = {
-      code:["mã vật tư","mã cố định","mã","code"],
+      code:["mã vật tư","mã cố định","code"],
       name:["tên hạng mục","tên","name"],
       vendor:["nhà cung cấp","ncc","vendor","supplier"],
       model:["mã ncc","mã / model","mã model","model","vendor ref","ký mã hiệu"],
@@ -1849,9 +1923,13 @@ function importMaterialFile(file){
       dims:["kích thước","dims","size","kt"],
       finish:["hoàn thiện","finish"],
     };
+    // "mã" một mình quá ngắn/mập mờ (dễ khớp nhầm "Mã NCC") — chỉ nhận đúng tên cột cho field code, các field khác vẫn cho includes().
     const colFor = {};
     keys.forEach(k=>{ const kl=String(k).toLowerCase().trim();
-      for(const [f,al] of Object.entries(alias)){ if(al.some(a=>kl===a||kl.includes(a))){ if(!colFor[f]) colFor[f]=k; } }
+      for(const [f,al] of Object.entries(alias)){
+        const hit = f==="code" ? al.some(a=>kl===a) : al.some(a=>kl===a||kl.includes(a));
+        if(hit){ if(!colFor[f]) colFor[f]=k; }
+      }
     });
     if(!colFor.code || !colFor.name){ toast('Không tìm thấy cột "Mã vật tư" và/hoặc "Tên hạng mục"'); return; }
     const rows = json.map(r=>{
@@ -1869,11 +1947,16 @@ function importMaterialFile(file){
     }).filter(r=>r.code && r.name);
     if(!rows.length){ toast("Không có dòng hợp lệ (cần có Mã vật tư và Tên hạng mục)"); return; }
     try{
-      const CHUNK = 450;
+      const CHUNK = 200; // để dành chỗ cho ghi lịch sử trong cùng batch (giới hạn Firestore 500 ghi/batch)
+      let created=0, updated=0;
       for(let i=0;i<rows.length;i+=CHUNK){
         const batch = db.batch();
         rows.slice(i,i+CHUNK).forEach(rec=>{
-          batch.set(CATALOG_COL.doc(slug(rec.code)), {
+          const id = slug(rec.code);
+          const existing = catalog.find(c=>c.code===rec.code);
+          if(existing){ batch.set(CATALOG_COL.doc(id).collection("history").doc(), {...existing, imagePos:undefined, _archivedAt: firebase.firestore.FieldValue.serverTimestamp()}); updated++; }
+          else created++;
+          batch.set(CATALOG_COL.doc(id), {
             ...rec,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
@@ -1882,7 +1965,7 @@ function importMaterialFile(file){
         await batch.commit();
       }
       closeDialog(); openMaterialLibrary();
-      toast(`Đã nhập ${rows.length} mã vào thư viện — giờ chỉ cần bổ sung ảnh cho từng mã`);
+      toast(`Đã thêm ${created} mã mới, cập nhật ${updated} mã đã có (đã lưu lịch sử) — giờ chỉ cần bổ sung ảnh`);
     }catch(err){ toast("Không nhập được — "+err.message); }
   };
   fr.readAsArrayBuffer(file);
@@ -1890,7 +1973,7 @@ function importMaterialFile(file){
 
 // ── Excel nhập / xuất ─────────────────────────────────────────
 const XCOLS = [
-  ["Mã","code"],["Tên hạng mục","name"],["Phòng","room"],["Nhóm","category"],["Nhà cung cấp","vendor"],
+  ["Mã","code"],["Mã vật tư","matCode"],["Tên hạng mục","name"],["Phòng","room"],["Nhóm","category"],["Nhà cung cấp","vendor"],
   ["Mã/Model","model"],["ĐVT","uom"],["Số lượng","qty"],["Đơn giá","unit"],
   ["Thành tiền","_total"],["Lead (tuần)","lead"],["Trạng thái","status"],["PO","po"],
   ["Kích thước","dims"],["Ghi chú","note"],
@@ -1923,7 +2006,7 @@ function openExcel(){
     <header><h3>Nhập / xuất Excel</h3><span class="kick">${items.length} hạng mục</span></header>
     <div class="impbox" id="dropzone">
       Kéo-thả file <b>.xlsx</b> hoặc <b>.csv</b> vào đây, hoặc <button class="link" id="pickFile" style="text-decoration:underline;color:var(--accent)">chọn file</button>.<br>
-      <span style="font-size:11px">Cột nhận diện: Mã, Tên hạng mục, Phòng, Nhà cung cấp, Mã/Model, ĐVT, Số lượng, Đơn giá, Lead, Trạng thái, PO, Kích thước, Ghi chú.</span>
+      <span style="font-size:11px">Cột nhận diện: Mã, Mã vật tư, Tên hạng mục, Phòng, Nhà cung cấp, Mã/Model, ĐVT, Số lượng, Đơn giá, Lead, Trạng thái, PO, Kích thước, Ghi chú. Dòng có cột "Mã" trùng hạng mục đã có sẽ được cập nhật, dòng mới sẽ được thêm vào — không mất dữ liệu cũ.</span>
     </div>
     <div style="padding:0 16px 14px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" id="x_export">Xuất .xlsx</button>
@@ -1986,7 +2069,7 @@ function importFile(file){
     if(!json.length){ toast("File rỗng"); return; }
     // map headers
     const keys = Object.keys(json[0]);
-    const alias = {code:["mã","ma","code"],name:["tên hạng mục","tên","ten","name","hạng mục","item"],
+    const alias = {code:["mã","ma","code"],matCode:["mã vật tư","mã cố định"],name:["tên hạng mục","tên","ten","name","hạng mục","item"],
       room:["phòng","phong","room"],category:["nhóm","nhom","category","phân loại"],
       vendor:["nhà cung cấp","ncc","vendor","supplier"],
       model:["mã/model","model","vendor ref","ký mã hiệu"],uom:["đvt","đơn vị tính","đơn vị","uom","unit of measure"],
@@ -1994,8 +2077,12 @@ function importFile(file){
       lead:["lead","lead (tuần)","lead time","thời gian"],status:["trạng thái","status"],po:["po","đơn hàng"],
       dims:["kích thước","dims","size","kt"],note:["ghi chú","note","mô tả","description"]};
     const colFor = {};
+    // "code" (mã nội bộ) chỉ khớp đúng tên cột — không dùng includes(), tránh "mã" nuốt luôn cột "Mã vật tư"/"Mã/Model".
     keys.forEach(k=>{ const kl=String(k).toLowerCase().trim();
-      for(const [f,al] of Object.entries(alias)){ if(al.some(a=>kl===a||kl.includes(a))){ if(!colFor[f]) colFor[f]=k; } }
+      for(const [f,al] of Object.entries(alias)){
+        const hit = f==="code" ? al.some(a=>kl===a) : al.some(a=>kl===a||kl.includes(a));
+        if(hit){ if(!colFor[f]) colFor[f]=k; }
+      }
     });
     if(!colFor.name){ toast("Không tìm thấy cột “Tên hạng mục”"); return; }
     const parsed = json.map(r=>{
@@ -2005,6 +2092,7 @@ function importFile(file){
       const catRaw = String(g("category")||"").trim();
       const base = {
         code:String(g("code")||"").trim(),
+        matCode:String(g("matCode")||"").trim().toUpperCase() || undefined,
         name:String(g("name")||"").trim(),
         room:String(g("room")||"").trim() || "(chưa phân phòng)",
         category:CATEGORIES.includes(catRaw) ? catRaw : "",
@@ -2034,26 +2122,30 @@ function importFile(file){
       </div>
       <footer>
         <button class="btn btn-sm" data-close>Huỷ</button>
-        <button class="btn btn-sm" id="imp_append">Thêm vào danh sách</button>
-        <button class="btn btn-primary btn-sm" id="imp_replace">Thay thế toàn bộ</button>
+        <button class="btn btn-primary btn-sm" id="imp_run">Nhập dữ liệu</button>
       </footer>
     `);
-    $("#imp_replace").onclick = ()=>{
-      items = []; parsed.forEach((p,idx)=>{ if(!p.code) p.code = "TT-"+String(idx+1).padStart(3,"0"); p.ord = idx+1; items.push(p); });
-      parsed.forEach(p=> addVendor(p.vendor));
-      const allRooms = [...new Set(parsed.map(p=>p.room))].filter(r=>r!=="(chưa phân phòng)");
-      rooms = allRooms.map(name=>{
-        const ex = DEFAULT_ROOMS.find(d=>d.name===name);
-        const spent = items.filter(i=>i.room===name).reduce((a,i)=>a+(lineTotal(i)||0),0);
-        return {name, budget: ex? ex.budget : spent};
-      });
-      ui.selected = items[0]?.code||null; ui.detail=null;
-      closeDialog(); save(); toast("Đã thay thế bằng "+items.length+" hạng mục"); render();
-    };
-    $("#imp_append").onclick = ()=>{
+    // Không còn "Thay thế toàn bộ" (dễ ghi đè mất dữ liệu cũ). Dòng nào có "Mã" trùng hạng mục đã có thì
+    // CẬP NHẬT tại chỗ (giữ nguyên ảnh/tệp/PO... không có trong file Excel); dòng mới thì thêm vào.
+    $("#imp_run").onclick = ()=>{
       newRooms.forEach(r=> rooms.push({name:r, budget:0}));
-      parsed.forEach(p=>{ if(!p.code || items.some(i=>i.code===p.code)) p.code = nextCode(); p.ord = nextOrd(); addVendor(p.vendor); items.push(p); });
-      closeDialog(); save(); toast("Đã thêm "+parsed.length+" hạng mục"); render();
+      let added=0, updated=0;
+      parsed.forEach(p=>{
+        const existing = p.code ? items.find(i=>i.code===p.code) : null;
+        addVendor(p.vendor);
+        if(existing){
+          Object.assign(existing, p, {code:existing.code, ord:existing.ord});
+          updated++;
+        } else {
+          if(!p.code || items.some(i=>i.code===p.code)) p.code = nextCode();
+          p.ord = nextOrd();
+          items.push(p);
+          added++;
+        }
+      });
+      closeDialog(); save();
+      toast(`Đã thêm ${added} hạng mục mới, cập nhật ${updated} hạng mục đã có`);
+      render();
     };
   };
   fr.readAsArrayBuffer(file);
@@ -2315,13 +2407,13 @@ function toast(msg){
   setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .3s"; setTimeout(()=>t.remove(),300); }, 2400);
 }
 // Ảnh ở rail bên phải: trỏ chuột vào phóng to 2x xem nhanh (overlay riêng, không bị khung rail cắt mất phần thừa ra).
-function showImageZoom(el, src){
+function showImageZoom(el, src, pos){
   hideImageZoom();
   const rect = el.getBoundingClientRect();
   const zoom = document.createElement("div");
   zoom.id = "imgZoomPreview";
   zoom.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;z-index:200;pointer-events:none;box-shadow:var(--shadow);border:1px solid var(--line-2);overflow:hidden;background:var(--surface);transform:scale(1);transition:transform .15s ease`;
-  zoom.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block">`;
+  zoom.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;object-position:${pos||"center center"};display:block">`;
   document.body.appendChild(zoom);
   requestAnimationFrame(()=>{ zoom.style.transform = "scale(2)"; });
 }
@@ -2347,7 +2439,7 @@ function detailKeys(e){
 
 // ── events ────────────────────────────────────────────────────
 function selectItem(code){ ui.selected = code; render(); }
-function openDetail(code){ ui.detail = code; ui.selected = code; render(); }
+function openDetail(code){ ui.detail = code; ui.selected = code; ui.posPicker=false; render(); }
 function togglePick(code){ ui.picks.has(code) ? ui.picks.delete(code) : ui.picks.add(code); render(); }
 let softTimer=null;
 function softRerender(){ clearTimeout(softTimer); softTimer=setTimeout(render,120); }
@@ -2431,7 +2523,7 @@ function wire(){
 
   const railHero = $("#railHero");
   if(railHero){
-    railHero.onmouseenter = ()=> showImageZoom(railHero, railHero.dataset.full);
+    railHero.onmouseenter = ()=> showImageZoom(railHero, railHero.dataset.full, railHero.dataset.pos);
     railHero.onmouseleave = hideImageZoom;
   }
 
@@ -2516,6 +2608,13 @@ function wireDetail(){
     e.stopPropagation();
     const i = +el.dataset.rmimg, it = items.find(x=>x.code===ui.detail);
     if(it && it.images){ it.images.splice(i,1); if(!it.images.length) delete it.images; save(); render(); toast("Đã xoá ảnh"); }
+  });
+  $("[data-togglepos]") && ($("[data-togglepos]").onclick = e=>{ e.stopPropagation(); ui.posPicker = !ui.posPicker; render(); });
+  document.querySelectorAll("[data-setpos]").forEach(el=> el.onclick = e=>{
+    e.stopPropagation();
+    const it = items.find(x=>x.code===ui.detail), img = it && it.images && it.images[0];
+    if(it && img){ it.imagePos = it.imagePos||{}; it.imagePos[img] = el.dataset.setpos; save(); }
+    ui.posPicker = false; render();
   });
 
   $("[data-pick-file]") && ($("[data-pick-file]").onclick = ()=> pickFiles(ui.detail));
