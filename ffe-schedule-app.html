@@ -2480,6 +2480,23 @@ function togglePick(code){ ui.picks.has(code) ? ui.picks.delete(code) : ui.picks
 let softTimer=null;
 function softRerender(){ clearTimeout(softTimer); softTimer=setTimeout(render,120); }
 
+// Ô tìm kiếm gõ-là-lọc-ngay (softRerender) — mỗi lần render() thay hẳn innerHTML nên input cũ bị huỷ và
+// input mới được tạo lại, một cờ gắn trên phần tử input (kiểu el._keep=true) sẽ KHÔNG theo sang phần tử
+// mới đó — focus bị rớt lặng lẽ, gõ tiếp thì không có ô nào đang nhận ký tự. Dùng biến ngoài (không gắn
+// trên node) để nhớ ô nào ĐANG cần giữ focus, gọi lại hàm này mỗi lần dựng lại ô input đó sau render.
+let focusedInputId = null;
+function wireSearchInput(id, onInput){
+  const el = $("#"+id);
+  if(!el) return;
+  el.oninput = e=>{ onInput(e.target.value); focusedInputId = id; softRerender(); };
+  // Khi render() thay hẳn innerHTML, trình duyệt tự bắn "blur" cho input cũ vì nó bị gỡ khỏi DOM —
+  // KHÔNG được coi đó là người dùng rời khỏi ô: lúc đó relatedTarget luôn rỗng (focus rơi về body, không
+  // "sang" phần tử cụ thể nào). Chỉ khi relatedTarget có giá trị (bấm hẳn sang 1 phần tử khác) mới thật
+  // sự rời ô, lúc đó mới xoá cờ giữ focus.
+  el.onblur = e=>{ if(e.relatedTarget) focusedInputId=null; };
+  if(focusedInputId===id){ el.focus(); const v=el.value; el.setSelectionRange(v.length,v.length); }
+}
+
 document.addEventListener("click", e=>{
   if(RO()) return;
   const cell = e.target.closest(".ed");
@@ -2505,8 +2522,7 @@ function wire(){
     document.querySelectorAll("[data-open-project]").forEach(b=> b.onclick = ()=> openProject(b.dataset.openProject));
     $("#newProjectBtn") && ($("#newProjectBtn").onclick = openNewProjectDialog);
     $("#signoutHome") && ($("#signoutHome").onclick = signOutApp);
-    const ps = $("#prjSearch");
-    if(ps){ ps.oninput = e=>{ ui.projectQ = e.target.value; ps._keep = true; softRerender(); }; if(ps._keep){ ps.focus(); const v=ps.value; ps.setSelectionRange(v.length,v.length); } }
+    wireSearchInput("prjSearch", v=>{ ui.projectQ = v; });
     $("#prjSelectToggle") && ($("#prjSelectToggle").onclick = ()=>{ ui.projectSelectMode = !ui.projectSelectMode; ui.projectPicks.clear(); render(); });
     document.querySelectorAll("[data-pickprj]").forEach(c=> c.onchange = ()=>{
       const id = c.dataset.pickprj;
@@ -2563,8 +2579,7 @@ function wire(){
     railHero.onmouseleave = hideImageZoom;
   }
 
-  const q = $("#q");
-  if(q) q.oninput = e=>{ ui.q=e.target.value; q._keep=true; softRerender(); };
+  wireSearchInput("q", v=>{ ui.q = v; });
   $("#fRoom") && ($("#fRoom").onchange = e=>{ ui.room=e.target.value; render(); });
   $("#fStatus") && ($("#fStatus").onchange = e=>{ ui.status=e.target.value; render(); });
   $("#fVendor") && ($("#fVendor").onchange = e=>{ ui.vendor=e.target.value; render(); });
@@ -2622,8 +2637,6 @@ function wire(){
     items.forEach(i=>{ if(ui.picks.has(i.code) && i.status==="Unspecified") i.status="Specified"; });
     ui.picks.clear(); save(); render(); toast("Đã đánh dấu đã chốt");
   });
-
-  if(q && q._keep){ q.focus(); const v=q.value; q.setSelectionRange(v.length,v.length); }
 }
 
 function wireDetail(){
