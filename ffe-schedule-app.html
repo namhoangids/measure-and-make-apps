@@ -1694,7 +1694,7 @@ function openMaterialLibrary(){
         </div>`;
       }).join("") : `<div class="empty">Chưa có mã vật tư nào.</div>`}
     </div>
-    <div style="padding:8px 16px;display:flex;gap:8px"><button class="btn btn-sm" id="m_add">+ Thêm mã vật tư</button><button class="btn btn-sm" id="m_import">Nhập từ Excel…</button></div>
+    <div style="padding:8px 16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm" id="m_add">+ Thêm mã vật tư</button><button class="btn btn-sm" id="m_import">Nhập từ Excel…</button><button class="btn btn-sm" id="m_bulkimg" title="Chọn nhiều ảnh cùng lúc, đặt tên file trùng Mã vật tư để tự khớp">Tải nhiều ảnh (theo tên mã)…</button></div>
     <footer><button class="btn btn-sm" data-close>Đóng</button></footer>
   `, true);
   const bd = $("#backdrop");
@@ -1707,6 +1707,7 @@ function openMaterialLibrary(){
   });
   $("#m_add").onclick = ()=> openMaterialEditor(null);
   $("#m_import").onclick = openMaterialExcel;
+  $("#m_bulkimg").onclick = matBulkUploadByFilename;
 }
 
 let matDraft = null, matOriginalCode = null, matPosPickerOpen = false;
@@ -1898,6 +1899,49 @@ function matPickImages(){
   };
   inp.click();
 }
+// Gắn nhiều ảnh cùng lúc theo tên file trùng Mã vật tư (vd file "LW575JW-F4W.jpg" tự khớp vào mã đó).
+// Excel không nhúng ảnh trực tiếp được (SheetJS không đọc ảnh chèn trong ô) nên đây là lối tắt thay thế:
+// đặt tên ảnh trùng mã rồi chọn cả chùm 1 lần, khỏi phải mở từng mã lên tải ảnh thủ công.
+function matBulkUploadByFilename(){
+  const inp = document.createElement("input");
+  inp.type="file"; inp.accept="image/*"; inp.multiple=true; inp.style.display="none";
+  document.body.appendChild(inp);
+  inp.onchange = ()=>{
+    const files = [...inp.files].filter(f=>f.type && f.type.startsWith("image/"));
+    inp.remove();
+    bulkAttachImagesByFilename(files);
+  };
+  inp.click();
+}
+async function bulkAttachImagesByFilename(files){
+  if(!files.length) return;
+  toast(`Đang tải ${files.length} ảnh…`);
+  const pending = {}; // slug(mã) -> mảng images đang tích luỹ, để nhiều ảnh cùng mã không ghi đè nhau
+  let ok = 0; const misses = [];
+  for(const f of files){
+    const base = f.name.replace(/\.[^.]+$/, "").trim().toUpperCase();
+    const m = base ? findMaterial(base) : null;
+    if(!m){ misses.push(f.name); continue; }
+    const key = slug(m.code);
+    if(!pending[key]) pending[key] = (m.images||[]).slice();
+    if(pending[key].length >= 6){ misses.push(`${f.name} (${m.code} đã đủ 6 ảnh)`); continue; }
+    try{
+      const blob = await resizeImageBlob(f);
+      const path = `ffe/_catalog/materials/${key}/${Date.now()}_${ok}.jpg`;
+      pending[key].push(await uploadToStorage(path, blob, "image/jpeg"));
+      await CATALOG_COL.doc(key).set({
+        images: pending[key].slice(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+      }, {merge:true});
+      ok++;
+    }catch(e){ misses.push(`${f.name} (lỗi tải lên)`); }
+  }
+  let msg = ok ? `Đã gắn ${ok} ảnh theo tên file trùng Mã vật tư` : `Không gắn được ảnh nào`;
+  if(misses.length) msg += ` — ${misses.length} ảnh không khớp/lỗi: ${misses.slice(0,4).join(", ")}${misses.length>4?"…":""}`;
+  toast(msg);
+  if(ui.dialog && ui.dialog.type==="materials") openMaterialLibrary();
+}
 function paintMatLinks(){
   const wrap = $("#m_links");
   wrap.innerHTML = (matDraft.links||[]).map((l,i)=>`<div class="dfile"><a class="fn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(l.label||l.url)}</a><button class="fx" data-mrmlink="${i}">×</button></div>`).join("")
@@ -1914,7 +1958,11 @@ function openMaterialExcel(){
       Kéo-thả file <b>.xlsx</b> hoặc <b>.csv</b> vào đây, hoặc <button class="link" id="mPickFile" style="text-decoration:underline;color:var(--accent)">chọn file</button>.<br>
       <span style="font-size:11px">Cột nhận diện: Mã vật tư, Tên hạng mục, Nhà cung cấp, Mã NCC, ĐVT, Đơn giá, Kích thước, Hoàn thiện. Mã đã có sẵn sẽ được cập nhật thông tin (ảnh đang có không bị mất) — nhập xong chỉ cần bổ sung ảnh cho từng mã.</span>
     </div>
-    <div style="padding:0 16px 14px"><button class="btn btn-sm" id="mx_template">Tải file mẫu</button></div>
+    <div style="padding:0 16px 14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" id="mx_template">Tải file mẫu</button>
+      <button class="btn btn-sm" id="mx_bulkimg" title="Chọn nhiều ảnh cùng lúc, đặt tên file trùng Mã vật tư để tự khớp">Tải nhiều ảnh (theo tên mã)…</button>
+    </div>
+    <span style="font-size:11px;color:var(--ink-3);padding:0 16px 14px;display:block;margin-top:-10px">Excel không nhúng ảnh trực tiếp được — thay vào đó đặt tên file ảnh trùng Mã vật tư (vd "LW575JW-F4W.jpg") rồi bấm "Tải nhiều ảnh" để gắn cả loạt cùng lúc.</span>
     <footer><button class="btn btn-sm" data-close>Đóng</button></footer>
   `);
   const dz = $("#mdropzone");
@@ -1927,6 +1975,7 @@ function openMaterialExcel(){
   dz.ondragover = e=>{ e.preventDefault(); dz.classList.add("drop"); };
   dz.ondragleave = ()=> dz.classList.remove("drop");
   dz.ondrop = e=>{ e.preventDefault(); dz.classList.remove("drop"); if(e.dataTransfer.files[0]) importMaterialFile(e.dataTransfer.files[0]); };
+  $("#mx_bulkimg").onclick = matBulkUploadByFilename;
   $("#mx_template").onclick = ()=>{
     if(typeof XLSX==="undefined"){ toast("Thư viện Excel chưa tải xong"); return; }
     const data = [{"Mã vật tư":"LW575JW-F4W","Tên hạng mục":"Vòi lavabo gắn tường","Nhà cung cấp":"TOTO","Mã NCC":"LW575JW/F4W","ĐVT":"chiếc","Đơn giá":8500000,"Kích thước":"","Hoàn thiện":"Chrome"}];
