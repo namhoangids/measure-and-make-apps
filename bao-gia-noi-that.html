@@ -1,24 +1,27 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#ececed;color:#1d1f20}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>M&amp;M Báo Giá Nội Thất</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
+  /* Họ màu nền / viền / chữ lấy đúng theo app FF&E (bộ token Industry) để 2 app nhìn cùng một hệ.
+     Trước đây bên này dùng tông kem ấm (#F2F1EC / #E7E2D5), FF&E dùng xám trung tính.
+     Màu nhấn (accent) và màu trạng thái (good/warn) giữ nguyên của app này. */
   :root {
-    --paper: #F2F1EC;
+    --paper: #ececed;
     --surface: #ffffff;
-    --surface-2: #E7E2D5;
+    --surface-2: #eeeef1;
     --sidebar: #ffffff;
-    --sidebar-line: #E1DCCC;
-    --sidebar-text: #4C4A45;
-    --sidebar-text-dim: #928D80;
-    --sidebar-active: #F2F1EC;
-    --sidebar-heading: #2A2A2E;
-    --ink: #2A2A2E;
-    --ink-soft: #4C4A45;
-    --ink-mute: #726D62;
-    --border: #DAD5C7;
-    --border-soft: #E1DCCC;
+    --sidebar-line: #e4e4e7;
+    --sidebar-text: #5a5a5d;
+    --sidebar-text-dim: #9a9a9d;
+    --sidebar-active: #f4f4f7;
+    --sidebar-heading: #1d1f20;
+    --ink: #1d1f20;
+    --ink-soft: #5a5a5d;
+    --ink-mute: #7a7a7d;
+    --border: #d2d2d6;
+    --border-soft: #e4e4e7;
     --accent: #24507A;
     --accent-ink: #ffffff;
     --accent-soft: #DCE7F0;
@@ -27,7 +30,7 @@
     --good-soft: #dfeee6;
     --warn: #a8722f;
     --warn-soft: #f3e6d3;
-    --neutral-pill: #E7E2D5;
+    --neutral-pill: #eeeef1;
     --shadow: 0 1px 2px rgba(20,24,28,.06), 0 6px 20px rgba(20,24,28,.05);
     --shadow-lift: 0 10px 34px rgba(20,24,28,.14);
     --radius: 10px;
@@ -35,58 +38,58 @@
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --paper: #121B24;
-      --surface: #16212C;
-      --surface-2: #1C2A38;
-      --sidebar: #0E161D;
-      --sidebar-line: #1E2B38;
-      --sidebar-text: #9AA7B2;
-      --sidebar-text-dim: #5C6771;
-      --sidebar-active: #121B24;
-      --sidebar-heading: #ECEEF1;
-      --ink: #ECEEF1;
-      --ink-soft: #B9C4CD;
-      --ink-mute: #7E8B96;
-      --border: #26364A;
-      --border-soft: #1E2B38;
+      --paper: #131517;
+      --surface: #1b1e21;
+      --surface-2: #25292e;
+      --sidebar: #1b1e21;
+      --sidebar-line: #2c3035;
+      --sidebar-text: #b6b6b9;
+      --sidebar-text-dim: #74747a;
+      --sidebar-active: #202327;
+      --sidebar-heading: #e9e9ea;
+      --ink: #e9e9ea;
+      --ink-soft: #b6b6b9;
+      --ink-mute: #96969a;
+      --border: #3a3f45;
+      --border-soft: #2c3035;
       --accent: #6FA8D6;
-      --accent-ink: #121B24;
+      --accent-ink: #131517;
       --accent-soft: #1F3A50;
       --accent-soft-border: #2C4A63;
       --good: #6fbb96;
       --good-soft: #1c3128;
       --warn: #d4a35f;
       --warn-soft: #382c19;
-      --neutral-pill: #1E2B38;
+      --neutral-pill: #25292e;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
       --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
     }
   }
 
   :root[data-theme="dark"] {
-    --paper: #121B24;
-    --surface: #16212C;
-    --surface-2: #1C2A38;
-    --sidebar: #0E161D;
-    --sidebar-line: #1E2B38;
-    --sidebar-text: #9AA7B2;
-    --sidebar-text-dim: #5C6771;
-    --sidebar-active: #121B24;
-    --sidebar-heading: #ECEEF1;
-    --ink: #ECEEF1;
-    --ink-soft: #B9C4CD;
-    --ink-mute: #7E8B96;
-    --border: #26364A;
-    --border-soft: #1E2B38;
+    --paper: #131517;
+    --surface: #1b1e21;
+    --surface-2: #25292e;
+    --sidebar: #1b1e21;
+    --sidebar-line: #2c3035;
+    --sidebar-text: #b6b6b9;
+    --sidebar-text-dim: #74747a;
+    --sidebar-active: #202327;
+    --sidebar-heading: #e9e9ea;
+    --ink: #e9e9ea;
+    --ink-soft: #b6b6b9;
+    --ink-mute: #96969a;
+    --border: #3a3f45;
+    --border-soft: #2c3035;
     --accent: #6FA8D6;
-    --accent-ink: #121B24;
+    --accent-ink: #131517;
     --accent-soft: #1F3A50;
     --accent-soft-border: #2C4A63;
     --good: #6fbb96;
     --good-soft: #1c3128;
     --warn: #d4a35f;
     --warn-soft: #382c19;
-    --neutral-pill: #1E2B38;
+    --neutral-pill: #25292e;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
     --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
   }
