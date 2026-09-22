@@ -1,7 +1,17 @@
 <meta charset="utf-8">
-<title>FF&E — Hà Đô Charm Villas</title>
+<title>FF&E - Specification</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Bảng kê FF&E (thiết bị vệ sinh TOTO) cho Hà Đô Charm Villas — bảng chỉnh sửa trực tiếp, quản lý phòng, nhập/xuất Excel, màn xem chi tiết từng hạng mục.">
+<meta name="description" content="Measure &amp; Make | Indust Design">
+<!-- Thẻ xem trước khi gửi link (Zalo, Messenger, iMessage...). Các app chat đọc thẻ này bằng robot
+     KHÔNG chạy JavaScript, nên không thể nhét tên dự án vào đây — tên dự án chỉ hiện được sau khi
+     mở link (đặt bằng setDocTitle() lúc chạy). -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="FF&E - Specification">
+<meta property="og:description" content="Measure &amp; Make | Indust Design">
+<meta property="og:site_name" content="Measure &amp; Make | Indust Design">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="FF&E - Specification">
+<meta name="twitter:description" content="Measure &amp; Make | Indust Design">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
@@ -850,6 +860,11 @@ function stats(){
 }
 
 // ── render ─────────────────────────────────────────────────────
+// Tên tab trình duyệt / tên khi lưu bookmark — có tên dự án đang mở, trống thì về tên chung.
+function setDocTitle(){
+  const t = currentProjectName ? "FF&E - Specification - "+currentProjectName : "FF&E - Specification";
+  if(document.title !== t) document.title = t;
+}
 function render(){
   const y = window.scrollY;
   hideImageZoom();
@@ -858,6 +873,7 @@ function render(){
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
   // Chặn mọi đường vào tab đã ẩn với khách: sửa hash thủ công, hoặc đang đứng ở tab đó rồi bật chế độ khách.
   if(RO() && CLIENT_HIDDEN_TABS.includes(ui.tab)) ui.tab = "schedule";
+  setDocTitle();
   const app = $("#app");
   app.innerHTML = !currentProjectId
     ? (SHARE_ID ? `<div class="loadwrap">Không mở được bảng kê này — link có thể đã bị thu hồi. Liên hệ người gửi link để được cấp lại.</div>` : projectListScreen())
