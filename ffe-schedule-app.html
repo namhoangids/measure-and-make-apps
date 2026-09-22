@@ -856,6 +856,8 @@ function render(){
   if(currentProjectId) linkMatCodesFromModel();
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
+  // Chặn mọi đường vào tab đã ẩn với khách: sửa hash thủ công, hoặc đang đứng ở tab đó rồi bật chế độ khách.
+  if(RO() && CLIENT_HIDDEN_TABS.includes(ui.tab)) ui.tab = "schedule";
   const app = $("#app");
   app.innerHTML = !currentProjectId
     ? (SHARE_ID ? `<div class="loadwrap">Không mở được bảng kê này — link có thể đã bị thu hồi. Liên hệ người gửi link để được cấp lại.</div>` : projectListScreen())
@@ -987,15 +989,23 @@ function openNewProjectDialog(){
   };
 }
 
+// Khách chỉ được xem Bảng kê & Ngân sách — Đơn hàng (PO) và Nhà cung cấp lộ NCC + giá mua nên ẩn hẳn,
+// ở CẢ link khách lẫn "Xem như khách hàng" (để chế độ xem thử của Nam đúng bằng cái khách thật sự thấy).
+const CLIENT_HIDDEN_TABS = ["orders","library"];
+function visibleTabs(){
+  const all = [["schedule","Bảng kê"],["budget","Ngân sách"],["orders","Đơn hàng"],["library","Nhà cung cấp"]];
+  return RO() ? all.filter(([t])=> !CLIENT_HIDDEN_TABS.includes(t)) : all;
+}
+function tabsHtml(){
+  return visibleTabs().map(([t,l])=>
+    `<button class="tab" data-tab="${t}" ${ui.tab===t?'aria-current="page"':""}>${l}</button>`).join("");
+}
 function topbar(){
   if(SHARE_ID) return `
   <div class="topbar">
     <span class="brand" style="cursor:default">FF&amp;E</span>
     <span class="crumb">${esc(currentProjectName)}</span>
-    <nav class="tabs">
-      ${[["schedule","Bảng kê"],["budget","Ngân sách"],["orders","Đơn hàng"],["library","Nhà cung cấp"]].map(([t,l])=>
-        `<button class="tab" data-tab="${t}" ${ui.tab===t?'aria-current="page"':""}>${l}</button>`).join("")}
-    </nav>
+    <nav class="tabs">${tabsHtml()}</nav>
     <button class="iconbtn" id="themeBtn" title="Sáng / tối" aria-label="Đổi giao diện">◑</button>
   </div>
   <div class="clientbar">👁 Bản xem dành cho khách hàng — chỉ xem, không sửa được. Số liệu cập nhật trực tiếp theo bản gốc.</div>`;
@@ -1003,10 +1013,7 @@ function topbar(){
   <div class="topbar">
     <button class="brand" id="homeBtn" title="Về danh sách dự án">FF&amp;E</button>
     <span class="crumb">${esc(currentProjectName)}</span>
-    <nav class="tabs">
-      ${[["schedule","Bảng kê"],["budget","Ngân sách"],["orders","Đơn hàng"],["library","Nhà cung cấp"]].map(([t,l])=>
-        `<button class="tab" data-tab="${t}" ${ui.tab===t?'aria-current="page"':""}>${l}</button>`).join("")}
-    </nav>
+    <nav class="tabs">${tabsHtml()}</nav>
     <button class="iconbtn" id="themeBtn" title="Sáng / tối" aria-label="Đổi giao diện">◑</button>
     <button class="iconbtn" id="menuBtn" aria-label="Thêm" aria-haspopup="true">⋯</button>
     <div class="avatar" title="${esc((fbAuth.currentUser&&fbAuth.currentUser.email)||"")}">${RO()?"KH":initials((fbAuth.currentUser&&fbAuth.currentUser.email)||"ID")}</div>
@@ -1379,7 +1386,7 @@ function detailScreen(code){
         </div>
         ${stage<0?`<div style="font-size:11px;color:var(--ink-4);margin-top:6px">Chưa đặt hàng — tiến trình bắt đầu khi tạo PO.</div>`:""}
 
-        ${ro ? (it.po ? `<div class="dactions"><button class="btn" data-viewpo>Xem ${esc(it.po)} ›</button></div>` : "") : `<div class="dactions">
+        ${ro ? "" : `<div class="dactions">
           <button class="btn btn-primary" data-edit>Sửa thông số</button>
           <button class="btn" data-dup>Nhân bản sang phòng khác</button>
           ${it.po
