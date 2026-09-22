@@ -928,6 +928,7 @@
     else if (view.screen === "customers") renderCustomersScreen();
     else if (view.screen === "catalog") renderCatalogScreen();
     else if (view.screen === "print") renderPrintPreview();
+    else if (view.screen === "projects") renderProjectsScreen();
     else renderList();
     renderNav();
   }
@@ -1581,7 +1582,7 @@
       { label: "Hợp đồng – Biên bản", soon: true }
     ]},
     { group: "Công trình", items: [
-      { label: "Danh sách công trình", soon: true },
+      { label: "Danh sách công trình", screen: "projects" },
       { label: "% Tiến độ công trình", soon: true },
       { label: "Nhật ký thi công", soon: true },
       { label: "Quản lý giao thoa", soon: true },
@@ -1621,6 +1622,7 @@
         if (btn.dataset.soon === "1") { toast("Mục này đang được phát triển ở giai đoạn tiếp theo."); return; }
         var screen = btn.dataset.screen;
         if (screen === "quotes" && !isNavScreenActive("quotes")) { view.screen = "list"; renderList(); renderNav(); }
+        else if (screen === "projects" && view.screen !== "projects") { view.screen = "projects"; renderProjectsScreen(); renderNav(); }
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
         else if (screen === "catalog" && view.screen !== "catalog") { view.screen = "catalog"; renderCatalogScreen(); renderNav(); }
       });
@@ -1728,6 +1730,69 @@
           renderList();
           toast("Đã xoá báo giá.");
         }
+      });
+    });
+  }
+
+  /* ===================== CÔNG TRÌNH ===================== */
+  // Danh sách này dùng CHUNG với app FF&E (cùng mảng `projects` trong doc baogia/main) — FF&E đọc từ đây
+  // và cũng thêm vào đây khi tạo dự án mới bên đó. Xoá ở màn này là xoá khỏi danh sách chung của cả 2 app.
+  function quotesUsingProject(id) {
+    return state.quotes.filter(function (q) { return q.projectId === id; });
+  }
+  function renderProjectsScreen() {
+    var rowsHtml;
+    if (!PROJECTS.length) {
+      rowsHtml = '<tr class="empty-row"><td colspan="5">Chưa có công trình nào.</td></tr>';
+    } else {
+      rowsHtml = PROJECTS.map(function (p) {
+        var used = quotesUsingProject(p.id);
+        return '<tr>' +
+          '<td><div class="cell-title">' + escapeHtml(p.name || "—") + '</div><div class="cell-muted">' + escapeHtml(p.id) + '</div></td>' +
+          '<td>' + escapeHtml(p.client || "—") + '</td>' +
+          '<td class="cell-muted">' + escapeHtml(p.type || "—") + '</td>' +
+          '<td class="cell-muted">' + (used.length ? used.length + " báo giá" : "chưa có báo giá") + '</td>' +
+          '<td><div class="row-actions">' +
+            '<button class="icon-btn danger" data-delprj="' + escapeHtml(p.id) + '" title="Xoá công trình">' + iconTrash() + '</button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join("");
+    }
+
+    var html =
+      '<div class="mock-note">' + iconInfo() + ' Danh sách này <b>dùng chung với app FF&amp;E</b> (' + PROJECTS.length + ' công trình). Tạo dự án mới bên FF&amp;E là công trình hiện luôn ở đây, và ngược lại. Xoá ở đây là xoá khỏi danh sách chung của cả hai app — nhưng bảng kê FF&amp;E của công trình đó (nếu đã lập) vẫn còn bên FF&amp;E, muốn mất hẳn thì xoá nốt bảng kê bên đó.</div>' +
+      '<div class="page-head">' +
+        '<div><h1>Danh sách công trình</h1><div class="page-sub">Công trình dùng chung giữa app Báo giá / Dự toán và app FF&amp;E Schedule.</div></div>' +
+        '<div class="head-actions">' +
+          '<a class="btn sheet-link-btn" href="' + PRICE_SHEET_URL + '" target="_blank" rel="noopener">' + iconExternal() + ' Mở Sheet</a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="table-wrap"><div class="table-scroll"><table>' +
+        '<thead><tr><th>Tên công trình</th><th>Khách hàng</th><th>Loại</th><th>Đang dùng</th><th></th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+      '</table></div></div>';
+
+    document.getElementById("content").innerHTML = html;
+    document.getElementById("crumbCurrent").textContent = "Danh sách công trình";
+
+    document.querySelectorAll("[data-delprj]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.dataset.delprj;
+        var p = projectById(id);
+        if (!p) return;
+        var used = quotesUsingProject(id);
+        if (used.length) {
+          // Không cho xoá khi còn báo giá gắn vào — xoá xong các báo giá đó sẽ mồ côi, không biết thuộc công trình nào.
+          alert('Không xoá được "' + p.name + '" vì còn ' + used.length + ' báo giá đang gắn vào công trình này:\n\n' +
+            used.map(function (q) { return "• " + q.name; }).join("\n") +
+            '\n\nChuyển các báo giá đó sang công trình khác (mở báo giá → đổi ô "Công trình") hoặc xoá chúng trước.');
+          return;
+        }
+        if (!confirm('Xoá công trình "' + p.name + '" khỏi danh sách dùng chung?\n\nApp FF&E cũng sẽ không còn thấy công trình này trong danh sách chọn dự án. Bảng kê FF&E đã lập cho nó (nếu có) vẫn còn bên FF&E.')) return;
+        PROJECTS = PROJECTS.filter(function (x) { return x.id !== id; });
+        saveState();
+        renderProjectsScreen();
+        toast('Đã xoá công trình "' + p.name + '".');
       });
     });
   }
