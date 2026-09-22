@@ -1,6 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>M&amp;M Báo Giá Nội Thất</title>
-<title>M&amp;M Báo Giá Nội Thất</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -1285,6 +1285,136 @@
     document.body.appendChild(lb);
   }
 
+  /* ---------- Sao lưu dữ liệu ra file để dự phòng ---------- */
+  // Excel = để Nam mở ra đọc/đối chiếu. JSON = bản sao y nguyên, khôi phục lại được đúng từng dòng
+  // (Excel làm phẳng bảng 3 tầng Hạng mục > Nhóm > Dòng nên không dựng ngược lại chính xác được).
+  function backupStamp() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes());
+  }
+  function quoteMeta(q) {
+    var prj = q.projectId ? projectById(q.projectId) : null;
+    return {
+      project: prj ? prj.name : "",
+      client: prj ? (prj.client || "") : "",
+      status: (STATUS_META[q.status] && STATUS_META[q.status].label) || q.status || ""
+    };
+  }
+  function backupLineRows() {
+    var rows = [];
+    state.quotes.forEach(function (q) {
+      var m = quoteMeta(q);
+      (q.sections || []).forEach(function (sec) {
+        (sec.groups || []).forEach(function (g) {
+          (g.items || []).forEach(function (it, i) {
+            var qty = Number(it.qty) || 0, price = Number(it.price) || 0;
+            rows.push({
+              "Mã báo giá": q.code || "", "Tên báo giá": q.name || "",
+              "Công trình": m.project, "Khách hàng": m.client, "Trạng thái": m.status,
+              "Hạng mục": sec.name || "", "Nhóm": g.name || "", "STT": i + 1,
+              "Tên công việc / vật tư": it.name || "", "Mô tả": it.detail || "",
+              "Dài": it.sizeD || "", "Rộng": it.sizeR || "", "Cao": it.sizeC || "",
+              "ĐVT": it.unit || "", "Số lượng": qty, "Đơn giá": price, "Thành tiền": Math.round(qty * price),
+              "Ghi chú": it.note || ""
+            });
+          });
+        });
+      });
+    });
+    return rows;
+  }
+  function backupQuoteRows() {
+    return state.quotes.map(function (q) {
+      var m = quoteMeta(q), before = quoteTotal(q), vat = Number(q.vat) || 0;
+      return {
+        "Mã báo giá": q.code || "", "Tên báo giá": q.name || "",
+        "Công trình": m.project, "Khách hàng": m.client, "Trạng thái": m.status,
+        "Ngày tạo": q.createdDate || "", "Ngày cập nhật": q.updatedDate || "",
+        "Cộng trước VAT": Math.round(before), "VAT (%)": vat, "Tiền VAT": Math.round(before * vat / 100),
+        "Tổng sau VAT": Math.round(before * (1 + vat / 100)), "Ghi chú nguồn": q.source || ""
+      };
+    });
+  }
+  function exportBackupExcel() {
+    if (typeof XLSX === "undefined") { toast("Thư viện Excel chưa tải xong, thử lại sau vài giây."); return; }
+    var wb = XLSX.utils.book_new();
+    var add = function (name, rows) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{}]), name);
+    };
+    add("Tong hop bao gia", backupQuoteRows());
+    add("Chi tiet bao gia", backupLineRows());
+    add("Thu vien vat tu", PRICE_CATALOG.map(function (e) {
+      return { "Mã": e.code || "", "Tên": e.name || "", "Nội dung": e.detail || "",
+        "ĐVT": e.unit || "", "Đơn giá": Number(e.price) || 0, "Số ảnh": (e.images || []).length };
+    }));
+    add("Cong trinh", PROJECTS.map(function (p) {
+      return { "Mã": p.id || "", "Tên công trình": p.name || "", "Khách hàng": p.client || "",
+        "Loại": p.type || "", "Tên đầy đủ": p.full || "" };
+    }));
+    add("Khach hang", CUSTOMERS.map(function (c) {
+      return { "Tên": c.name || "", "Điện thoại": c.phone || "", "Email": c.email || "",
+        "Công trình": c.project || "", "Ghi chú": c.note || "" };
+    }));
+    try {
+      XLSX.writeFile(wb, "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".xlsx");
+      toast("Đã tải file Excel sao lưu.");
+    } catch (e) { toast("Trình duyệt chặn tải file ở đây — " + e.message); }
+  }
+  function exportBackupJson() {
+    var payload = {
+      _app: "bao-gia-noi-that", _backupAt: new Date().toISOString(),
+      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
+    };
+    try {
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".json";
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      toast("Đã tải file sao lưu đầy đủ (.json).");
+    } catch (e) { toast("Không tạo được file sao lưu — " + e.message); }
+  }
+  function ensureBackupModal() {
+    if (document.getElementById("backupModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "backupModalOverlay";
+    el.className = "modal-overlay";
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel">' +
+        '<div class="modal-head"><h3>Sao lưu dữ liệu ra file</h3><button class="icon-btn" id="backupModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="sync-status" id="backupSummary"></div>' +
+          '<ol class="modal-steps">' +
+            '<li><b>File Excel (.xlsx)</b> — 5 trang tính: tổng hợp báo giá, chi tiết từng dòng, thư viện vật tư, công trình, khách hàng. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
+            '<li><b>File sao lưu đầy đủ (.json)</b> — bản sao y nguyên toàn bộ dữ liệu. Nếu app mất dữ liệu, đưa file này cho Claude là khôi phục lại được đúng từng dòng. Excel không làm được việc đó vì đã làm phẳng bảng.</li>' +
+          '</ol>' +
+          '<div class="sync-status">Nên tải cả 2 file và cất vào Dropbox mỗi khi có thay đổi lớn.</div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn" id="backupJsonBtn" type="button">' + iconDownload() + ' Tải file .json (khôi phục được)</button>' +
+          '<button class="btn btn-primary" id="backupExcelBtn" type="button">' + iconDownload() + ' Tải file Excel</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("backupModalClose").addEventListener("click", closeBackupModal);
+    el.addEventListener("click", function (e) { if (e.target === el) closeBackupModal(); });
+    document.getElementById("backupExcelBtn").addEventListener("click", exportBackupExcel);
+    document.getElementById("backupJsonBtn").addEventListener("click", exportBackupJson);
+  }
+  function openBackupModal() {
+    ensureBackupModal();
+    document.getElementById("backupModalOverlay").hidden = false;
+    document.getElementById("backupSummary").textContent =
+      "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
+      PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng.";
+  }
+  function closeBackupModal() {
+    var el = document.getElementById("backupModalOverlay");
+    if (el) el.hidden = true;
+  }
+
   /* ---------- Đồng bộ dữ liệu: dán JSON copy từ Apps Script vào app ---------- */
   function ensureSyncModal() {
     if (document.getElementById("syncModalOverlay")) return;
@@ -1553,7 +1683,7 @@
       '<div class="mock-note">' + iconInfo() + ' Báo giá Hà Đô Charm Villas dùng số liệu thật (trích dự toán PDF ngày 20/06/2026). Bảng giá vật tư (' + PRICE_CATALOG.length + ' mã), công trình (' + PROJECTS.length + ') và khách hàng (' + CUSTOMERS.length + ')' + (catalogSyncedAt ? " — đồng bộ lần cuối " + fmtDateTime(catalogSyncedAt) : " — chưa đồng bộ từ Sheet") + '. Dùng nút "Đồng bộ dữ liệu" bên phải để cập nhật cả 3 cùng lúc từ 1 file Sheet.</div>' +
       '<div class="page-head">' +
         '<div><h1>Báo giá nội thất</h1><div class="page-sub">Theo dõi toàn bộ báo giá dự toán nội thất theo từng công trình, từ khi lập đến khi khách hàng duyệt.</div></div>' +
-        '<div class="head-actions"><button class="btn" id="btnSyncCatalog">' + iconSync() + ' Đồng bộ dữ liệu</button><button class="btn" id="btnExport">' + iconDownload() + ' Xuất PDF</button><button class="btn btn-primary" id="btnNew">' + iconPlus() + ' Tạo báo giá mới</button></div>' +
+        '<div class="head-actions"><button class="btn" id="btnSyncCatalog">' + iconSync() + ' Đồng bộ dữ liệu</button><button class="btn" id="btnBackup">' + iconDownload() + ' Sao lưu dữ liệu</button><button class="btn" id="btnExport">' + iconDownload() + ' Xuất PDF</button><button class="btn btn-primary" id="btnNew">' + iconPlus() + ' Tạo báo giá mới</button></div>' +
       '</div>' +
       '<div class="stats">' +
         '<div class="stat-tile"><div class="stat-label">Đang triển khai</div><div class="stat-value">' + activeCount + '</div><div class="stat-foot">báo giá</div></div>' +
@@ -1578,6 +1708,7 @@
 
     document.getElementById("btnNew").addEventListener("click", createQuote);
     document.getElementById("btnSyncCatalog").addEventListener("click", openSyncModal);
+    document.getElementById("btnBackup").addEventListener("click", openBackupModal);
     document.getElementById("btnExport").addEventListener("click", function () { toast("Mở một báo giá cụ thể rồi bấm \"Xuất PDF\" trong trang đó."); });
     document.querySelectorAll(".tab").forEach(function (t) {
       t.addEventListener("click", function () { view.tab = t.dataset.tab; renderList(); });
