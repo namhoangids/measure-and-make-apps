@@ -737,6 +737,18 @@ function materialList(){ return catalog.slice().sort((a,b)=>a.code.localeCompare
 function lineTotal(it){ return it.unit==null ? null : it.qty*it.unit; }
 // Vị trí crop của ảnh (object-position) — lưu theo URL trên chính hạng mục/mã vật tư, không đổi cấu trúc mảng images[].
 function imgPos(entity, url){ return (entity && entity.imagePos && entity.imagePos[url]) || "center center"; }
+// Hạng mục chưa tự có ảnh riêng thì mượn ảnh của mã vật tư (Thư viện) — nhờ vậy hạng mục mới/nhân bản sang
+// phòng khác, hay dự án mới tạo, đều thấy ngay ảnh của vật liệu đó mà không cần chép lại dữ liệu ảnh mỗi nơi.
+function itemImages(it){
+  if(it.images && it.images.length) return it.images;
+  const m = it.matCode ? findMaterial(it.matCode) : null;
+  return (m && m.images) || [];
+}
+function itemImgPos(it, url){
+  if(it.imagePos && it.imagePos[url]) return it.imagePos[url];
+  const m = it.matCode ? findMaterial(it.matCode) : null;
+  return (m && m.imagePos && m.imagePos[url]) || "center center";
+}
 const IMG_POSITIONS = [
   ["left top","↖"],["center top","↑"],["right top","↗"],
   ["left center","←"],["center center","•"],["right center","→"],
@@ -1119,9 +1131,9 @@ function cardsView(){
       ${(orphan||RO())?"":`<span class="gact"><button data-addto="${esc(room)}">+ dòng</button></span>`}</div>`;
     if(!g.length){ if(!RO()) out += `<div class="addrow"><button data-addto="${esc(room)}">+ Thêm hạng mục vào phòng này</button></div>`; continue; }
     for(const it of g){
-      const t = lineTotal(it), img = it.images&&it.images[0];
+      const t = lineTotal(it), img = itemImages(it)[0];
       out += `<div class="cardrow" data-code="${it.code}" aria-selected="${ui.selected===it.code}" tabindex="0">
-        <div class="thumb ${img?"":"slot bp"}">${img?`<img src="${img}" alt="" style="object-position:${imgPos(it,img)}">`:`<i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>`}</div>
+        <div class="thumb ${img?"":"slot bp"}">${img?`<img src="${img}" alt="" style="object-position:${itemImgPos(it,img)}">`:`<i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>`}</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:10.5px;color:var(--accent)">${it.code}</span>
             <span style="font-family:'Barlow Condensed';font-weight:600;font-size:15px" class="cell-ell">${esc(it.name)}</span></div>
@@ -1149,10 +1161,10 @@ function boardView(){
     if(!g.length){ if(!RO()) out += `<div class="addrow"><button data-addto="${esc(room)}">+ Thêm hạng mục vào phòng này</button></div>`; continue; }
     out += `<div class="board">`;
     for(const it of g){
-      const img = it.images&&it.images[0];
+      const img = itemImages(it)[0];
       out += `<div class="btile bp" data-code="${it.code}" aria-selected="${ui.selected===it.code}" tabindex="0">
         <i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>
-        <div class="slot" style="height:120px;border:0;border-bottom:1px solid var(--line-2)">${img?`<img src="${img}" alt="" style="object-position:${imgPos(it,img)}">`:""}</div>
+        <div class="slot" style="height:120px;border:0;border-bottom:1px solid var(--line-2)">${img?`<img src="${img}" alt="" style="object-position:${itemImgPos(it,img)}">`:""}</div>
         <div class="cap">
           <div class="top"><span>${it.code}</span><span>×${it.qty}</span></div>
           <h4>${esc(it.name)}</h4>
@@ -1183,11 +1195,11 @@ function rail(){
     </aside>`;
   }
   const t = lineTotal(it), stage = it.stage ?? -1;
-  const img = it.images&&it.images[0];
+  const img = itemImages(it)[0];
   return `<aside class="rail">
     <div class="kick">${it.code} · Đang chọn</div>
     ${img
-      ? `<div class="slot" id="railHero" data-full="${img}" data-pos="${imgPos(it,img)}" style="height:150px;overflow:hidden;cursor:zoom-in"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:${imgPos(it,img)};display:block"></div>`
+      ? `<div class="slot" id="railHero" data-full="${img}" data-pos="${itemImgPos(it,img)}" style="height:150px;overflow:hidden;cursor:zoom-in"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:${itemImgPos(it,img)};display:block"></div>`
       : `<div class="slot bp" style="height:150px"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i></div>`}
     <h3>${esc(it.name)}</h3>
     <div class="vend">${[it.vendor,it.model].filter(Boolean).map(esc).join(" · ")||"Chưa có NCC"}</div>
@@ -1249,7 +1261,9 @@ function detailScreen(code){
   const roomSpent = items.filter(i=>i.room===it.room).reduce((a,i)=>a+(lineTotal(i)||0),0);
   const stage = it.stage ?? -1;
   const stepDate = it.poDate ? {2:it.poDate} : {};
-  const im = it.images||[];
+  const im = it.images||[]; // ảnh riêng của hạng mục — dùng cho khung thumbnail sửa/xoá được
+  const heroImg = im[0] || itemImages(it)[0]; // chưa có ảnh riêng thì mượn tạm ảnh mã vật tư để xem trước
+  const inherited = !im.length && !!heroImg;
   const ro = RO();
   return `
   <div class="detail">
@@ -1264,8 +1278,8 @@ function detailScreen(code){
     </div>
     <div class="dbody">
       <div class="dleft">
-        ${im[0]
-          ? `<div class="dhero" ${ro?"":`data-pick-img="1"`} title="${ro?"":"Đổi ảnh chính"}"><img src="${im[0]}" alt="${esc(it.name)}" style="object-position:${imgPos(it,im[0])}">${ro?"":`<span class="hint">Bấm để đổi · kéo-thả / dán để thêm</span><button class="posbtn" data-togglepos="1" title="Chỉnh vị trí ảnh">⤢</button>${ui.posPicker?positionPickerHtml():""}`}</div>`
+        ${heroImg
+          ? `<div class="dhero" ${ro?"":`data-pick-img="1"`} title="${ro?"":(inherited?"Bấm để thêm ảnh riêng":"Đổi ảnh chính")}"><img src="${heroImg}" alt="${esc(it.name)}" style="object-position:${itemImgPos(it,heroImg)}">${inherited?`<span class="hint">Ảnh mẫu từ Thư viện vật tư (${esc(it.matCode)})${ro?"":" · bấm để thêm ảnh riêng"}</span>`:(ro?"":`<span class="hint">Bấm để đổi · kéo-thả / dán để thêm</span><button class="posbtn" data-togglepos="1" title="Chỉnh vị trí ảnh">⤢</button>${ui.posPicker?positionPickerHtml():""}`)}</div>`
           : (ro
             ? `<div class="dhero slot bp ph"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i><span class="phlabel">Chưa có ảnh</span></div>`
             : `<div class="dhero slot bp ph" data-pick-img="1"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i><span class="phlabel">+ Thêm ảnh</span></div>`)}
