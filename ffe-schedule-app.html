@@ -1749,7 +1749,7 @@ function openMaterialEditor(code){
     const label = prompt("Nhãn (tuỳ chọn):", "") || "";
     matDraft.links = matDraft.links || [];
     matDraft.links.push({url, label});
-    paintMatLinks();
+    paintMatLinks(); persistMatDraft();
   };
   if(m) $("#m_del").onclick = async ()=>{
     if(!confirm(`Xoá mã "${m.code}" khỏi thư viện?`)) return;
@@ -1834,6 +1834,23 @@ async function openMaterialHistory(code){
   }
 }
 
+// Sửa mã vật tư ĐÃ CÓ SẴN (import Excel, hoặc đã tồn tại): thêm/xoá/sắp xếp ảnh, đổi vị trí, thêm liên kết
+// đều lưu thẳng lên Firestore ngay — không đợi bấm "Lưu" mới ghi. Trước đây các thao tác này chỉ sửa
+// `matDraft` trong bộ nhớ, nếu Nam đóng dialog mà quên bấm "Lưu" thì ảnh đã tải lên Storage nhưng
+// không có trong Firestore, "gọi" lại mã đó lần sau sẽ không thấy ảnh. Mã MỚI (chưa có matOriginalCode)
+// vẫn chỉ lưu khi bấm "Lưu", vì lúc đó chưa chắc đã có Tên/Mã hợp lệ để ghi.
+async function persistMatDraft(){
+  if(!matOriginalCode) return;
+  try{
+    await CATALOG_COL.doc(slug(matOriginalCode)).set({
+      images:(matDraft.images||[]).slice(),
+      imagePos:{...(matDraft.imagePos||{})},
+      links:(matDraft.links||[]).slice(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
+    }, {merge:true});
+  }catch(e){ toast("Không lưu được ảnh/liên kết — "+e.message); }
+}
 function paintMatMedia(){
   const im = matDraft.images || [];
   $("#m_hero").innerHTML = im[0]
@@ -1844,7 +1861,7 @@ function paintMatMedia(){
   document.querySelectorAll("#m_hero [data-setpos]").forEach(el=> el.onclick = e=>{
     e.stopPropagation();
     matDraft.imagePos = matDraft.imagePos||{}; matDraft.imagePos[im[0]] = el.dataset.setpos;
-    matPosPickerOpen = false; paintMatMedia();
+    matPosPickerOpen = false; paintMatMedia(); persistMatDraft();
   });
   const thumbs = $("#m_thumbs");
   thumbs.innerHTML = im.map((src,i)=>`<div class="dthumb ${i===0?"active":""}" style="width:48px;height:48px" data-mthumb="${i}" title="${i===0?"Ảnh chính":"Đặt làm ảnh chính"}"><img src="${src}" alt="" style="object-position:${imgPos(matDraft,src)}"><button class="dthumb-x" data-mrmimg="${i}">×</button></div>`).join("")
@@ -1853,9 +1870,9 @@ function paintMatMedia(){
   thumbs.querySelectorAll("[data-mthumb]").forEach(el=> el.onclick = e=>{
     if(e.target.closest("[data-mrmimg]")) return;
     const i = +el.dataset.mthumb;
-    if(i>0){ matDraft.images.unshift(matDraft.images.splice(i,1)[0]); paintMatMedia(); }
+    if(i>0){ matDraft.images.unshift(matDraft.images.splice(i,1)[0]); paintMatMedia(); persistMatDraft(); }
   });
-  thumbs.querySelectorAll("[data-mrmimg]").forEach(b=> b.onclick = e=>{ e.stopPropagation(); matDraft.images.splice(+b.dataset.mrmimg,1); paintMatMedia(); });
+  thumbs.querySelectorAll("[data-mrmimg]").forEach(b=> b.onclick = e=>{ e.stopPropagation(); matDraft.images.splice(+b.dataset.mrmimg,1); paintMatMedia(); persistMatDraft(); });
 }
 function matPickImages(){
   const inp = document.createElement("input");
@@ -1869,7 +1886,7 @@ function matPickImages(){
         const blob = await resizeImageBlob(f);
         const path = `ffe/_catalog/materials/${slug(matDraft.uploadKey)}/${Date.now()}.jpg`;
         matDraft.images.push(await uploadToStorage(path, blob, "image/jpeg"));
-        paintMatMedia();
+        paintMatMedia(); await persistMatDraft();
       }catch(e){ toast("Không tải được ảnh lên: "+e.message); }
     }
     inp.remove();
@@ -1880,7 +1897,7 @@ function paintMatLinks(){
   const wrap = $("#m_links");
   wrap.innerHTML = (matDraft.links||[]).map((l,i)=>`<div class="dfile"><a class="fn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(l.label||l.url)}</a><button class="fx" data-mrmlink="${i}">×</button></div>`).join("")
     || `<div style="color:var(--ink-4)">Chưa có liên kết</div>`;
-  wrap.querySelectorAll("[data-mrmlink]").forEach(b=> b.onclick = ()=>{ matDraft.links.splice(+b.dataset.mrmlink,1); paintMatLinks(); });
+  wrap.querySelectorAll("[data-mrmlink]").forEach(b=> b.onclick = ()=>{ matDraft.links.splice(+b.dataset.mrmlink,1); paintMatLinks(); persistMatDraft(); });
 }
 
 // ── Thư viện vật tư: nhập nhanh từ Excel/CSV (điền thông tin trước, thêm ảnh sau) ──
