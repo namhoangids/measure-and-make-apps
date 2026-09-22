@@ -133,7 +133,12 @@ input,select,textarea{font:inherit;color:inherit}
 .tablewrap{overflow-x:auto;flex:1}
 .tbl{min-width:1020px}
 .trow .stt,.thead .stt{color:var(--ink-4);font-size:10px;text-align:right;justify-self:end}
-.thead,.trow{display:grid;grid-template-columns:22px 28px 62px minmax(140px,1fr) 96px 104px 36px 112px 120px 44px 96px 66px 22px;column-gap:8px;align-items:center}
+/* Độ rộng cột lấy từ biến --tblcols đặt trên .tbl (kéo giãn được, xem TCOL trong script).
+   Dùng biến vì .thead và .trow là 2 phần tử riêng — đặt 1 chỗ trên cha là cả hai ăn theo, luôn thẳng cột. */
+.thead,.trow{display:grid;grid-template-columns:var(--tblcols,22px 28px 62px minmax(140px,1fr) 96px 104px 36px 112px 120px 44px 96px 66px 22px);column-gap:8px;align-items:center}
+.thead>*{position:relative}
+.colgrip{position:absolute;top:-7px;right:-5px;bottom:-7px;width:9px;cursor:col-resize;z-index:3;touch-action:none}
+.colgrip:hover,.colgrip.dragging{background:var(--accent)}
 .thead{padding:7px 16px;background:var(--panel);border-bottom:1px solid var(--line-2);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);position:sticky;top:0;z-index:2}
 .thead button{font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;display:inline-flex;gap:3px;align-items:center}
 .thead button:hover{color:var(--ink)}
@@ -1174,9 +1179,81 @@ function scheduleView(){
   </div>`;
 }
 
-function sortBtn(key,label,right){
+// ── Độ rộng cột bảng kê: kéo giãn tay, nhớ lại trong máy (giống bảng bên app Dự toán) ──
+// Cột "name" để dạng minmax(…,1fr) để luôn ăn hết chỗ trống còn lại — kéo nó là đổi độ rộng tối thiểu.
+// 2 cột 22px đầu/cuối (ô chọn & nút xoá) cố định, không cho kéo.
+const TCOL = [
+  {key:"sel",     def:22,  fixed:true},
+  {key:"stt",     def:28,  fixed:true},
+  {key:"matCode", def:62,  min:40},
+  {key:"name",    def:140, min:100, flex:true},
+  {key:"cat",     def:96,  min:50},
+  {key:"vendor",  def:104, min:50},
+  {key:"qty",     def:36,  min:30},
+  {key:"price",   def:112, min:60},
+  {key:"total",   def:120, min:70},
+  {key:"lead",    def:44,  min:36},
+  {key:"status",  def:96,  min:60},
+  {key:"po",      def:66,  min:40},
+  {key:"del",     def:22,  fixed:true}
+];
+const COLW_KEY = "ffe_colw_v1";
+let colW = (()=>{
+  const o = {}; TCOL.forEach(c=> o[c.key] = c.def);
+  try{
+    const s = JSON.parse(localStorage.getItem(COLW_KEY) || "{}");
+    TCOL.forEach(c=>{ if(!c.fixed && typeof s[c.key]==="number") o[c.key] = Math.max(c.min, Math.min(480, s[c.key])); });
+  }catch(e){}
+  return o;
+})();
+function saveColW(){ try{ localStorage.setItem(COLW_KEY, JSON.stringify(colW)); }catch(e){} }
+function tblColsCss(){ return TCOL.map(c=> c.flex ? `minmax(${colW[c.key]}px,1fr)` : `${colW[c.key]}px`).join(" "); }
+function tblMinWidth(){ return TCOL.reduce((s,c)=> s+colW[c.key], 0) + 12*8 + 32; } // + column-gap + padding 2 bên
+function applyColW(){
+  const tbl = $(".tbl"); if(!tbl) return;
+  tbl.style.setProperty("--tblcols", tblColsCss());
+  tbl.style.minWidth = tblMinWidth()+"px";
+}
+function colGrip(key){
+  const c = TCOL.find(x=>x.key===key);
+  return (!c || c.fixed) ? "" : `<span class="colgrip" data-grip="${key}" title="Kéo để chỉnh độ rộng cột · bấm đúp để về mặc định"></span>`;
+}
+(function setupColResize(){
+  let drag = null;
+  document.addEventListener("mousedown", e=>{
+    const grip = e.target.closest && e.target.closest(".colgrip");
+    if(!grip) return;
+    e.preventDefault(); e.stopPropagation();
+    drag = { key: grip.dataset.grip, startX: e.clientX, startW: colW[grip.dataset.grip] };
+    grip.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+  }, true);
+  document.addEventListener("mousemove", e=>{
+    if(!drag) return;
+    const c = TCOL.find(x=>x.key===drag.key);
+    colW[drag.key] = Math.max(c.min, Math.min(480, drag.startW + (e.clientX - drag.startX)));
+    applyColW();
+  });
+  document.addEventListener("mouseup", ()=>{
+    if(!drag) return;
+    drag = null;
+    document.body.style.cursor = "";
+    document.querySelectorAll(".colgrip.dragging").forEach(g=> g.classList.remove("dragging"));
+    saveColW();
+  });
+  // Bấm đúp vào vạch kéo = trả cột đó về độ rộng mặc định (lỡ kéo hỏng thì khỏi phải mò).
+  document.addEventListener("dblclick", e=>{
+    const grip = e.target.closest && e.target.closest(".colgrip");
+    if(!grip) return;
+    e.preventDefault(); e.stopPropagation();
+    const c = TCOL.find(x=>x.key===grip.dataset.grip);
+    colW[c.key] = c.def; applyColW(); saveColW();
+  }, true);
+})();
+
+function sortBtn(key,label,right,colKey){
   const active = ui.sortKey===key;
-  return `<button data-sort="${key}" class="${right?"r":""}">${label}${active?`<span class="sortmark">${ui.sortDir>0?"▲":"▼"}</span>`:""}</button>`;
+  return `<button data-sort="${key}" class="${right?"r":""}">${label}${active?`<span class="sortmark">${ui.sortDir>0?"▲":"▼"}</span>`:""}${colGrip(colKey||key)}</button>`;
 }
 const edCell = (code,field,html)=> RO()
   ? `<span>${html}</span>`
@@ -1213,20 +1290,20 @@ function tableView(){
 
   const visSum = list.reduce((a,i)=>a+(lineTotal(i)||0),0);
   return `
-  <div class="tablewrap"><div class="tbl">
+  <div class="tablewrap"><div class="tbl" style="--tblcols:${tblColsCss()};min-width:${tblMinWidth()}px">
     <div class="thead">
       <span></span>
       <span class="stt">STT</span>
       ${sortBtn("matCode","Mã vật tư")}
       ${sortBtn("name","Hạng mục")}
-      ${sortBtn("category","Nhóm")}
+      ${sortBtn("category","Nhóm",false,"cat")}
       ${sortBtn("vendor","NCC")}
       ${sortBtn("qty","SL",true)}
-      ${sortBtn("unit","Đơn giá",true)}
+      ${sortBtn("unit","Đơn giá",true,"price")}
       ${sortBtn("total","Thành tiền",true)}
       ${sortBtn("lead","Lead",true)}
       ${sortBtn("status","Trạng thái")}
-      <span>PO</span>
+      <span>PO${colGrip("po")}</span>
       <span></span>
     </div>
     ${rows || `<div class="empty">Chưa có hạng mục nào.</div>`}
@@ -2823,7 +2900,8 @@ function wire(){
   $("#addItem") && ($("#addItem").onclick = ()=> openAdd());
   $("#addRoom") && ($("#addRoom").onclick = openRooms);
 
-  document.querySelectorAll("[data-sort]").forEach(b=> b.onclick = ()=>{
+  document.querySelectorAll("[data-sort]").forEach(b=> b.onclick = e=>{
+    if(e.target.closest(".colgrip")) return; // kéo vạch chỉnh cột, không phải bấm để sắp xếp
     const k=b.dataset.sort;
     if(ui.sortKey!==k){ ui.sortKey=k; ui.sortDir=1; }
     else if(ui.sortDir===1){ ui.sortDir=-1; }
