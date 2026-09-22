@@ -366,6 +366,7 @@ input,select,textarea{font:inherit;color:inherit}
 <div class="app" id="app"></div>
 <datalist id="vendorlist"></datalist>
 <datalist id="matlist"></datalist>
+<datalist id="prjtypelist"></datalist>
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -605,7 +606,7 @@ function slugifyVi(s){
 }
 function uniqueProjectId(name){
   const base = slugifyVi(name) || "du-an";
-  const existing = new Set(projects.map(p=>p.id));
+  const existing = new Set([...projects.map(p=>p.id), ...masterProjects.map(p=>p.id)]);
   let id = base, n = 2;
   while(existing.has(id)){ id = base+"-"+n; n++; }
   return id;
@@ -639,6 +640,44 @@ function updateHash(){
   }catch(e){}
 }
 
+// ── Danh sách công trình dùng CHUNG với app Dự toán (Báo giá nội thất) ──
+// Công trình sống ở `baogia/main.projects` — chỗ app Dự toán đang lưu sẵn (nguồn gốc là Google Sheet).
+// Chọn chỗ này chứ không tạo collection mới vì: app Dự toán ghi đè cả mảng `projects` mỗi lần lưu,
+// để nơi khác là hai bên đá nhau; và giữ nguyên mã dự án hai bên nên báo giá cũ + link khách vẫn chạy.
+// FF&E chỉ ĐỌC và THÊM (arrayUnion) vào mảng này, không bao giờ xoá — báo giá bên kia còn gắn vào đó.
+const BAOGIA_DOC = db.collection("baogia").doc("main");
+let masterProjects = [], masterUnsub = null;
+function subscribeMasterProjects(){
+  if(masterUnsub || SHARE_ID) return; // khách xem link chia sẻ không cần (và không có quyền đọc) danh sách này
+  masterUnsub = BAOGIA_DOC.onSnapshot(snap=>{
+    const d = snap.exists ? snap.data() : null;
+    masterProjects = (d && Array.isArray(d.projects) ? d.projects : []).filter(p=> p && p.id && p.name);
+    if(!currentProjectId) render();
+  }, err=>{ masterProjects = []; });
+}
+// Ghép 2 nguồn thành 1 danh sách: khớp theo TÊN đã chuẩn hoá, vì cùng 1 công trình đang mang 2 mã khác nhau
+// ở 2 app (vd "hado" bên Dự toán vs "hado-charm-villas" bên FF&E) — khớp theo mã sẽ ra 2 dòng trùng tên.
+// Thêm công trình vào danh sách chung. arrayUnion = chỉ nối thêm, không đụng các công trình khác —
+// an toàn kể cả khi app Dự toán đang mở và ghi cùng lúc. Trùng tên thì thôi, khỏi tạo bản thứ 2.
+async function addToMasterProjects({id, name, client, type}){
+  if(masterProjects.some(m=> slugifyVi(m.name)===slugifyVi(name))) return;
+  const full = ["Indust", client, name].filter(Boolean).join(" | ");
+  try{
+    await BAOGIA_DOC.set({ projects: firebase.firestore.FieldValue.arrayUnion(
+      { id, name, client: client||"", type: type||"", full }) }, {merge:true});
+  }catch(e){ toast("Đã tạo bảng kê, nhưng chưa đưa được công trình sang app Dự toán — "+e.message); }
+}
+function mergedProjects(){
+  const byName = new Map();
+  projects.forEach(p=> byName.set(slugifyVi(p.name), {...p, hasFfe:true}));
+  masterProjects.forEach(m=>{
+    const key = slugifyVi(m.name), hit = byName.get(key);
+    if(hit){ hit.client = m.client||""; hit.type = m.type||""; }
+    else byName.set(key, {id:m.id, name:m.name, itemCount:0, updatedAt:null,
+      client:m.client||"", type:m.type||"", hasFfe:false});
+  });
+  return [...byName.values()].sort((a,b)=> a.name.localeCompare(b.name,"vi"));
+}
 function subscribeProjectsList(){
   if(projectsUnsub) return;
   projectsUnsub = db.collection("ffe_projects").onSnapshot(snap=>{
@@ -676,7 +715,13 @@ async function openProject(id, opts){
   try{
     const snap = await ref.get();
     if(!snap.exists){
-      toast("Không tìm thấy dự án này"); currentProjectId=null; render(); return;
+      // Công trình có bên Dự toán nhưng FF&E chưa có bảng kê → tạo bảng kê rỗng ngay lúc mở, khỏi phải tạo tay.
+      const master = masterProjects.find(m=>m.id===id);
+      if(!master || RO()){ toast("Không tìm thấy dự án này"); currentProjectId=null; render(); return; }
+      await ref.set({ name: master.name, rooms:[], items:[], vendors:[],
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null });
+      toast(`Đã tạo bảng kê cho “${master.name}”`);
     }
   }catch(err){
     renderLoading("Không tải được dữ liệu: ["+err.code+"] "+err.message+" — thử tải lại trang (F5).");
@@ -711,6 +756,7 @@ function initRouting(){
     return;
   }
   subscribeProjectsList();
+  subscribeMasterProjects();
   subscribeCatalog();
   const parsed = parseHash();
   if(parsed && parsed.projectId){
@@ -871,6 +917,7 @@ function render(){
   if(currentProjectId) linkMatCodesFromModel();
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
+  $("#prjtypelist").innerHTML = [...new Set(masterProjects.map(m=>m.type).filter(Boolean))].map(t=>`<option value="${esc(t)}">`).join("");
   // Chặn mọi đường vào tab đã ẩn với khách: sửa hash thủ công, hoặc đang đứng ở tab đó rồi bật chế độ khách.
   if(RO() && CLIENT_HIDDEN_TABS.includes(ui.tab)) ui.tab = "schedule";
   setDocTitle();
@@ -887,9 +934,11 @@ function fmtDate(ts){
   try{ const d = ts && ts.toDate ? ts.toDate() : null; return d ? d.toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""; }catch(e){ return ""; }
 }
 function filteredProjects(){
+  const all = mergedProjects();
   const q = ui.projectQ.trim().toLowerCase();
-  if(!q) return projects;
-  return projects.filter(p=> p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  if(!q) return all;
+  return all.filter(p=> p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+    || (p.client||"").toLowerCase().includes(q));
 }
 function projectListScreen(){
   const list = filteredProjects();
@@ -907,12 +956,16 @@ function projectListScreen(){
       <div class="prjgrid">
         ${list.map(p=>{
           const picked = ui.projectPicks.has(p.id);
+          const sub = p.hasFfe
+            ? `${p.itemCount} hạng mục${p.updatedAt?" · cập nhật "+fmtDate(p.updatedAt):""}`
+            : `Chưa có bảng kê — bấm để bắt đầu`;
           return `<div class="prjcard${picked?" picked":""}">
-            ${selMode
+            ${(selMode && p.hasFfe)
               ? `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-pickprj="${esc(p.id)}" ${picked?"checked":""}><b>${esc(p.name)}</b></label>`
               : `<b class="prjname" data-open-project="${esc(p.id)}" style="cursor:pointer">${esc(p.name)}</b>`}
-            <div class="m">${p.itemCount} hạng mục${p.updatedAt?" · cập nhật "+fmtDate(p.updatedAt):""}</div>
-            ${(!selMode && !RO()) ? `<div style="display:flex;gap:12px;margin-top:2px">
+            ${p.client?`<div class="m" style="color:var(--ink-2)">${esc(p.client)}${p.type?" · "+esc(p.type):""}</div>`:""}
+            <div class="m">${sub}</div>
+            ${(!selMode && !RO() && p.hasFfe) ? `<div style="display:flex;gap:12px;margin-top:2px">
               <button class="btn btn-sm" data-renameprj="${esc(p.id)}">Đổi tên</button>
               <button class="btn btn-sm btn-danger" data-delprj="${esc(p.id)}">Xoá</button>
             </div>` : ""}
@@ -920,7 +973,7 @@ function projectListScreen(){
         }).join("")}
         ${(!selMode && !RO()) ? `<button class="prjcard prjcard-new" id="newProjectBtn">+ Tạo dự án mới</button>` : ""}
       </div>
-      ${!list.length ? `<p class="lead" style="text-align:center">${projects.length?"Không tìm thấy dự án nào khớp.":"Chưa có dự án nào."}</p>` : ""}
+      ${!list.length ? `<p class="lead" style="text-align:center">${(projects.length||masterProjects.length)?"Không tìm thấy dự án nào khớp.":"Chưa có dự án nào."}</p>` : ""}
       ${selMode ? prjSelbar() : ""}
       <div style="text-align:center">
         <button class="btn btn-sm" id="signoutHome" style="margin:0 auto">Đăng xuất (${esc((fbAuth.currentUser&&fbAuth.currentUser.email)||"")})</button>
@@ -941,8 +994,21 @@ async function renameProject(id){
   const p = projects.find(x=>x.id===id); if(!p) return;
   const name = prompt("Tên mới cho dự án:", p.name);
   if(!name || !name.trim() || name.trim()===p.name) return;
-  try{ await projectDocRef(id).update({name: name.trim()}); toast("Đã đổi tên dự án"); }
+  try{
+    await projectDocRef(id).update({name: name.trim()});
+    // Phải đổi tên ở CẢ danh sách chung: hai bên ghép với nhau theo tên, để lệch là công trình hiện thành 2 dòng.
+    await renameInMasterProjects(p.name, name.trim());
+    toast("Đã đổi tên dự án");
+  }
   catch(err){ toast("Không đổi được tên — "+err.message); }
+}
+async function renameInMasterProjects(oldName, newName){
+  const key = slugifyVi(oldName);
+  if(!masterProjects.some(m=> slugifyVi(m.name)===key)) return;
+  const next = masterProjects.map(m=> slugifyVi(m.name)===key
+    ? {...m, name:newName, full:["Indust", m.client, newName].filter(Boolean).join(" | ")} : m);
+  try{ await BAOGIA_DOC.set({projects: next}, {merge:true}); }
+  catch(e){ toast("Đã đổi tên bên FF&E, nhưng chưa đổi được bên app Dự toán — "+e.message); }
 }
 async function deleteProjectsBulk(ids){
   try{
@@ -972,6 +1038,9 @@ function openNewProjectDialog(){
     <header><h3>Tạo dự án mới</h3></header>
     <div class="dform">
       <div class="full"><label>Tên dự án</label><input id="np_name" placeholder="vd. Project B — Vinhomes Ocean Park"></div>
+      <div><label>Khách hàng</label><input id="np_client" placeholder="vd. Mr Long"></div>
+      <div><label>Loại công trình</label><input id="np_type" list="prjtypelist" placeholder="vd. Biệt thự"></div>
+      <div class="full" style="font-size:11px;color:var(--ink-3);margin-top:-4px">Công trình này sẽ hiện luôn trong danh sách của app Dự toán.</div>
       <div class="full"><label>Dữ liệu ban đầu</label>
         <select id="np_source">
           <option value="blank">Dự án trống — tự nhập từ đầu</option>
@@ -995,6 +1064,7 @@ function openNewProjectDialog(){
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
       });
+      await addToMasterProjects({ id, name, client: $("#np_client").value.trim(), type: $("#np_type").value.trim() });
       closeDialog();
       toast("Đã tạo dự án “"+name+"”");
       openProject(id, {tab:"schedule"});
@@ -2693,7 +2763,7 @@ function wire(){
     document.querySelectorAll("[data-delprj]").forEach(b=> b.onclick = async e=>{
       e.stopPropagation();
       const id = b.dataset.delprj, p = projects.find(x=>x.id===id);
-      if(confirm(`Xoá dự án "${p?p.name:id}"? Toàn bộ hạng mục, ảnh & dữ liệu sẽ mất, không khôi phục được.`)) await deleteProjectsBulk([id]);
+      if(confirm(`Xoá bảng kê FF&E của "${p?p.name:id}"? Toàn bộ hạng mục, ảnh & dữ liệu sẽ mất, không khôi phục được.\n\nCông trình vẫn còn trong danh sách dùng chung với app Dự toán (hiện là "Chưa có bảng kê") — báo giá bên đó không bị ảnh hưởng.`)) await deleteProjectsBulk([id]);
     });
     $("#prjCopy") && ($("#prjCopy").onclick = async ()=>{
       if(!ui.projectPicks.size) return;
@@ -2702,7 +2772,7 @@ function wire(){
     });
     $("#prjBulkDelete") && ($("#prjBulkDelete").onclick = async ()=>{
       if(!ui.projectPicks.size) return;
-      if(!confirm(`Xoá ${ui.projectPicks.size} dự án đã chọn? Toàn bộ dữ liệu sẽ mất, không khôi phục được.`)) return;
+      if(!confirm(`Xoá bảng kê FF&E của ${ui.projectPicks.size} dự án đã chọn? Toàn bộ dữ liệu sẽ mất, không khôi phục được.\n\nCác công trình vẫn còn trong danh sách dùng chung với app Dự toán — báo giá bên đó không bị ảnh hưởng.`)) return;
       await deleteProjectsBulk([...ui.projectPicks]);
       ui.projectPicks.clear(); ui.projectSelectMode = false; render();
     });
