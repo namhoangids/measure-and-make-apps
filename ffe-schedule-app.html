@@ -182,12 +182,9 @@ input,select,textarea{font:inherit;color:inherit}
 
 /* board */
 .board{padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:13px}
-.btile{border:1px solid var(--line-2);display:flex;flex-direction:column;position:relative}
-.btile:hover{border-color:var(--ink-4);z-index:5}
+.btile{border:1px solid var(--line-2);display:flex;flex-direction:column}
+.btile:hover{border-color:var(--ink-4)}
 .btile[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.btile .slot img{transition:transform .15s ease}
-.btile:hover .slot{z-index:1}
-.btile:hover .slot img{transform:scale(2)}
 .btile .cap{padding:8px 9px}
 .btile .cap .top{display:flex;justify-content:space-between;font-size:10px;color:var(--accent)}
 .btile .cap h4{font-size:13px;margin:3px 0;line-height:1.15}
@@ -794,6 +791,7 @@ function stats(){
 // ── render ─────────────────────────────────────────────────────
 function render(){
   const y = window.scrollY;
+  hideImageZoom();
   if(currentProjectId) linkMatCodesFromModel();
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
@@ -1170,7 +1168,7 @@ function rail(){
   return `<aside class="rail">
     <div class="kick">${it.code} · Đang chọn</div>
     ${img
-      ? `<div class="slot" style="height:150px;overflow:hidden"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
+      ? `<div class="slot" id="railHero" data-full="${img}" style="height:150px;overflow:hidden;cursor:zoom-in"><img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
       : `<div class="slot bp" style="height:150px"><i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i></div>`}
     <h3>${esc(it.name)}</h3>
     <div class="vend">${[it.vendor,it.model].filter(Boolean).map(esc).join(" · ")||"Chưa có NCC"}</div>
@@ -2316,6 +2314,18 @@ function toast(msg){
   $("#toasts").appendChild(t);
   setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .3s"; setTimeout(()=>t.remove(),300); }, 2400);
 }
+// Ảnh ở rail bên phải: trỏ chuột vào phóng to 2x xem nhanh (overlay riêng, không bị khung rail cắt mất phần thừa ra).
+function showImageZoom(el, src){
+  hideImageZoom();
+  const rect = el.getBoundingClientRect();
+  const zoom = document.createElement("div");
+  zoom.id = "imgZoomPreview";
+  zoom.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;z-index:200;pointer-events:none;box-shadow:var(--shadow);border:1px solid var(--line-2);overflow:hidden;background:var(--surface);transform:scale(1);transition:transform .15s ease`;
+  zoom.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block">`;
+  document.body.appendChild(zoom);
+  requestAnimationFrame(()=>{ zoom.style.transform = "scale(2)"; });
+}
+function hideImageZoom(){ const z = document.getElementById("imgZoomPreview"); if(z) z.remove(); }
 function toggleTheme(){
   const cur = document.documentElement.getAttribute("data-theme");
   const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
@@ -2418,6 +2428,12 @@ function wire(){
 
   if(ui.tab==="schedule" && ui.detail){ wireDetail(); return; }
   if(ui.tab!=="schedule") return;
+
+  const railHero = $("#railHero");
+  if(railHero){
+    railHero.onmouseenter = ()=> showImageZoom(railHero, railHero.dataset.full);
+    railHero.onmouseleave = hideImageZoom;
+  }
 
   const q = $("#q");
   if(q) q.oninput = e=>{ ui.q=e.target.value; q._keep=true; softRerender(); };
