@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>FF&E — Hà Đô Charm Villas</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Bảng kê FF&E (thiết bị vệ sinh TOTO) cho Hà Đô Charm Villas — bảng chỉnh sửa trực tiếp, quản lý phòng, nhập/xuất Excel, màn xem chi tiết từng hạng mục.">
@@ -496,12 +497,20 @@ function linkMatCodesFromModel(){
   });
 }
 
+// ── Link riêng cho khách hàng: <link app>?share=<mã dự án> ──
+// Mở link này là vào thẳng đúng 1 dự án ở chế độ CHỈ XEM, không qua màn đăng nhập, không có đường
+// quay lại chế độ sửa (khác với "Xem như khách hàng" trong menu ⋯ — cái đó chỉ là chế độ tạm của Nam).
+// Đăng nhập ẩn danh (anonymous) để vẫn đọc được Firestore/Storage mà không cần tài khoản.
+const SHARE_ID = (()=>{ try{ return new URLSearchParams(location.search).get("share") || null; }catch(e){ return null; } })();
+
 let ui = {
   tab:"schedule", view:"table",
   q:"", room:"", status:"", vendor:"", cat:"", matCodeFilter:"", leadOnly:false,
   sortKey:"ord", sortDir:1,
   selected:null, detail:null, picks:new Set(), menu:false, dialog:null,
-  mode:(()=>{ try{ return localStorage.getItem("ffe_mode")==="client" ? "client" : "admin"; }catch(e){ return "admin"; } })(),
+  // Link khách luôn là chế độ khách, và KHÔNG ghi vào localStorage (cùng origin với link chính —
+  // ghi vào sẽ làm Nam mở link chính lên cũng bị kẹt ở chế độ khách).
+  mode:(()=>{ if(SHARE_ID) return "client"; try{ return localStorage.getItem("ffe_mode")==="client" ? "client" : "admin"; }catch(e){ return "admin"; } })(),
   projectQ:"", projectSelectMode:false, projectPicks:new Set(),
   posPicker:false,
 };
@@ -529,7 +538,7 @@ function projectDocRef(id){ return db.collection("ffe_projects").doc(id); }
 const CATALOG_COL = db.collection("ffe_material_catalog");
 
 // ── Nhiều dự án: danh sách dự án + dự án đang mở ──
-let currentProjectId = null, currentProjectName = "";
+let currentProjectId = null, currentProjectName = "", currentProjectPublic = false;
 let projects = [], projectsUnsub = null;
 let docUnsub = null, saveTimer = null, pendingSave = false, firstSnapshot = true;
 
@@ -569,11 +578,13 @@ function save(){
 function flushSave(){
   if(!pendingSave || !currentProjectId) return;
   pendingSave = false;
+  if(SHARE_ID) return; // link khách: chỉ xem, không bao giờ ghi đè dữ liệu của Nam
+  // merge:true để không xoá mất các field khác của doc (vd cờ "public" bật cho khách xem).
   projectDocRef(currentProjectId).set({
     name: currentProjectName, rooms, items, vendors,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
-  }).catch(err=> toast("Không lưu được lên server — "+err.message));
+  }, {merge:true}).catch(err=> toast("Không lưu được lên server — "+err.message));
 }
 window.addEventListener("beforeunload", ()=>{ if(pendingSave) flushSave(); });
 
@@ -631,6 +642,7 @@ function subscribeProjectsList(){
 }
 
 function goHome(){
+  if(SHARE_ID) return; // khách không có danh sách dự án để về
   if(docUnsub){ docUnsub(); docUnsub=null; }
   currentProjectId = null; currentProjectName = "";
   rooms=[]; items=[]; vendors=[];  // KHÔNG xoá catalog — thư viện vật tư dùng chung mọi dự án, không thuộc riêng dự án nào
@@ -664,6 +676,7 @@ async function openProject(id, opts){
   docUnsub = ref.onSnapshot(snap=>{
     if(!snap.exists) return;
     const d = snap.data();
+    currentProjectPublic = d.public === true;
     currentProjectName = d.name || (id==="hado-charm-villas" ? "Hà Đô Charm Villas — TOTO" : id);
     if(!d.name && !RO()) ref.update({name: currentProjectName}).catch(()=>{});
     rooms = Array.isArray(d.rooms) ? d.rooms : [];
@@ -679,6 +692,14 @@ async function openProject(id, opts){
 }
 
 function initRouting(){
+  if(SHARE_ID){
+    // Khách chỉ được 1 dự án duy nhất — không tải danh sách dự án (không cho thấy dự án khác).
+    // Vẫn cần Thư viện vật tư vì ảnh hạng mục có thể "mượn" từ mã vật tư.
+    subscribeCatalog();
+    const p = parseHash();
+    openProject(SHARE_ID, p && p.projectId===SHARE_ID ? {tab:p.tab, view:p.view, detail:p.detail} : {tab:"schedule"});
+    return;
+  }
   subscribeProjectsList();
   subscribeCatalog();
   const parsed = parseHash();
@@ -719,9 +740,17 @@ function authErrorText(err){
 }
 function signOutApp(){ fbAuth.signOut(); }
 
-renderLoading("Đang kiểm tra đăng nhập…");
+renderLoading(SHARE_ID ? "Đang mở bảng kê…" : "Đang kiểm tra đăng nhập…");
 fbAuth.onAuthStateChanged(user=>{
-  if(user){ initRouting(); }
+  if(SHARE_ID){
+    if(user) initRouting();
+    else fbAuth.signInAnonymously().catch(err=> renderLoading(
+      "Không mở được bản xem cho khách ["+err.code+"]. Người gửi link cần bật đăng nhập ẩn danh (Anonymous) trong Firebase Console."));
+    return;
+  }
+  // Phiên ẩn danh còn sót lại (do mở link khách trên cùng trình duyệt) KHÔNG được tính là đã đăng nhập —
+  // nếu không, mở link chính sẽ vào thẳng app bằng tài khoản không có quyền ghi, sửa gì cũng báo lỗi.
+  if(user && !user.isAnonymous){ initRouting(); }
   else{
     if(docUnsub){ docUnsub(); docUnsub=null; }
     if(projectsUnsub){ projectsUnsub(); projectsUnsub=null; }
@@ -828,7 +857,8 @@ function render(){
   $("#vendorlist").innerHTML = vendorList().map(v=>`<option value="${esc(v)}">`).join("");
   $("#matlist").innerHTML = materialList().map(m=>`<option value="${esc(m.code)}">${esc(m.name)}</option>`).join("");
   const app = $("#app");
-  app.innerHTML = !currentProjectId ? projectListScreen()
+  app.innerHTML = !currentProjectId
+    ? (SHARE_ID ? `<div class="loadwrap">Không mở được bảng kê này — link có thể đã bị thu hồi. Liên hệ người gửi link để được cấp lại.</div>` : projectListScreen())
     : topbar() + (ui.tab==="schedule" ? (ui.detail ? detailScreen(ui.detail) : scheduleView()) : panelView());
   wire();
   updateHash();
@@ -958,6 +988,17 @@ function openNewProjectDialog(){
 }
 
 function topbar(){
+  if(SHARE_ID) return `
+  <div class="topbar">
+    <span class="brand" style="cursor:default">FF&amp;E</span>
+    <span class="crumb">${esc(currentProjectName)}</span>
+    <nav class="tabs">
+      ${[["schedule","Bảng kê"],["budget","Ngân sách"],["orders","Đơn hàng"],["library","Nhà cung cấp"]].map(([t,l])=>
+        `<button class="tab" data-tab="${t}" ${ui.tab===t?'aria-current="page"':""}>${l}</button>`).join("")}
+    </nav>
+    <button class="iconbtn" id="themeBtn" title="Sáng / tối" aria-label="Đổi giao diện">◑</button>
+  </div>
+  <div class="clientbar">👁 Bản xem dành cho khách hàng — chỉ xem, không sửa được. Số liệu cập nhật trực tiếp theo bản gốc.</div>`;
   return `
   <div class="topbar">
     <button class="brand" id="homeBtn" title="Về danh sách dự án">FF&amp;E</button>
@@ -980,6 +1021,7 @@ function topbar(){
         <button data-act="excel">Nhập / xuất Excel…</button>
         <button data-act="autocat">Tự động phân nhóm lại</button>
         <hr>
+        <button data-act="share">Link gửi khách hàng…</button>
         <button data-act="client">Xem như khách hàng</button>
         <button data-act="csv">Chép bảng kê (CSV)</button>`}
       <hr>
@@ -1671,6 +1713,51 @@ function openVendors(){
       else if(ui.vendor && !names.includes(ui.vendor)) ui.vendor = "";
       vendors = names;
       closeDialog(); save(); toast("Đã lưu NCC"); render();
+    };
+  };
+  paint();
+}
+
+// ── Link gửi khách hàng: cùng file app + ?share=<mã dự án>, khách mở là xem được ngay, không đăng nhập ──
+function shareUrl(id){ return location.href.split("#")[0].split("?")[0] + "?share=" + encodeURIComponent(id); }
+function openShareDialog(){
+  if(!currentProjectId) return;
+  ui.dialog = {type:"share"};
+  const url = shareUrl(currentProjectId);
+  const paint = ()=>{
+    paintDialog(`
+      <header><h3>Link gửi khách hàng</h3><span class="kick">${esc(currentProjectName)}</span></header>
+      <div class="dform">
+        <div class="full"><label>Link chỉ xem (khách không cần tài khoản)</label>
+          <input id="sh_url" value="${esc(url)}" readonly onclick="this.select()"></div>
+        <div class="full" style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" id="sh_copy">Chép link</button>
+          <a class="btn btn-sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Mở thử</a>
+        </div>
+        <div class="full" style="border-top:1px solid var(--line);padding-top:10px">
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+            <input type="checkbox" id="sh_public" ${currentProjectPublic?"checked":""} style="margin-top:2px;width:auto">
+            <span>Cho phép khách xem dự án này<br>
+              <span style="font-size:11px;color:var(--ink-3)">Bỏ tick là thu hồi — link cũ sẽ không mở được nữa (chỉ có tác dụng nếu Rules Firestore đã đặt theo cờ này).</span></span>
+          </label>
+        </div>
+        <div class="full" style="font-size:11px;color:var(--ink-3)">
+          Khách mở link sẽ thấy đúng bảng kê này ở chế độ chỉ xem (không sửa, không xoá, không thấy dự án khác), số liệu cập nhật trực tiếp theo bản gốc. Ai có link đều xem được — không đặt mật khẩu riêng.
+        </div>
+      </div>
+      <footer><button class="btn btn-sm" data-close>Đóng</button></footer>
+    `);
+    $("#sh_copy").onclick = async ()=>{
+      try{ await navigator.clipboard.writeText(url); toast("Đã chép link"); }
+      catch(e){ $("#sh_url").select(); toast("Không chép tự động được — bấm Ctrl+C để chép"); }
+    };
+    $("#sh_public").onchange = async e=>{
+      const on = e.target.checked;
+      try{
+        await projectDocRef(currentProjectId).set({public:on}, {merge:true});
+        currentProjectPublic = on;
+        toast(on ? "Đã cho phép khách xem dự án này" : "Đã thu hồi quyền xem của khách");
+      }catch(err){ e.target.checked = !on; toast("Không đổi được — "+err.message); }
     };
   };
   paint();
@@ -2558,6 +2645,7 @@ function autoClassifyAll(){
   toast(n? `Đã phân nhóm lại ${n} hạng mục` : "Không có thay đổi");
 }
 function setMode(m){
+  if(SHARE_ID) return; // link khách không có đường ra chế độ quản trị
   ui.mode = m; ui.menu=false; ui.picks.clear();
   try{ localStorage.setItem("ffe_mode", m); }catch(e){}
   render();
@@ -2611,6 +2699,7 @@ function wire(){
       else if(a==="materials") openMaterialLibrary();
       else if(a==="excel") openExcel();
       else if(a==="autocat"){ if(confirm("Tự động phân nhóm lại toàn bộ hạng mục dựa trên mô tả? Nhóm đã tự chỉnh sẽ bị ghi đè.")) autoClassifyAll(); else render(); }
+      else if(a==="share") openShareDialog();
       else if(a==="client") setMode("client");
       else if(a==="admin") setMode("admin");
       else if(a==="csv"){ exportCsv(); render(); }
