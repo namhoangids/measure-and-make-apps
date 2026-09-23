@@ -390,6 +390,8 @@
   .tk-table input.tk-over { color: var(--warn); font-weight: 600; }
   .tk-table td { padding: 2px 4px; vertical-align: middle; }
   .tk-table .tk-result { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; white-space: nowrap; }
+  .tk-code-input { font-family: 'IBM Plex Mono', monospace !important; text-transform: uppercase; font-weight: 600 !important; letter-spacing: .02em; }
+  .tk-table .col-stt { text-align: center; color: var(--ink-mute); font-size: 11px; }
   .tk-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .tk-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); color: var(--ink); font-family: 'IBM Plex Mono', monospace; }
   .tk-chip.idle { background: var(--neutral-pill); border-color: var(--border-soft); color: var(--ink-mute); }
@@ -859,6 +861,10 @@
   var MAIN_DOC = db.collection("baogia").doc("main");
 
   var docUnsub = null, saveTimer = null, pendingSave = false;
+  // Đếm số lần ghi đang bay lên server. Firestore bắn onSnapshot NGAY cho bản ghi của chính mình
+  // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
+  // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
+  var inflightWrites = 0, firstPaintDone = false;
 
   // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng) — báo lỗi qua toast nếu
   // sau đó thật sự ghi thất bại. Đây là hàm DUY NHẤT lưu dữ liệu — gộp cả quotes, bảng giá vật tư, công
@@ -871,11 +877,15 @@
   function flushSave() {
     if (!pendingSave) return;
     pendingSave = false;
+    inflightWrites++;
     MAIN_DOC.set({
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
-    }).catch(function (err) { toast("Không lưu được lên server — " + err.message); });
+    }).then(function () { inflightWrites--; }, function (err) {
+      inflightWrites--;
+      toast("Không lưu được lên server — " + err.message);
+    });
   }
   window.addEventListener("beforeunload", function () { if (pendingSave) flushSave(); });
 
@@ -969,6 +979,12 @@
         PROJECTS = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
         CUSTOMERS = Array.isArray(d.customers) ? d.customers : [];
         if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
+        // Snapshot do CHÍNH MÌNH vừa ghi: dữ liệu trên màn đã đúng sẵn rồi (người dùng vừa gõ ra nó),
+        // vẽ lại chỉ tổ huỷ ô đang gõ và làm văng con trỏ — đây chính là lỗi "gõ 1 ký tự là thoát khỏi ô".
+        // Vẫn nhận dữ liệu ở trên (không bỏ sót gì), chỉ bỏ qua việc vẽ lại.
+        // Lần vẽ ĐẦU TIÊN luôn phải chạy, kể cả khi đang có ghi treo, nếu không màn hình sẽ trắng.
+        if (firstPaintDone && (snap.metadata.hasPendingWrites || inflightWrites > 0)) return;
+        firstPaintDone = true;
         hideAuthOverlay();
         renderUserFoot();
         renderCurrentScreen();
@@ -1360,11 +1376,15 @@
     };
     add("Tong hop bao gia", backupQuoteRows());
     add("Chi tiet bao gia", backupLineRows());
+    // Đi qua takeoffGroups() chứ không đọc thẳng q.takeoff, để dữ liệu cũ dạng phẳng cũng được
+    // chuyển sang nhóm trước khi xuất — đọc thẳng sẽ bỏ sót toàn bộ dòng con.
     add("Dien giai khoi luong", state.quotes.reduce(function (acc, q) {
-      (q.takeoff || []).forEach(function (row) {
-        acc.push({ "Mã báo giá": q.code || "", "Mã": row.code || "", "Vị trí": row.label || "",
-          "Dài": row.d || "", "Rộng": row.r || "", "Cao": row.c || "", "SL": row.n || "",
-          "Khối lượng": takeoffRowQty(row), "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
+      takeoffGroups(q).forEach(function (grp) {
+        (grp.rows || []).forEach(function (row) {
+          acc.push({ "Mã báo giá": q.code || "", "Mã": grp.code || "", "Vị trí": row.label || "",
+            "Dài": row.d || "", "Rộng": row.r || "", "Cao": row.c || "", "SL": row.n || "",
+            "Khối lượng": takeoffRowQty(row), "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
+        });
       });
       return acc;
     }, []));
@@ -2308,14 +2328,43 @@
   }
 
   /* ===================== DIỄN GIẢI KHỐI LƯỢNG ===================== */
-  // Bảng diễn giải thuộc RIÊNG từng báo giá (q.takeoff). Mỗi dòng là 1 vị trí đo được:
-  //   Mã | Vị trí | Dài | Rộng | Cao | SL | (khối lượng tự tính) | ghi đè | ghi chú
+  // Bảng diễn giải thuộc RIÊNG từng báo giá (q.takeoff), gom theo NHÓM MÃ — điền Mã một lần ở đầu nhóm:
+  //   [ { id, code, note, rows: [ {id, label, d, r, c, n, over, note}, ... ] }, ... ]
+  // Mỗi dòng con là 1 vị trí đo được: Vị trí | Dài | Rộng | Cao | SL | (khối lượng tự tính) | ghi đè.
   // Khối lượng = tích các ô kích thước CÓ nhập × SL — nhờ vậy 1 công thức dùng được cho mọi kiểu:
-  //   trần 4.5×3.2 (m2) · tường 6×3.2 bỏ trống Rộng (m2) · phào chỉ chỉ nhập Dài (md) · đồ rời chỉ nhập SL (cái).
-  // Cộng tất cả dòng cùng Mã = khối lượng của mã đó; mọi dòng báo giá mang mã đó lấy đúng con số này.
-  function takeoffRows(q) { return Array.isArray(q.takeoff) ? q.takeoff : (q.takeoff = []); }
+  //   trần 4.5×3.2 (m2) · tường 6×3.2 bỏ trống Rộng (m2) · phào chỉ nhập Dài (md) · đồ rời chỉ nhập SL (cái).
+  // Tổng các dòng trong nhóm = khối lượng của mã đó; mọi dòng báo giá mang mã đó lấy đúng con số này.
   function blankTakeoffRow() {
-    return { id: uid("tk"), code: "", label: "", d: "", r: "", c: "", n: "", over: "", note: "" };
+    return { id: uid("tk"), label: "", d: "", r: "", c: "", n: "", over: "", note: "" };
+  }
+  function blankTakeoffGroup(code) {
+    return { id: uid("tkg"), code: code || "", note: "", rows: [blankTakeoffRow()] };
+  }
+  // CỔNG DUY NHẤT đọc q.takeoff — mọi nơi khác (render, tổng, nhập Excel, sao lưu) đều đi qua đây,
+  // nên cũng là chỗ tự chuyển dữ liệu cũ (mảng phẳng, Mã lặp ở từng dòng) sang cấu trúc nhóm.
+  // Nhận diện theo cấu trúc chứ không theo cờ phiên bản → chạy lại nhiều lần vẫn an toàn, và file
+  // sao lưu .json cũ khôi phục về sau cũng tự được chuyển. KHÔNG gọi saveState() ở đây: cứ để lần
+  // lưu kế tiếp ghi xuống, tránh kích một vòng ghi → snapshot ngay giữa lúc đang gõ.
+  function takeoffGroups(q) {
+    var t = q.takeoff;
+    if (!Array.isArray(t)) return (q.takeoff = []);
+    if (!t.length || Array.isArray(t[0].rows)) return t;
+    var byCode = {}, out = [];
+    t.forEach(function (row) {
+      var code = String(row.code || "").trim().toUpperCase();
+      if (!byCode[code]) { byCode[code] = { id: uid("tkg"), code: code, note: "", rows: [] }; out.push(byCode[code]); }
+      byCode[code].rows.push({
+        id: row.id || uid("tk"), label: row.label || "",
+        d: row.d || "", r: row.r || "", c: row.c || "", n: row.n || "",
+        over: row.over || "", note: row.note || ""
+      });
+    });
+    // Nhóm không có mã (dòng cũ bỏ trống Mã) đẩy xuống cuối cho đỡ vướng, nhưng không xoá — không mất dữ liệu.
+    out.sort(function (a, b) { return (a.code ? 0 : 1) - (b.code ? 0 : 1); });
+    return (q.takeoff = out);
+  }
+  function takeoffGroupQty(grp) {
+    return Math.round((grp.rows || []).reduce(function (s, r) { return s + takeoffRowQty(r); }, 0) * 1000) / 1000;
   }
   function takeoffRowQty(row) {
     if (String(row.over).trim() !== "" && !isNaN(Number(row.over))) return Number(row.over);
@@ -2328,10 +2377,10 @@
   function takeoffTotals(q) {
     var out = {};
     if (!q) return out;
-    takeoffRows(q).forEach(function (row) {
-      var code = String(row.code || "").trim().toUpperCase();
+    takeoffGroups(q).forEach(function (grp) {
+      var code = String(grp.code || "").trim().toUpperCase();
       if (!code) return;
-      out[code] = Math.round(((out[code] || 0) + takeoffRowQty(row)) * 1000) / 1000;
+      out[code] = Math.round(((out[code] || 0) + takeoffGroupQty(grp)) * 1000) / 1000;
     });
     return out;
   }
@@ -2350,28 +2399,53 @@
   }
   function fmtQty(v) { return (Math.round(Number(v) * 1000) / 1000).toLocaleString("vi-VN"); }
 
-  function renderTakeoffPanel(q) {
-    var rows = takeoffRows(q);
-    var totals = takeoffTotals(q);
-    var codes = Object.keys(totals).sort();
-
-    var rowsHtml = rows.length ? rows.map(function (row) {
+  // Mỗi mã = 1 khối nhóm (dùng lại đúng khuôn .group-block/.group-head của bảng báo giá):
+  // Mã điền 1 lần ở đầu nhóm, bên trong là các dòng vị trí.
+  function renderTakeoffGroup(q, grp, idx) {
+    // Nhóm chưa điền mã thì không đếm — nếu không sẽ khớp với mọi dòng báo giá cũng đang bỏ trống Mã
+    // và báo cảnh báo trùng một cách vô nghĩa.
+    var used = grp.code ? codeUsageInQuote(q, String(grp.code).trim().toUpperCase()) : 0;
+    var rowsHtml = (grp.rows || []).length ? grp.rows.map(function (row, i) {
       var over = String(row.over).trim() !== "";
-      return '<tr data-tk="' + row.id + '">' +
-        '<td><input data-tf="code" value="' + escapeHtml(row.code || "") + '" placeholder="Mã" title="Mã vật tư, trùng với ô Mã ở bảng báo giá (vd. TTC)"></td>' +
-        '<td><input data-tf="label" value="' + escapeHtml(row.label || "") + '" placeholder="Vị trí / diễn giải (vd. Phòng ngủ Master)"></td>' +
+      return '<tr data-tk="' + row.id + '" data-tk-in="' + grp.id + '">' +
+        '<td class="col-stt">' + (i + 1) + '</td>' +
+        '<td><input data-tf="label" value="' + escapeHtml(row.label || "") + '" placeholder="Vị trí (vd. Phòng ngủ Master)"></td>' +
         '<td><input class="num" data-tf="d" value="' + escapeHtml(row.d) + '" inputmode="decimal" placeholder="D"></td>' +
         '<td><input class="num" data-tf="r" value="' + escapeHtml(row.r) + '" inputmode="decimal" placeholder="R"></td>' +
         '<td><input class="num" data-tf="c" value="' + escapeHtml(row.c) + '" inputmode="decimal" placeholder="C"></td>' +
         '<td><input class="num" data-tf="n" value="' + escapeHtml(row.n) + '" inputmode="decimal" placeholder="SL"></td>' +
         '<td class="tk-result" data-tk-qty>' + fmtQty(takeoffRowQty(row)) + '</td>' +
-        '<td><input class="num' + (over ? " tk-over" : "") + '" data-tf="over" value="' + escapeHtml(row.over) + '" inputmode="decimal" placeholder="—" title="Gõ số vào đây để ghi đè kết quả tự tính"></td>' +
+        '<td><input class="num' + (over ? " tk-over" : "") + '" data-tf="over" value="' + escapeHtml(row.over) + '" inputmode="decimal" placeholder="—" title="Gõ số vào đây để dùng thẳng số này, bỏ qua công thức"></td>' +
         '<td><input data-tf="note" value="' + escapeHtml(row.note || "") + '" placeholder="Ghi chú"></td>' +
-        '<td><button class="icon-btn danger" data-tk-del="' + row.id + '" title="Xoá dòng">' + iconTrash() + '</button></td>' +
+        '<td><button class="icon-btn danger" data-tk-del-row="' + row.id + '" data-tk-in="' + grp.id + '" title="Xoá dòng">' + iconTrash() + '</button></td>' +
       '</tr>';
-    }).join("") : '<tr class="empty-row"><td colspan="10">Chưa có dòng diễn giải nào. Bấm "Thêm dòng" hoặc "Nhập từ Excel".</td></tr>';
+    }).join("") : '<tr class="empty-row"><td colspan="10">Nhóm này chưa có dòng nào.</td></tr>';
 
-    var sumHtml = takeoffChipsHtml(q);
+    return '<div class="group-block" data-tk-group="' + grp.id + '">' +
+      '<div class="group-head">' +
+        '<div class="group-head-name"><span class="roman">' + toRoman(idx + 1) + '.</span>' +
+          '<input class="group-name-input tk-code-input" data-tk-code="' + grp.id + '" value="' + escapeHtml(grp.code || "") + '" placeholder="MÃ VẬT TƯ (vd. TTC)" title="Điền 1 lần cho cả nhóm — dòng báo giá nào mang mã này sẽ lấy tổng khối lượng bên dưới">' +
+        '</div>' +
+        '<span class="group-total" data-tk-group-total="' + grp.id + '">' + fmtQty(takeoffGroupQty(grp)) +
+          (used > 1 ? ' ⚠ ' + used + ' dòng báo giá' : (used ? '' : (grp.code ? ' · chưa dùng' : ''))) + '</span>' +
+        '<button class="icon-btn danger" data-tk-del-group="' + grp.id + '" title="Xoá cả nhóm mã này">' + iconTrash() + '</button>' +
+      '</div>' +
+      '<div class="table-wrap"><div class="table-scroll"><table class="tk-table">' +
+        '<thead><tr>' +
+          '<th style="width:32px"></th><th>Vị trí / diễn giải</th>' +
+          '<th style="width:70px">Dài</th><th style="width:70px">Rộng</th><th style="width:70px">Cao</th><th style="width:60px">SL</th>' +
+          '<th style="width:92px">Khối lượng</th><th style="width:82px">Ghi đè</th><th style="width:150px">Ghi chú</th><th style="width:40px"></th>' +
+        '</tr></thead><tbody>' + rowsHtml + '</tbody>' +
+      '</table></div></div>' +
+      '<div class="add-item-row"><button type="button" data-tk-add-row="' + grp.id + '">' + iconPlus() + ' Thêm dòng vào nhóm này</button></div>' +
+    '</div>';
+  }
+
+  function renderTakeoffPanel(q) {
+    var groups = takeoffGroups(q);
+    var groupsHtml = groups.length
+      ? groups.map(function (grp, i) { return renderTakeoffGroup(q, grp, i); }).join("")
+      : '<div class="cell-muted" style="padding:10px 2px">Chưa có mã nào. Bấm "Thêm mã" hoặc "Nhập từ Excel".</div>';
 
     return '<div class="panel" style="margin-bottom:16px;">' +
       '<div class="panel-head"><h2>Diễn giải khối lượng</h2>' +
@@ -2379,17 +2453,11 @@
       '</div>' +
       (view.takeoffOpen === false ? "" :
       '<div class="panel-body">' +
-        '<div class="cell-muted" style="margin-bottom:10px;font-size:11.5px">Khối lượng = nhân các ô kích thước có nhập × SL (bỏ trống ô nào thì không tính ô đó). Gõ vào cột <b>Ghi đè</b> để dùng số của mình. Dòng báo giá nào có <b>cùng Mã</b> sẽ tự lấy tổng khối lượng của mã đó và không sửa tay được nữa.</div>' +
-        '<div class="table-wrap"><div class="table-scroll"><table class="tk-table">' +
-          '<thead><tr>' +
-            '<th style="width:82px">Mã</th><th>Vị trí / diễn giải</th>' +
-            '<th style="width:70px">Dài</th><th style="width:70px">Rộng</th><th style="width:70px">Cao</th><th style="width:60px">SL</th>' +
-            '<th style="width:92px">Khối lượng</th><th style="width:82px">Ghi đè</th><th style="width:150px">Ghi chú</th><th style="width:40px"></th>' +
-          '</tr></thead><tbody>' + rowsHtml + '</tbody>' +
-        '</table></div></div>' +
-        '<div class="tk-sum" id="tkSum">' + sumHtml + '</div>' +
+        '<div class="cell-muted" style="margin-bottom:10px;font-size:11.5px">Mỗi <b>Mã</b> là một nhóm, điền mã 1 lần ở đầu nhóm; bên trong là các dòng theo từng phòng / vị trí. Khối lượng mỗi dòng = nhân các ô kích thước có nhập × SL (bỏ trống ô nào thì không tính ô đó), hoặc gõ thẳng vào cột <b>Ghi đè</b>. Tổng của nhóm sẽ tự áp cho mọi dòng báo giá mang cùng mã đó (ô khối lượng bên đó khoá lại, không gõ tay nữa).</div>' +
+        groupsHtml +
+        '<div class="tk-sum" id="tkSum">' + takeoffChipsHtml(q) + '</div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
-          '<button class="btn btn-sm" id="tkAdd" type="button">' + iconPlus() + ' Thêm dòng</button>' +
+          '<button class="btn btn-sm" id="tkAdd" type="button">' + iconPlus() + ' Thêm mã</button>' +
           '<button class="btn btn-sm" id="tkImport" type="button">Nhập từ Excel…</button>' +
           '<button class="btn btn-sm" id="tkTemplate" type="button">Tải file mẫu</button>' +
         '</div>' +
@@ -2441,6 +2509,9 @@
     });
     var sumEl = document.getElementById("tkSum");
     if (sumEl) sumEl.innerHTML = takeoffChipsHtml(q);
+    // Tiêu đề nhóm có kèm cảnh báo "đang dùng ở mấy dòng báo giá" — số đó đổi khi người dùng gõ Mã
+    // bên bảng báo giá, nên phải vẽ lại luôn ở đây, không chỉ khi gõ trong bảng diễn giải.
+    takeoffGroups(q).forEach(function (grp) { refreshTakeoffGroupTotal(q, grp); });
     refreshAllTotals(q);
   }
 
@@ -2452,36 +2523,93 @@
     });
     if (view.takeoffOpen === false) return;
 
+    var groupById = function (id) {
+      return takeoffGroups(q).filter(function (x) { return x.id === id; })[0];
+    };
+
+    // Thao tác CẤU TRÚC (thêm/xoá nhóm, thêm/xoá dòng) thì vẽ lại cả màn — người dùng vừa bấm nút,
+    // không đang gõ nên không sợ văng con trỏ. Còn GÕ CHỮ thì tuyệt đối không vẽ lại, chỉ vá DOM tại chỗ.
     document.getElementById("tkAdd").addEventListener("click", function () {
-      takeoffRows(q).push(blankTakeoffRow());
+      takeoffGroups(q).push(blankTakeoffGroup());
       saveState(); renderDetail();
     });
     document.getElementById("tkImport").addEventListener("click", openTakeoffImport);
     document.getElementById("tkTemplate").addEventListener("click", downloadTakeoffTemplate);
 
-    document.querySelectorAll("[data-tk-del]").forEach(function (b) {
+    document.querySelectorAll("[data-tk-add-row]").forEach(function (b) {
       b.addEventListener("click", function () {
-        q.takeoff = takeoffRows(q).filter(function (x) { return x.id !== b.dataset.tkDel; });
+        var grp = groupById(b.dataset.tkAddRow);
+        if (!grp) return;
+        grp.rows = grp.rows || [];
+        grp.rows.push(blankTakeoffRow());
         saveState(); renderDetail();
       });
     });
 
+    document.querySelectorAll("[data-tk-del-group]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var grp = groupById(b.dataset.tkDelGroup);
+        if (!grp) return;
+        var n = (grp.rows || []).length;
+        if (n > 1 && !confirm('Xoá cả nhóm mã "' + (grp.code || "(chưa có mã)") + '" cùng ' + n + ' dòng bên trong?')) return;
+        q.takeoff = takeoffGroups(q).filter(function (x) { return x.id !== grp.id; });
+        saveState(); renderDetail();
+      });
+    });
+
+    document.querySelectorAll("[data-tk-del-row]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var grp = groupById(b.dataset.tkIn);
+        if (!grp) return;
+        grp.rows = (grp.rows || []).filter(function (x) { return x.id !== b.dataset.tkDelRow; });
+        saveState(); renderDetail();
+      });
+    });
+
+    // Ô Mã của nhóm: gõ tới đâu áp tới đó, KHÔNG vẽ lại. Chỉ viết hoa lại khi giá trị thực sự khác,
+    // và khôi phục vị trí con trỏ — gán lại .value vô điều kiện sẽ đẩy con trỏ về cuối sau mỗi phím.
+    document.querySelectorAll("[data-tk-code]").forEach(function (inp) {
+      var grp = groupById(inp.dataset.tkCode);
+      if (!grp) return;
+      inp.addEventListener("input", function () {
+        var up = inp.value.toUpperCase();
+        if (inp.value !== up) {
+          var pos = inp.selectionStart;
+          inp.value = up;
+          try { inp.setSelectionRange(pos, pos); } catch (e) {}
+        }
+        grp.code = up;
+        refreshTakeoffGroupTotal(q, grp);
+        applyTakeoffToQuoteRows(q);
+        saveState();
+      });
+    });
+
     document.querySelectorAll("tr[data-tk]").forEach(function (tr) {
-      var row = takeoffRows(q).filter(function (x) { return x.id === tr.dataset.tk; })[0];
+      var grp = groupById(tr.dataset.tkIn);
+      if (!grp) return;
+      var row = (grp.rows || []).filter(function (x) { return x.id === tr.dataset.tk; })[0];
       if (!row) return;
       tr.querySelectorAll("[data-tf]").forEach(function (inp) {
         inp.addEventListener("input", function () {
-          var f = inp.dataset.tf;
-          row[f] = (f === "code") ? inp.value.toUpperCase() : inp.value;
-          if (f === "code") inp.value = row.code;
+          row[inp.dataset.tf] = inp.value;
           var cell = tr.querySelector("[data-tk-qty]");
           if (cell) cell.textContent = fmtQty(takeoffRowQty(row));
-          inp.classList.toggle("tk-over", f === "over" && String(row.over).trim() !== "");
+          inp.classList.toggle("tk-over", inp.dataset.tf === "over" && String(row.over).trim() !== "");
+          refreshTakeoffGroupTotal(q, grp);
           applyTakeoffToQuoteRows(q);
           saveState();
         });
       });
     });
+  }
+
+  function refreshTakeoffGroupTotal(q, grp) {
+    var el = document.querySelector('[data-tk-group-total="' + grp.id + '"]');
+    if (!el) return;
+    var used = grp.code ? codeUsageInQuote(q, String(grp.code).trim().toUpperCase()) : 0;
+    el.textContent = fmtQty(takeoffGroupQty(grp)) +
+      (used > 1 ? " ⚠ " + used + " dòng báo giá" : (used ? "" : (grp.code ? " · chưa dùng" : "")));
   }
 
   /* ---------- Diễn giải khối lượng: nhập từ Excel ---------- */
@@ -2544,13 +2672,25 @@
       });
       if (!colFor.code) { toast('Không tìm thấy cột "Mã" trong file.'); return; }
 
-      var added = 0;
+      // Gom theo Mã: mã đã có nhóm (kể cả nhóm đang có sẵn trong báo giá) thì dồn dòng vào nhóm đó.
+      // Ô Mã để trống thì kế thừa mã của dòng ngay trên — hợp với thói quen gộp ô trong Excel.
+      var groups = takeoffGroups(q), byCode = {}, added = 0, newGroups = 0, lastCode = "";
+      groups.forEach(function (g) {
+        var c = String(g.code || "").trim().toUpperCase();
+        if (c && !byCode[c]) byCode[c] = g;
+      });
       json.forEach(function (r) {
         var get = function (f) { return colFor[f] != null ? String(r[colFor[f]]).trim() : ""; };
-        var code = get("code").toUpperCase();
+        var code = get("code").toUpperCase() || lastCode;
         if (!code) return;
-        takeoffRows(q).push({
-          id: uid("tk"), code: code, label: get("label"),
+        lastCode = code;
+        if (!byCode[code]) {
+          byCode[code] = { id: uid("tkg"), code: code, note: "", rows: [] };
+          groups.push(byCode[code]);
+          newGroups++;
+        }
+        byCode[code].rows.push({
+          id: uid("tk"), label: get("label"),
           d: get("d"), r: get("r"), c: get("c"), n: get("n"),
           over: get("over"), note: get("note")
         });
@@ -2559,7 +2699,7 @@
       if (!added) { toast("Không có dòng nào hợp lệ (cần có cột Mã)."); return; }
       saveState();
       renderDetail();
-      toast("Đã nhập " + added + " dòng diễn giải.");
+      toast("Đã nhập " + added + " dòng" + (newGroups ? " vào " + newGroups + " mã mới" : "") + ".");
     };
     fr.readAsArrayBuffer(file);
   }
