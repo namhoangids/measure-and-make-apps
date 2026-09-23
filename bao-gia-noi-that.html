@@ -864,7 +864,24 @@
   // Đếm số lần ghi đang bay lên server. Firestore bắn onSnapshot NGAY cho bản ghi của chính mình
   // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
   // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
-  var inflightWrites = 0, firstPaintDone = false;
+  var inflightWrites = 0, firstPaintDone = false, lastWrittenJson = "", repaintPending = false;
+  // Chốt chặn cuối cho lỗi "gõ 1 ký tự là văng khỏi ô": đang đặt con trỏ trong một ô nhập liệu thì
+  // KHÔNG vẽ lại #content (vì vẽ lại = thay innerHTML = huỷ luôn ô đang gõ). Hoãn lại, khi nào rời ô
+  // hẳn mới vẽ. Đây là lớp bắt mọi nguyên nhân, kể cả nguyên nhân chưa lường tới.
+  function typingInsideContent() {
+    var ae = document.activeElement, c = document.getElementById("content");
+    return !!(ae && c && c.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
+  }
+  (function watchBlurToRepaint() {
+    var c = document.getElementById("content");
+    if (!c) return;
+    c.addEventListener("focusout", function () {
+      setTimeout(function () {
+        if (typingInsideContent()) return; // chỉ nhảy sang ô khác, chưa rời hẳn
+        if (repaintPending) { repaintPending = false; renderCurrentScreen(); }
+      }, 0);
+    });
+  })();
 
   // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng) — báo lỗi qua toast nếu
   // sau đó thật sự ghi thất bại. Đây là hàm DUY NHẤT lưu dữ liệu — gộp cả quotes, bảng giá vật tư, công
@@ -877,12 +894,17 @@
   function flushSave() {
     if (!pendingSave) return;
     pendingSave = false;
+    var payload = {
+      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
+    };
+    lastWrittenJson = JSON.stringify(payload); // vân tay bản vừa ghi, để nhận ra snapshot dội ngược
+    // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
+    // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
+    // Trường này chỉ để tham khảo, không nơi nào trong app đọc tới.
+    payload.updatedAt = Date.now();
+    payload.updatedBy = (fbAuth.currentUser && fbAuth.currentUser.email) || null;
     inflightWrites++;
-    MAIN_DOC.set({
-      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: (fbAuth.currentUser && fbAuth.currentUser.email) || null
-    }).then(function () { inflightWrites--; }, function (err) {
+    MAIN_DOC.set(payload).then(function () { inflightWrites--; }, function (err) {
       inflightWrites--;
       toast("Không lưu được lên server — " + err.message);
     });
@@ -983,7 +1005,17 @@
         // vẽ lại chỉ tổ huỷ ô đang gõ và làm văng con trỏ — đây chính là lỗi "gõ 1 ký tự là thoát khỏi ô".
         // Vẫn nhận dữ liệu ở trên (không bỏ sót gì), chỉ bỏ qua việc vẽ lại.
         // Lần vẽ ĐẦU TIÊN luôn phải chạy, kể cả khi đang có ghi treo, nếu không màn hình sẽ trắng.
-        if (firstPaintDone && (snap.metadata.hasPendingWrites || inflightWrites > 0)) return;
+        //
+        // So VÂN TAY DỮ LIỆU chứ không chỉ đếm lượt ghi: Firestore giải quyết promise của set() TRƯỚC
+        // rồi mới bắn snapshot xác nhận, nên tới lúc đó inflightWrites đã về 0 và hasPendingWrites
+        // cũng đã false — chỉ đếm lượt ghi là lọt đúng lần vẽ lại gây lỗi (bài học lần vá hụt đầu tiên).
+        if (firstPaintDone) {
+          var incomingJson = JSON.stringify({
+            quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
+          });
+          if (snap.metadata.hasPendingWrites || inflightWrites > 0 || incomingJson === lastWrittenJson) return;
+          if (typingInsideContent()) { repaintPending = true; return; }
+        }
         firstPaintDone = true;
         hideAuthOverlay();
         renderUserFoot();
@@ -2285,6 +2317,34 @@
     return state.quotes.filter(function (q) { return q.id === view.editingId; })[0];
   }
 
+  // Gợi ý Mã: dùng <datalist> của trình duyệt, KHÔNG tự vẽ dropdown.
+  // Lý do: datalist chỉ là 1 thuộc tính list="..." trên ô nhập; trình duyệt tự lọc và vẽ danh sách
+  // BÊN NGOÀI trang, không chèn/xoá node nào cạnh ô đang gõ → không thể làm văng con trỏ.
+  // Gợi ý gồm mã trong Thư viện vật tư + các mã đang dùng trong chính báo giá này (mã lạ xếp sau).
+  function codeListHtml(q) {
+    var seen = {}, opts = [];
+    PRICE_CATALOG.forEach(function (e) {
+      var code = String(e.code || "").trim().toUpperCase();
+      if (!code || seen[code]) return;
+      seen[code] = true;
+      var desc = [e.name, e.price ? moneyPlain(e.price) + "/" + (e.unit || "") : ""].filter(Boolean).join(" · ");
+      opts.push('<option value="' + escapeHtml(code) + '">' + escapeHtml(desc) + '</option>');
+    });
+    if (q) {
+      var addLoose = function (code) {
+        code = String(code || "").trim().toUpperCase();
+        if (!code || seen[code]) return;
+        seen[code] = true;
+        opts.push('<option value="' + escapeHtml(code) + '">(chưa có trong thư viện vật tư)</option>');
+      };
+      q.sections.forEach(function (sec) {
+        sec.groups.forEach(function (g) { g.items.forEach(function (it) { addLoose(it.code); }); });
+      });
+      takeoffGroups(q).forEach(function (grp) { addLoose(grp.code); });
+    }
+    return '<datalist id="codeList">' + opts.join("") + '</datalist>';
+  }
+
   // Danh sách đơn vị tính = bộ mặc định + mọi đơn vị đang xuất hiện trong bảng giá (đồng bộ từ Google Sheet).
   function catalogUnits() {
     var seen = {};
@@ -2424,7 +2484,7 @@
     return '<div class="group-block" data-tk-group="' + grp.id + '">' +
       '<div class="group-head">' +
         '<div class="group-head-name"><span class="roman">' + toRoman(idx + 1) + '.</span>' +
-          '<input class="group-name-input tk-code-input" data-tk-code="' + grp.id + '" value="' + escapeHtml(grp.code || "") + '" placeholder="MÃ VẬT TƯ (vd. TTC)" title="Điền 1 lần cho cả nhóm — dòng báo giá nào mang mã này sẽ lấy tổng khối lượng bên dưới">' +
+          '<input class="group-name-input tk-code-input" list="codeList" data-tk-code="' + grp.id + '" value="' + escapeHtml(grp.code || "") + '" placeholder="MÃ VẬT TƯ (vd. TTC)" title="Điền 1 lần cho cả nhóm — dòng báo giá nào mang mã này sẽ lấy tổng khối lượng bên dưới">' +
         '</div>' +
         '<span class="group-total" data-tk-group-total="' + grp.id + '">' + fmtQty(takeoffGroupQty(grp)) +
           (used > 1 ? ' ⚠ ' + used + ' dòng báo giá' : (used ? '' : (grp.code ? ' · chưa dùng' : ''))) + '</span>' +
@@ -2729,7 +2789,7 @@
         itemsHtml +=
           '<tr data-item="' + it.id + '" data-group="' + g.id + '" data-section="' + sec.id + '">' +
             '<td class="col-stt">' + (iIdx + 1) + '</td>' +
-            '<td class="col-code"><input class="' + (linkLocked ? "matched" : "") + '" data-f="code" value="' + escapeHtml(it.code || "") + '" placeholder="Mã" title="' + (catalogEntry ? escapeHtml(catalogEntry.name + " — " + money(catalogEntry.price) + "/" + catalogEntry.unit) : "Mã vật tư (vd. TTC) — tự điền tên, nội dung, đơn giá") + '">' +
+            '<td class="col-code"><input class="' + (linkLocked ? "matched" : "") + '" list="codeList" data-f="code" value="' + escapeHtml(it.code || "") + '" placeholder="Mã" title="' + (catalogEntry ? escapeHtml(catalogEntry.name + " — " + money(catalogEntry.price) + "/" + catalogEntry.unit) : "Mã vật tư (vd. TTC) — tự điền tên, nội dung, đơn giá") + '">' +
               (catalogHasMedia(catalogEntry) ? '<button type="button" class="catalog-peek" data-peek="' + escapeHtml(catalogEntry.code) + '" title="Xem ảnh / liên kết vật tư">' + iconInfo() + '</button>' : '') +
             '</td>' +
             '<td class="col-name"><textarea class="' + (linkLocked ? "computed" : "") + '" data-f="name" rows="1" placeholder="Tên hạng mục"' + (linkLocked ? " disabled" : "") + '>' + escapeHtml(it.name) + '</textarea></td>' +
@@ -2841,6 +2901,7 @@
             '<div class="status-select-wrap"><button class="btn btn-primary" id="btnSave">' + iconCheck() + ' Lưu báo giá</button></div>' +
           '</div>' +
         '</div>' +
+        codeListHtml(q) +
         renderTakeoffPanel(q) +
         renderSummaryTable(q) +
         sectionsHtml +
@@ -2969,24 +3030,8 @@
 
     document.querySelectorAll(".item-table textarea").forEach(autoResizeTextarea);
 
-    // Gợi ý Mã theo kiểu inline autocomplete: gõ tiếp hoặc bấm Tab để nhận mã gợi ý.
-    document.querySelectorAll('.item-table input[data-f="code"]').forEach(function (inp) {
-      inp.addEventListener("input", function (e) {
-        var raw = inp.value;
-        if (!raw) return;
-        var deleting = e.inputType && e.inputType.indexOf("delete") === 0;
-        if (deleting) return;
-        var upper = raw.toUpperCase();
-        var alreadyExact = PRICE_CATALOG.some(function (en) { return en.code === upper; });
-        if (alreadyExact) return;
-        var match = PRICE_CATALOG.filter(function (en) { return en.code.indexOf(upper) === 0; })[0];
-        if (match && match.code.length > raw.length) {
-          var typedLen = raw.length;
-          inp.value = match.code;
-          if (inp.setSelectionRange) inp.setSelectionRange(typedLen, match.code.length);
-        }
-      });
-    });
+    // (Đã bỏ đoạn tự điền nốt phần còn lại của mã ngay khi gõ: nó ghi đè inp.value và bôi đen sau MỖI
+    //  phím, gõ rất khó chịu và không hề cho thấy có những mã nào. Thay bằng <datalist> — xem codeListHtml.)
 
     document.querySelectorAll("[data-peek]").forEach(function (b) {
       b.addEventListener("click", function (e) { e.stopPropagation(); openCatalogPeek(b.dataset.peek); });
