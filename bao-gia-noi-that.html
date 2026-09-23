@@ -1423,7 +1423,7 @@
           var cell = takeoffRowCell(row, bkCtx);
           acc.push({ "Mã báo giá": q.code || "", "Mã": grp.code || "", "Vị trí": row.label || "",
             "Dài": row.d || "", "Rộng": row.r || "", "Cao": row.c || "", "SL": row.n || "",
-            "Khối lượng (tính)": cell.err ? "#" + cell.err : Math.round(cell.v * 1000) / 1000,
+            "Khối lượng (tính)": cell.err ? "#" + cell.err : cell.v,
             "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
         });
       });
@@ -2567,10 +2567,10 @@
         (g.rows || []).forEach(function (r) { sum += tkRowQtyStrict(r, ctx); });
       });
     } finally { delete ctx.visiting[code]; }
-    // KHÔNG làm tròn ở đây: làm tròn tại từng mắt xích khiến chuỗi công thức trôi số
-    // (=A/3 rồi =B*3 ra 0.999 thay vì 1). Chỉ làm tròn đúng một lần lúc HIỂN THỊ.
-    ctx.cache[code] = sum;
-    return sum;
+    // Cộng các dòng ĐÃ làm tròn 2 số lẻ rồi chốt lại 2 số lẻ — công thức tham chiếu tới mã này sẽ
+    // dùng đúng con số đang hiện ở dòng tổng của nhóm, không dùng một con số ẩn nhiều số lẻ hơn.
+    ctx.cache[code] = tkRound2(sum);
+    return ctx.cache[code];
   }
 
   // Bản "nghiêm": ném lỗi khi công thức sai — dùng bên trong quá trình tính.
@@ -2582,6 +2582,12 @@
     var v = parseFloat(t);
     return isFinite(v) ? v : null;
   }
+  // Khối lượng chốt ở 2 CHỮ SỐ THẬP PHÂN, và làm tròn THẬT chứ không phải chỉ làm tròn lúc hiển thị:
+  // con số dùng để tính tiền đúng bằng con số đang hiện trên màn hình. Nhờ vậy cộng tay lại các dòng
+  // là ra đúng tổng, và lục lại kiểm tra được — quan trọng hơn việc giữ đủ số lẻ máy tính.
+  // Đánh đổi đã biết: chuỗi công thức =A/3 rồi =B*3 sẽ ra 0,99 chứ không phải 1 — nhưng đó đúng là
+  // kết quả người ta nhận được khi kiểm lại bằng tay theo các con số in ra.
+  function tkRound2(v) { return Math.round((Number(v) + Number.EPSILON) * 100) / 100; }
   function tkRowQtyStrict(row, ctx) {
     var ov = String(row.over == null ? "" : row.over).trim();
     if (ov !== "") {
@@ -2589,17 +2595,17 @@
         if (!ctx) throw tkErr("LỖI CÚ PHÁP");
         var fv = tkEval(ov.slice(1), ctx);
         if (!isFinite(fv)) throw tkErr("KẾT QUẢ KHÔNG HỢP LỆ");
-        return fv;
+        return tkRound2(fv);
       }
       var pv = tkParsePlainNumber(ov);
       if (pv === null) throw tkErr("KHÔNG PHẢI SỐ");
-      return pv;
+      return tkRound2(pv);
     }
     var dims = [row.d, row.r, row.c].map(Number).filter(function (v) { return v > 0 && isFinite(v); });
     var n = Number(row.n) > 0 && isFinite(Number(row.n)) ? Number(row.n) : null;
-    if (!dims.length) return n || 0;
+    if (!dims.length) return tkRound2(n || 0);
     var base = dims.reduce(function (a, b) { return a * b; }, 1);
-    return base * (n || 1);
+    return tkRound2(base * (n || 1));
   }
   // Bản "hiền": không bao giờ ném — trả về {v: số} hoặc {err: "mô tả lỗi"} để hiển thị.
   function takeoffRowCell(row, ctx) {
@@ -2617,7 +2623,7 @@
       if (c.err) return { err: c.err };
       sum += c.v;
     }
-    return { v: sum };
+    return { v: tkRound2(sum) };
   }
   function takeoffGroupQty(grp, ctx) {
     var c = takeoffGroupCell(grp, ctx);
@@ -2639,7 +2645,7 @@
       out[code] = (out[code] || 0) + c.v;
     });
     Object.keys(bad).forEach(function (code) { delete out[code]; });
-    Object.keys(out).forEach(function (code) { out[code] = Math.round(out[code] * 1000) / 1000; });
+    Object.keys(out).forEach(function (code) { out[code] = tkRound2(out[code]); });
     return out;
   }
   // Mã nào đang được ĐÚNG 1 dòng báo giá dùng thì an toàn; từ 2 dòng trở lên sẽ cùng nhận 1 con số
@@ -2655,7 +2661,11 @@
     });
     return n;
   }
-  function fmtQty(v) { return (Math.round(Number(v) * 1000) / 1000).toLocaleString("vi-VN"); }
+  // Hiển thị tối đa 2 số lẻ — và giá trị bên dưới CŨNG đã là 2 số lẻ (xem tkRound2), nên con số
+  // nhìn thấy đúng bằng con số dùng để tính tiền.
+  function fmtQty(v) {
+    return tkRound2(v).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+  }
 
   // Mỗi mã = 1 khối nhóm (dùng lại đúng khuôn .group-block/.group-head của bảng báo giá):
   // Mã điền 1 lần ở đầu nhóm, bên trong là các dòng vị trí.
