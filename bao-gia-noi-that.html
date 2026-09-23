@@ -1417,9 +1417,14 @@
       var bkCtx = takeoffCtx(q); // cần ngữ cảnh để giải được các ô có công thức
       takeoffGroups(q).forEach(function (grp) {
         (grp.rows || []).forEach(function (row) {
+          // Cột kết quả đặt tên "Khối lượng (tính)" để lúc NHẬP LẠI file sao lưu nó không bị nhận nhầm
+          // thành cột "Ghi đè" — nhận nhầm là mất sạch công thức, mọi dòng biến thành số cứng.
+          // Ô lỗi ghi rõ "#..." thay vì 0, để mở file sao lưu ra còn thấy chỗ nào đang sai.
+          var cell = takeoffRowCell(row, bkCtx);
           acc.push({ "Mã báo giá": q.code || "", "Mã": grp.code || "", "Vị trí": row.label || "",
             "Dài": row.d || "", "Rộng": row.r || "", "Cao": row.c || "", "SL": row.n || "",
-            "Khối lượng": takeoffRowQty(row, bkCtx), "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
+            "Khối lượng (tính)": cell.err ? "#" + cell.err : Math.round(cell.v * 1000) / 1000,
+            "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
         });
       });
       return acc;
@@ -2440,39 +2445,66 @@
   function isTakeoffFormula(v) { return String(v == null ? "" : v).trim().charAt(0) === "="; }
   function tkErr(msg) { var e = new Error(msg); e.tkErr = msg; return e; }
 
-  function tkKnownCodes(q) {
-    return takeoffGroups(q)
+  // Mã chỉ gồm chữ số (vd đặt mã là "2") bị LOẠI khỏi danh sách nhận diện: nếu không, "=TTC*2" sẽ
+  // hiểu số 2 thành mã 2 và cho kết quả sai mà không báo lỗi. Muốn trỏ tới mã dạng số phải viết [2].
+  function tkKnownCodes(ctx) {
+    if (ctx._codes) return ctx._codes; // dựng 1 lần cho cả lượt tính, tránh sắp xếp lại ở mỗi công thức
+    ctx._codes = takeoffGroups(ctx.q)
       .map(function (g) { return String(g.code || "").trim().toUpperCase(); })
-      .filter(Boolean)
+      .filter(function (c) { return c && !/^[0-9.]+$/.test(c); })
       .sort(function (a, b) { return b.length - a.length; }); // dài trước, để khớp tham lam
+    return ctx._codes;
   }
   function tkTokenize(src, codes) {
     var s = String(src), i = 0, out = [];
+    var isWordCh = function (ch) { return ch !== "" && /[A-Za-z0-9_\-.]/.test(ch); };
     while (i < s.length) {
       var ch = s.charAt(i);
       if (/\s/.test(ch)) { i++; continue; }
-      if ("+-*/()".indexOf(ch) >= 0) { out.push({ k: ch }); i++; continue; }
       if (ch === "[") {
         var end = s.indexOf("]", i);
-        if (end < 0) throw tkErr("LỖI CÚ PHÁP");
+        if (end < 0) throw tkErr("THIẾU DẤU ]");
         out.push({ k: "code", v: s.slice(i + 1, end).trim().toUpperCase() });
         i = end + 1; continue;
       }
-      var rest = s.slice(i).toUpperCase(), hit = null;
-      for (var c = 0; c < codes.length; c++) {
-        if (codes[c] && rest.indexOf(codes[c]) === 0) { hit = codes[c]; break; }
-      }
-      if (hit) { out.push({ k: "code", v: hit }); i += hit.length; continue; }
+      // SỐ đọc trước MÃ — đảo lại thứ tự cũ, vì mã dạng số từng nuốt mất số hằng trong công thức.
       var num = /^[0-9]+(\.[0-9]+)?/.exec(s.slice(i));
       if (num) { out.push({ k: "num", v: parseFloat(num[0]) }); i += num[0].length; continue; }
-      var ident = /^[A-Za-z_][A-Za-z0-9_.]*/.exec(s.slice(i));
+      if ("+-*/()".indexOf(ch) >= 0 && !/[A-Za-z_]/.test(ch)) {
+        // Thử khớp mã trước khi coi là toán tử, để mã bắt đầu bằng "-" vẫn dùng được qua [ ].
+        var opHit = tkMatchCode(s, i, codes, isWordCh);
+        if (!opHit) { out.push({ k: ch }); i++; continue; }
+      }
+      var hit = tkMatchCode(s, i, codes, isWordCh);
+      if (hit) {
+        // Nhập nhằng: chuỗi vừa khớp một mã có dấu "-" (vd MDF-AC), vừa có thể đọc là phép trừ giữa
+        // hai mã có thật (MDF trừ AC). Tự đoán là cho ra số sai âm thầm → bắt người dùng nói rõ bằng [ ].
+        if (hit.indexOf("-") >= 0) {
+          var head = hit.split("-")[0];
+          if (codes.indexOf(head) >= 0) throw tkErr("MÃ NHẬP NHẰNG " + hit + " — DÙNG [" + hit + "]");
+        }
+        out.push({ k: "code", v: hit }); i += hit.length; continue;
+      }
+      var ident = /^[A-Za-z_][A-Za-z0-9_.\-]*/.exec(s.slice(i));
       if (ident) { out.push({ k: "code", v: ident[0].toUpperCase() }); i += ident[0].length; continue; }
       throw tkErr("LỖI CÚ PHÁP");
     }
     return out;
   }
+  // Khớp mã tại vị trí i, và chỉ chấp nhận khi đúng RANH GIỚI TỪ — không cho "TT" khớp giữa "TTC".
+  function tkMatchCode(s, i, codes, isWordCh) {
+    var rest = s.slice(i).toUpperCase();
+    for (var c = 0; c < codes.length; c++) {
+      var code = codes[c];
+      if (!code || rest.indexOf(code) !== 0) continue;
+      var after = s.charAt(i + code.length);
+      if (isWordCh(after)) continue; // còn dính chữ phía sau → chưa phải mã trọn vẹn
+      return code;
+    }
+    return null;
+  }
   function tkEval(src, ctx) {
-    var toks = tkTokenize(src, tkKnownCodes(ctx.q)), pos = 0;
+    var toks = tkTokenize(src, tkKnownCodes(ctx)), pos = 0;
     var peek = function () { return toks[pos]; };
     function parseExpr() {
       var v = parseTerm();
@@ -2535,31 +2567,43 @@
         (g.rows || []).forEach(function (r) { sum += tkRowQtyStrict(r, ctx); });
       });
     } finally { delete ctx.visiting[code]; }
-    sum = Math.round(sum * 1000) / 1000;
+    // KHÔNG làm tròn ở đây: làm tròn tại từng mắt xích khiến chuỗi công thức trôi số
+    // (=A/3 rồi =B*3 ra 0.999 thay vì 1). Chỉ làm tròn đúng một lần lúc HIỂN THỊ.
     ctx.cache[code] = sum;
     return sum;
   }
 
   // Bản "nghiêm": ném lỗi khi công thức sai — dùng bên trong quá trình tính.
+  // Số thuần: chỉ nhận đúng dạng số thập phân (cho phép dấu phẩy kiểu Việt Nam). Trước đây dùng
+  // Number() nên "Infinity", "1e999", "0x10" đều lọt và làm thành tiền hỏng hẳn.
+  function tkParsePlainNumber(s) {
+    var t = String(s).trim().replace(",", ".");
+    if (!/^-?[0-9]+(\.[0-9]+)?$/.test(t)) return null;
+    var v = parseFloat(t);
+    return isFinite(v) ? v : null;
+  }
   function tkRowQtyStrict(row, ctx) {
     var ov = String(row.over == null ? "" : row.over).trim();
     if (ov !== "") {
       if (isTakeoffFormula(ov)) {
         if (!ctx) throw tkErr("LỖI CÚ PHÁP");
-        return tkEval(ov.slice(1), ctx);
+        var fv = tkEval(ov.slice(1), ctx);
+        if (!isFinite(fv)) throw tkErr("KẾT QUẢ KHÔNG HỢP LỆ");
+        return fv;
       }
-      if (!isNaN(Number(ov))) return Number(ov);
-      throw tkErr("KHÔNG PHẢI SỐ");
+      var pv = tkParsePlainNumber(ov);
+      if (pv === null) throw tkErr("KHÔNG PHẢI SỐ");
+      return pv;
     }
-    var dims = [row.d, row.r, row.c].map(Number).filter(function (v) { return v > 0; });
-    var n = Number(row.n) > 0 ? Number(row.n) : null;
+    var dims = [row.d, row.r, row.c].map(Number).filter(function (v) { return v > 0 && isFinite(v); });
+    var n = Number(row.n) > 0 && isFinite(Number(row.n)) ? Number(row.n) : null;
     if (!dims.length) return n || 0;
     var base = dims.reduce(function (a, b) { return a * b; }, 1);
-    return Math.round(base * (n || 1) * 1000) / 1000;
+    return base * (n || 1);
   }
   // Bản "hiền": không bao giờ ném — trả về {v: số} hoặc {err: "mô tả lỗi"} để hiển thị.
   function takeoffRowCell(row, ctx) {
-    try { return { v: Math.round(tkRowQtyStrict(row, ctx) * 1000) / 1000 }; }
+    try { return { v: tkRowQtyStrict(row, ctx) }; }
     catch (e) { return { err: e.tkErr || "LỖI" }; }
   }
   function takeoffRowQty(row, ctx) {
@@ -2573,7 +2617,7 @@
       if (c.err) return { err: c.err };
       sum += c.v;
     }
-    return { v: Math.round(sum * 1000) / 1000 };
+    return { v: sum };
   }
   function takeoffGroupQty(grp, ctx) {
     var c = takeoffGroupCell(grp, ctx);
@@ -2582,16 +2626,20 @@
   // Mã nào có công thức lỗi thì KHÔNG đưa vào tổng — để dòng báo giá mang mã đó khỏi nhận số sai;
   // lỗi được hiện rõ ngay tại bảng diễn giải.
   function takeoffTotals(q) {
-    var out = {};
+    var out = {}, bad = {};
     if (!q) return out;
     var ctx = takeoffCtx(q);
     takeoffGroups(q).forEach(function (grp) {
       var code = String(grp.code || "").trim().toUpperCase();
       if (!code) return;
       var c = takeoffGroupCell(grp, ctx);
-      if (c.err) { delete out[code]; return; }
-      out[code] = Math.round(((out[code] || 0) + c.v) * 1000) / 1000;
+      // Đánh dấu rồi xoá SAU vòng lặp, không xoá ngay: hai nhóm cùng mã mà nhóm lỗi đứng trước thì
+      // `delete` lúc đó chưa có gì để xoá, nhóm sau vẫn ghi đè → tổng thiếu mà không hề báo lỗi.
+      if (c.err) { bad[code] = true; return; }
+      out[code] = (out[code] || 0) + c.v;
     });
+    Object.keys(bad).forEach(function (code) { delete out[code]; });
+    Object.keys(out).forEach(function (code) { out[code] = Math.round(out[code] * 1000) / 1000; });
     return out;
   }
   // Mã nào đang được ĐÚNG 1 dòng báo giá dùng thì an toàn; từ 2 dòng trở lên sẽ cùng nhận 1 con số
@@ -2705,11 +2753,21 @@
           var code = String(it.code || "").trim().toUpperCase();
           var tk = code ? totals[code] : undefined;
           var val = (tk != null) ? tk : autoQtyFor(it);
-          if (val === null || val === undefined) return;
-          it.qty = val;
           var rowEl = document.querySelector('[data-item="' + it.id + '"]');
+          var qtyInput = rowEl && rowEl.querySelector('[data-f="qty"]');
+          // Không còn nguồn tự tính (mã bị đổi/xoá, hoặc công thức của mã đó đang lỗi): phải MỞ KHOÁ
+          // để nhập tay lại. Trước đây chỉ `return` — ô vẫn khoá và giữ nguyên con số cũ, tiền tiếp tục
+          // tính theo số đã lỗi thời mà không sửa được, chỉ hết sau khi tải lại trang.
+          if (val === null || val === undefined) {
+            if (qtyInput) {
+              qtyInput.disabled = false;
+              qtyInput.classList.remove("computed", "from-takeoff");
+              qtyInput.title = code ? "Mã \"" + code + "\" chưa có khối lượng hợp lệ trong bảng Diễn giải — nhập tay" : "";
+            }
+            return;
+          }
+          it.qty = val;
           if (!rowEl) return;
-          var qtyInput = rowEl.querySelector('[data-f="qty"]');
           if (qtyInput) {
             qtyInput.value = val;
             qtyInput.disabled = true;
@@ -2892,7 +2950,9 @@
         r: ["rộng", "rong", "r", "chiều rộng"],
         c: ["cao", "c", "chiều cao"],
         n: ["sl", "số lượng", "so luong", "sl(bộ)", "số bộ"],
-        over: ["khối lượng", "khoi luong", "kl", "ghi đè"],
+        // "ghi đè" đứng TRƯỚC "khối lượng": file sao lưu có cả 2 cột, nếu "khối lượng" khớp trước thì
+        // cột chứa công thức không bao giờ được đọc tới → nhập lại là mất hết công thức.
+        over: ["ghi đè", "ghi de", "công thức", "cong thuc", "khối lượng", "khoi luong", "kl"],
         note: ["ghi chú", "ghi chu", "note"]
       };
       // Dò cột theo TÊN TRƯỜNG (không phải theo thứ tự cột), và mỗi cột chỉ được gán cho 1 trường.
@@ -3247,14 +3307,22 @@
           }
 
           if (f === "sizeD" || f === "sizeR" || f === "sizeC") {
-            var auto = autoQtyFor(it);
-            if (auto !== null) it.qty = auto;
-            var qtyInput = row.querySelector('[data-f="qty"]');
-            if (qtyInput) {
-              qtyInput.value = it.qty;
-              qtyInput.disabled = auto !== null;
-              qtyInput.classList.toggle("computed", auto !== null);
-              qtyInput.title = auto !== null ? "Tự tính từ kích thước" : "";
+            // Dòng đang lấy khối lượng từ bảng Diễn giải thì bảng đó là nguồn duy nhất — sửa kích thước
+            // ở đây KHÔNG được đè lên. Trước đây đè mất, thậm chí mở khoá cho gõ tay rồi lưu số sai.
+            var tkTotals = takeoffTotals(q);
+            var myCode = String(it.code || "").trim().toUpperCase();
+            if (myCode && tkTotals[myCode] != null) {
+              it.qty = tkTotals[myCode];
+            } else {
+              var auto = autoQtyFor(it);
+              if (auto !== null) it.qty = auto;
+              var qtyInput = row.querySelector('[data-f="qty"]');
+              if (qtyInput) {
+                qtyInput.value = it.qty;
+                qtyInput.disabled = auto !== null;
+                qtyInput.classList.toggle("computed", auto !== null);
+                qtyInput.title = auto !== null ? "Tự tính từ kích thước" : "";
+              }
             }
           }
 
@@ -3369,10 +3437,9 @@
   // Dựng 1 tài liệu tĩnh (không input/textarea) trong #printArea rồi gọi window.print() —
   // trình duyệt cho chọn "Lưu thành PDF" trong hộp thoại in. Sửa hàm này để chỉnh UI/nội dung
   // khi in: header công ty, bảng thông tin, bảng chi tiết, khối ký tên...
-  function fmtQty(n) {
-    n = Number(n) || 0;
-    return String(Math.round(n * 1000) / 1000);
-  }
+  // (Hàm fmtQty dùng chung khai báo 1 lần ở phần Diễn giải khối lượng — trước đây bị khai báo lại
+  //  ở đây, và vì cùng một phạm vi nên bản sau đè bản trước, làm mọi số trong bảng Diễn giải mất
+  //  dấu phân cách nghìn. Đã gộp làm một.)
 
   function buildPrintHtml(q) {
     var p = projectById(q.projectId);
