@@ -382,6 +382,19 @@
   .size-inputs input::placeholder { color: var(--ink-mute); font-style: italic; }
   .size-inputs span { color: var(--ink-mute); font-size: 10px; flex-shrink: 0; }
   .item-table .col-amount { text-align: right; padding-top: 12px; padding-right: 12px; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--ink); white-space: nowrap; }
+  /* Bảng diễn giải khối lượng */
+  .tk-table input { width: 100%; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 6px; font: inherit; font-size: 12px; color: var(--ink); }
+  .tk-table input:hover { border-color: var(--border-soft); }
+  .tk-table input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  .tk-table input.num { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+  .tk-table input.tk-over { color: var(--warn); font-weight: 600; }
+  .tk-table td { padding: 2px 4px; vertical-align: middle; }
+  .tk-table .tk-result { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; white-space: nowrap; }
+  .tk-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tk-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); color: var(--ink); font-family: 'IBM Plex Mono', monospace; }
+  .tk-chip.idle { background: var(--neutral-pill); border-color: var(--border-soft); color: var(--ink-mute); }
+  .tk-chip.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .item-table input.from-takeoff.computed { color: var(--accent); font-weight: 600; }
   .col-resize-handle { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; z-index: 3; touch-action: none; }
   .col-resize-handle:hover, .col-resize-handle.dragging { background: var(--accent-soft-border); }
   .item-table .col-note textarea { color: var(--ink-mute); font-size: 12px; }
@@ -1347,6 +1360,14 @@
     };
     add("Tong hop bao gia", backupQuoteRows());
     add("Chi tiet bao gia", backupLineRows());
+    add("Dien giai khoi luong", state.quotes.reduce(function (acc, q) {
+      (q.takeoff || []).forEach(function (row) {
+        acc.push({ "Mã báo giá": q.code || "", "Mã": row.code || "", "Vị trí": row.label || "",
+          "Dài": row.d || "", "Rộng": row.r || "", "Cao": row.c || "", "SL": row.n || "",
+          "Khối lượng": takeoffRowQty(row), "Ghi đè": row.over || "", "Ghi chú": row.note || "" });
+      });
+      return acc;
+    }, []));
     add("Thu vien vat tu", PRICE_CATALOG.map(function (e) {
       return { "Mã": e.code || "", "Tên": e.name || "", "Nội dung": e.detail || "",
         "ĐVT": e.unit || "", "Đơn giá": Number(e.price) || 0, "Số ảnh": (e.images || []).length };
@@ -2286,14 +2307,278 @@
     '</div>';
   }
 
+  /* ===================== DIỄN GIẢI KHỐI LƯỢNG ===================== */
+  // Bảng diễn giải thuộc RIÊNG từng báo giá (q.takeoff). Mỗi dòng là 1 vị trí đo được:
+  //   Mã | Vị trí | Dài | Rộng | Cao | SL | (khối lượng tự tính) | ghi đè | ghi chú
+  // Khối lượng = tích các ô kích thước CÓ nhập × SL — nhờ vậy 1 công thức dùng được cho mọi kiểu:
+  //   trần 4.5×3.2 (m2) · tường 6×3.2 bỏ trống Rộng (m2) · phào chỉ chỉ nhập Dài (md) · đồ rời chỉ nhập SL (cái).
+  // Cộng tất cả dòng cùng Mã = khối lượng của mã đó; mọi dòng báo giá mang mã đó lấy đúng con số này.
+  function takeoffRows(q) { return Array.isArray(q.takeoff) ? q.takeoff : (q.takeoff = []); }
+  function blankTakeoffRow() {
+    return { id: uid("tk"), code: "", label: "", d: "", r: "", c: "", n: "", over: "", note: "" };
+  }
+  function takeoffRowQty(row) {
+    if (String(row.over).trim() !== "" && !isNaN(Number(row.over))) return Number(row.over);
+    var dims = [row.d, row.r, row.c].map(Number).filter(function (v) { return v > 0; });
+    var n = Number(row.n) > 0 ? Number(row.n) : null;
+    if (!dims.length) return n || 0;
+    var base = dims.reduce(function (a, b) { return a * b; }, 1);
+    return Math.round(base * (n || 1) * 1000) / 1000;
+  }
+  function takeoffTotals(q) {
+    var out = {};
+    if (!q) return out;
+    takeoffRows(q).forEach(function (row) {
+      var code = String(row.code || "").trim().toUpperCase();
+      if (!code) return;
+      out[code] = Math.round(((out[code] || 0) + takeoffRowQty(row)) * 1000) / 1000;
+    });
+    return out;
+  }
+  // Mã nào đang được ĐÚNG 1 dòng báo giá dùng thì an toàn; từ 2 dòng trở lên sẽ cùng nhận 1 con số
+  // (Nam đã chọn cách nối "chỉ theo Mã") → dễ tính trùng tiền, nên cảnh báo ngay tại bảng diễn giải.
+  function codeUsageInQuote(q, code) {
+    var n = 0;
+    q.sections.forEach(function (sec) {
+      sec.groups.forEach(function (g) {
+        g.items.forEach(function (it) {
+          if (String(it.code || "").trim().toUpperCase() === code) n++;
+        });
+      });
+    });
+    return n;
+  }
+  function fmtQty(v) { return (Math.round(Number(v) * 1000) / 1000).toLocaleString("vi-VN"); }
+
+  function renderTakeoffPanel(q) {
+    var rows = takeoffRows(q);
+    var totals = takeoffTotals(q);
+    var codes = Object.keys(totals).sort();
+
+    var rowsHtml = rows.length ? rows.map(function (row) {
+      var over = String(row.over).trim() !== "";
+      return '<tr data-tk="' + row.id + '">' +
+        '<td><input data-tf="code" value="' + escapeHtml(row.code || "") + '" placeholder="Mã" title="Mã vật tư, trùng với ô Mã ở bảng báo giá (vd. TTC)"></td>' +
+        '<td><input data-tf="label" value="' + escapeHtml(row.label || "") + '" placeholder="Vị trí / diễn giải (vd. Phòng ngủ Master)"></td>' +
+        '<td><input class="num" data-tf="d" value="' + escapeHtml(row.d) + '" inputmode="decimal" placeholder="D"></td>' +
+        '<td><input class="num" data-tf="r" value="' + escapeHtml(row.r) + '" inputmode="decimal" placeholder="R"></td>' +
+        '<td><input class="num" data-tf="c" value="' + escapeHtml(row.c) + '" inputmode="decimal" placeholder="C"></td>' +
+        '<td><input class="num" data-tf="n" value="' + escapeHtml(row.n) + '" inputmode="decimal" placeholder="SL"></td>' +
+        '<td class="tk-result" data-tk-qty>' + fmtQty(takeoffRowQty(row)) + '</td>' +
+        '<td><input class="num' + (over ? " tk-over" : "") + '" data-tf="over" value="' + escapeHtml(row.over) + '" inputmode="decimal" placeholder="—" title="Gõ số vào đây để ghi đè kết quả tự tính"></td>' +
+        '<td><input data-tf="note" value="' + escapeHtml(row.note || "") + '" placeholder="Ghi chú"></td>' +
+        '<td><button class="icon-btn danger" data-tk-del="' + row.id + '" title="Xoá dòng">' + iconTrash() + '</button></td>' +
+      '</tr>';
+    }).join("") : '<tr class="empty-row"><td colspan="10">Chưa có dòng diễn giải nào. Bấm "Thêm dòng" hoặc "Nhập từ Excel".</td></tr>';
+
+    var sumHtml = takeoffChipsHtml(q);
+
+    return '<div class="panel" style="margin-bottom:16px;">' +
+      '<div class="panel-head"><h2>Diễn giải khối lượng</h2>' +
+        '<button class="btn btn-sm" id="tkToggle" type="button">' + (view.takeoffOpen === false ? "Mở ra" : "Thu gọn") + '</button>' +
+      '</div>' +
+      (view.takeoffOpen === false ? "" :
+      '<div class="panel-body">' +
+        '<div class="cell-muted" style="margin-bottom:10px;font-size:11.5px">Khối lượng = nhân các ô kích thước có nhập × SL (bỏ trống ô nào thì không tính ô đó). Gõ vào cột <b>Ghi đè</b> để dùng số của mình. Dòng báo giá nào có <b>cùng Mã</b> sẽ tự lấy tổng khối lượng của mã đó và không sửa tay được nữa.</div>' +
+        '<div class="table-wrap"><div class="table-scroll"><table class="tk-table">' +
+          '<thead><tr>' +
+            '<th style="width:82px">Mã</th><th>Vị trí / diễn giải</th>' +
+            '<th style="width:70px">Dài</th><th style="width:70px">Rộng</th><th style="width:70px">Cao</th><th style="width:60px">SL</th>' +
+            '<th style="width:92px">Khối lượng</th><th style="width:82px">Ghi đè</th><th style="width:150px">Ghi chú</th><th style="width:40px"></th>' +
+          '</tr></thead><tbody>' + rowsHtml + '</tbody>' +
+        '</table></div></div>' +
+        '<div class="tk-sum" id="tkSum">' + sumHtml + '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+          '<button class="btn btn-sm" id="tkAdd" type="button">' + iconPlus() + ' Thêm dòng</button>' +
+          '<button class="btn btn-sm" id="tkImport" type="button">Nhập từ Excel…</button>' +
+          '<button class="btn btn-sm" id="tkTemplate" type="button">Tải file mẫu</button>' +
+        '</div>' +
+      '</div>') +
+    '</div>';
+  }
+
+  function takeoffChipsHtml(q) {
+    var totals = takeoffTotals(q);
+    var codes = Object.keys(totals).sort();
+    return codes.length ? codes.map(function (code) {
+      var used = codeUsageInQuote(q, code);
+      var warn = used > 1;
+      return '<span class="tk-chip' + (warn ? " warn" : (used ? "" : " idle")) + '" title="' +
+        (warn ? "Mã này đang ở " + used + " dòng báo giá — cả " + used + " dòng đều nhận cùng khối lượng này, kiểm tra kẻo tính trùng"
+              : (used ? "Đang áp cho 1 dòng báo giá" : "Chưa có dòng báo giá nào dùng mã này")) + '">' +
+        escapeHtml(code) + ': <b>' + fmtQty(totals[code]) + '</b>' + (warn ? " ⚠ " + used + " dòng" : (used ? "" : " · chưa dùng")) +
+      '</span>';
+    }).join("") : '<span class="cell-muted">Chưa có mã nào.</span>';
+  }
+
+  // Đẩy khối lượng mới xuống các dòng báo giá đang dùng mã đó, không vẽ lại cả trang (giữ con trỏ đang gõ).
+  function applyTakeoffToQuoteRows(q) {
+    var totals = takeoffTotals(q);
+    q.sections.forEach(function (sec) {
+      sec.groups.forEach(function (g) {
+        g.items.forEach(function (it) {
+          var code = String(it.code || "").trim().toUpperCase();
+          var tk = code ? totals[code] : undefined;
+          var val = (tk != null) ? tk : autoQtyFor(it);
+          if (val === null || val === undefined) return;
+          it.qty = val;
+          var rowEl = document.querySelector('[data-item="' + it.id + '"]');
+          if (!rowEl) return;
+          var qtyInput = rowEl.querySelector('[data-f="qty"]');
+          if (qtyInput) {
+            qtyInput.value = val;
+            qtyInput.disabled = true;
+            qtyInput.classList.add("computed");
+            qtyInput.classList.toggle("from-takeoff", tk != null);
+            qtyInput.title = (tk != null)
+              ? "Lấy từ bảng Diễn giải khối lượng (mã " + code + ")"
+              : "Tự tính từ kích thước";
+          }
+          var amountCell = rowEl.querySelector(".col-amount");
+          if (amountCell) amountCell.textContent = moneyPlain(itemAmount(it));
+        });
+      });
+    });
+    var sumEl = document.getElementById("tkSum");
+    if (sumEl) sumEl.innerHTML = takeoffChipsHtml(q);
+    refreshAllTotals(q);
+  }
+
+  function wireTakeoff(q) {
+    var toggle = document.getElementById("tkToggle");
+    if (toggle) toggle.addEventListener("click", function () {
+      view.takeoffOpen = (view.takeoffOpen === false);
+      renderDetail();
+    });
+    if (view.takeoffOpen === false) return;
+
+    document.getElementById("tkAdd").addEventListener("click", function () {
+      takeoffRows(q).push(blankTakeoffRow());
+      saveState(); renderDetail();
+    });
+    document.getElementById("tkImport").addEventListener("click", openTakeoffImport);
+    document.getElementById("tkTemplate").addEventListener("click", downloadTakeoffTemplate);
+
+    document.querySelectorAll("[data-tk-del]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        q.takeoff = takeoffRows(q).filter(function (x) { return x.id !== b.dataset.tkDel; });
+        saveState(); renderDetail();
+      });
+    });
+
+    document.querySelectorAll("tr[data-tk]").forEach(function (tr) {
+      var row = takeoffRows(q).filter(function (x) { return x.id === tr.dataset.tk; })[0];
+      if (!row) return;
+      tr.querySelectorAll("[data-tf]").forEach(function (inp) {
+        inp.addEventListener("input", function () {
+          var f = inp.dataset.tf;
+          row[f] = (f === "code") ? inp.value.toUpperCase() : inp.value;
+          if (f === "code") inp.value = row.code;
+          var cell = tr.querySelector("[data-tk-qty]");
+          if (cell) cell.textContent = fmtQty(takeoffRowQty(row));
+          inp.classList.toggle("tk-over", f === "over" && String(row.over).trim() !== "");
+          applyTakeoffToQuoteRows(q);
+          saveState();
+        });
+      });
+    });
+  }
+
+  /* ---------- Diễn giải khối lượng: nhập từ Excel ---------- */
+  function downloadTakeoffTemplate() {
+    if (typeof XLSX === "undefined") { toast("Thư viện Excel chưa tải xong."); return; }
+    var data = [
+      { "Mã": "TTC", "Vị trí": "Phòng khách", "Dài": 4.5, "Rộng": 3.2, "Cao": "", "SL": 1, "Khối lượng": "", "Ghi chú": "" },
+      { "Mã": "TTC", "Vị trí": "Phòng ngủ Master", "Dài": 4.2, "Rộng": 3.6, "Cao": "", "SL": 1, "Khối lượng": "", "Ghi chú": "" },
+      { "Mã": "TX", "Vị trí": "Tường ngăn bếp", "Dài": 6, "Rộng": "", "Cao": 3.2, "SL": 2, "Khối lượng": "", "Ghi chú": "Bỏ trống Rộng" }
+    ];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Dien giai khoi luong");
+    try { XLSX.writeFile(wb, "DienGiaiKhoiLuong_mau.xlsx"); toast("Đã tải file mẫu."); }
+    catch (e) { toast("Trình duyệt chặn tải file — " + e.message); }
+  }
+  function openTakeoffImport() {
+    var inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".xlsx,.xls,.csv";
+    inp.addEventListener("change", function () { if (inp.files[0]) importTakeoffFile(inp.files[0]); });
+    inp.click();
+  }
+  function importTakeoffFile(file) {
+    if (typeof XLSX === "undefined") { toast("Thư viện Excel chưa tải xong."); return; }
+    var q = currentQuote();
+    if (!q) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var json;
+      try {
+        var wb = XLSX.read(fr.result, { type: "array" });
+        json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      } catch (e) { toast("Không đọc được file."); return; }
+      if (!json.length) { toast("File rỗng."); return; }
+
+      var alias = {
+        code: ["mã", "ma", "code", "mã vật tư"],
+        label: ["vị trí", "vi tri", "diễn giải", "dien giai", "hạng mục", "tên", "nội dung"],
+        d: ["dài", "dai", "d", "chiều dài"],
+        r: ["rộng", "rong", "r", "chiều rộng"],
+        c: ["cao", "c", "chiều cao"],
+        n: ["sl", "số lượng", "so luong", "sl(bộ)", "số bộ"],
+        over: ["khối lượng", "khoi luong", "kl", "ghi đè"],
+        note: ["ghi chú", "ghi chu", "note"]
+      };
+      // Dò cột theo TÊN TRƯỜNG (không phải theo thứ tự cột), và mỗi cột chỉ được gán cho 1 trường.
+      // Hai bẫy đã dính khi test: alias ngắn như "r" khớp kiểu "chứa" sẽ nuốt nhầm cột "Vị trí"
+      // (chữ "trí" có chữ r) → alias từ 2 ký tự trở xuống chỉ nhận khi trùng KHÍT tên cột;
+      // và nếu không đánh dấu cột đã dùng thì 1 cột có thể bị gán cho 2 trường cùng lúc.
+      var keys = Object.keys(json[0]), colFor = {}, usedCol = {};
+      Object.keys(alias).forEach(function (f) {
+        for (var i = 0; i < alias[f].length; i++) {
+          var a = alias[f][i];
+          for (var k = 0; k < keys.length; k++) {
+            if (usedCol[keys[k]]) continue;
+            var kl = String(keys[k]).toLowerCase().trim();
+            var ok = (a.length <= 2) ? (kl === a) : (kl === a || kl.indexOf(a) >= 0);
+            if (ok) { colFor[f] = keys[k]; usedCol[keys[k]] = true; return; }
+          }
+        }
+      });
+      if (!colFor.code) { toast('Không tìm thấy cột "Mã" trong file.'); return; }
+
+      var added = 0;
+      json.forEach(function (r) {
+        var get = function (f) { return colFor[f] != null ? String(r[colFor[f]]).trim() : ""; };
+        var code = get("code").toUpperCase();
+        if (!code) return;
+        takeoffRows(q).push({
+          id: uid("tk"), code: code, label: get("label"),
+          d: get("d"), r: get("r"), c: get("c"), n: get("n"),
+          over: get("over"), note: get("note")
+        });
+        added++;
+      });
+      if (!added) { toast("Không có dòng nào hợp lệ (cần có cột Mã)."); return; }
+      saveState();
+      renderDetail();
+      toast("Đã nhập " + added + " dòng diễn giải.");
+    };
+    fr.readAsArrayBuffer(file);
+  }
+
   function renderSectionBlock(sec, idx) {
+    var tkTotals = takeoffTotals(currentQuote());
     var groupsHtml = "";
     sec.groups.forEach(function (g, gIdx) {
       var itemsHtml = "";
       g.items.forEach(function (it, iIdx) {
-        var auto = autoQtyFor(it);
+        // Ưu tiên khối lượng từ bảng Diễn giải (theo Mã) — đó là ý định rõ ràng của người lập;
+        // không có thì mới rơi về công thức tự tính từ kích thước của chính dòng đó.
+        var tkCode = String(it.code || "").trim().toUpperCase();
+        var tkQty = tkCode ? tkTotals[tkCode] : undefined;
+        var fromTakeoff = tkQty != null;
+        var auto = fromTakeoff ? tkQty : autoQtyFor(it);
         if (auto !== null) it.qty = auto;
         var qtyLocked = auto !== null;
+        var qtyTitle = fromTakeoff ? "Lấy từ bảng Diễn giải khối lượng (mã " + tkCode + ")" : "Tự tính từ kích thước";
         var catalogEntry = findCatalogEntry(it.code);
         if (catalogEntry) {
           it.name = catalogEntry.name; it.detail = catalogEntry.detail;
@@ -2317,7 +2602,7 @@
               '<input data-f="sizeC" value="' + escapeHtml(it.sizeC || "") + '" placeholder="C" inputmode="decimal" title="Cao (mm)">' +
             '</div></td>' +
             '<td class="col-unit"><select data-f="unit">' + unitOptionsHtml(it.unit) + '</select></td>' +
-            '<td class="col-num col-qty"><input class="num' + (qtyLocked ? ' computed' : '') + '" data-f="qty" value="' + it.qty + '" inputmode="decimal"' + (qtyLocked ? ' disabled title="Tự tính từ kích thước"' : '') + '></td>' +
+            '<td class="col-num col-qty"><input class="num' + (qtyLocked ? ' computed' : '') + (fromTakeoff ? ' from-takeoff' : '') + '" data-f="qty" value="' + it.qty + '" inputmode="decimal"' + (qtyLocked ? ' disabled title="' + qtyTitle + '"' : '') + '></td>' +
             '<td class="col-num"><input class="num" data-f="price" value="' + moneyPlain(it.price) + '" inputmode="decimal" title="' + (linkLocked ? (it.priceOverridden ? "Đơn giá đã sửa riêng cho dự án này (khác bảng giá chung)" : "Gợi ý từ bảng giá theo mã — sửa được theo dự án") : "") + '"></td>' +
             '<td class="col-amount">' + moneyPlain(itemAmount(it)) + '</td>' +
             '<td class="col-note"><textarea data-f="note" rows="1" placeholder="Ghi chú">' + escapeHtml(it.note || "") + '</textarea></td>' +
@@ -2416,6 +2701,7 @@
             '<div class="status-select-wrap"><button class="btn btn-primary" id="btnSave">' + iconCheck() + ' Lưu báo giá</button></div>' +
           '</div>' +
         '</div>' +
+        renderTakeoffPanel(q) +
         renderSummaryTable(q) +
         sectionsHtml +
         '<div style="display:flex; align-items:center; gap:10px; margin-top:2px;">' +
@@ -2432,6 +2718,7 @@
     document.getElementById("btnSave").addEventListener("click", function () { saveState(); toast("Đã lưu báo giá lên server."); });
     document.getElementById("btnExportPdf").addEventListener("click", function () { printQuote(q); });
     document.getElementById("btnOpenCatalog").addEventListener("click", function () { view.screen = "catalog"; renderCatalogScreen(); renderNav(); });
+    wireTakeoff(q);
 
     document.getElementById("fName").addEventListener("input", function (e) { q.name = e.target.value; q.updatedDate = isoToday(); saveState(); });
     document.getElementById("fProject").addEventListener("change", function (e) { q.projectId = e.target.value; q.updatedDate = isoToday(); saveState(); renderDetail(); });
@@ -2667,7 +2954,10 @@
           if (f === "qty" || f === "price" || f === "sizeD" || f === "sizeR" || f === "sizeC" || f === "code") {
             var amountCell = row.querySelector(".col-amount");
             if (amountCell) amountCell.textContent = moneyPlain(itemAmount(it));
-            refreshAllTotals(q);
+            // Gõ Mã xong phải kéo ngay khối lượng từ bảng Diễn giải về dòng này (và cập nhật lại dải tổng
+            // theo mã, vì số dòng đang dùng mã đó vừa đổi) — không đợi tới lần vẽ lại trang.
+            if (f === "code") applyTakeoffToQuoteRows(q);
+            else refreshAllTotals(q);
           }
         });
       });
