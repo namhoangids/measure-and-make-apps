@@ -867,7 +867,7 @@
   // Đếm số lần ghi đang bay lên server. Firestore bắn onSnapshot NGAY cho bản ghi của chính mình
   // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
   // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
-  var inflightWrites = 0, firstPaintDone = false, lastWrittenJson = "", repaintPending = false;
+  var inflightWrites = 0, firstPaintDone = false, repaintPending = false;
   // Chốt chặn cuối cho lỗi "gõ 1 ký tự là văng khỏi ô": đang đặt con trỏ trong một ô nhập liệu thì
   // KHÔNG vẽ lại #content (vì vẽ lại = thay innerHTML = huỷ luôn ô đang gõ). Hoãn lại, khi nào rời ô
   // hẳn mới vẽ. Đây là lớp bắt mọi nguyên nhân, kể cả nguyên nhân chưa lường tới.
@@ -875,15 +875,25 @@
     var ae = document.activeElement, c = document.getElementById("content");
     return !!(ae && c && c.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
   }
+  // Vẽ lại NGAY lúc rời ô sẽ nuốt mất cú bấm: bấm nút -> ô đang gõ mất focus -> vẽ lại -> chính cái nút
+  // vừa bấm bị huỷ trước khi trình duyệt kịp phát sự kiện click -> phải bấm lần hai mới ăn.
+  // Nên: đang giữ chuột thì hoãn, và chỉ vẽ lại khi người dùng thật sự rảnh tay.
+  var pointerDown = false;
+  document.addEventListener("mousedown", function () { pointerDown = true; }, true);
+  document.addEventListener("mouseup", function () {
+    pointerDown = false;
+    setTimeout(flushPendingRepaint, 120); // sau khi cú click đã được xử lý xong
+  }, true);
+  function flushPendingRepaint() {
+    if (!repaintPending || pointerDown) return;
+    if (typingInsideContent()) return; // vẫn đang gõ ở ô khác
+    repaintPending = false;
+    renderCurrentScreen();
+  }
   (function watchBlurToRepaint() {
     var c = document.getElementById("content");
     if (!c) return;
-    c.addEventListener("focusout", function () {
-      setTimeout(function () {
-        if (typingInsideContent()) return; // chỉ nhảy sang ô khác, chưa rời hẳn
-        if (repaintPending) { repaintPending = false; renderCurrentScreen(); }
-      }, 0);
-    });
+    c.addEventListener("focusout", function () { setTimeout(flushPendingRepaint, 120); });
   })();
 
   // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng) — báo lỗi qua toast nếu
@@ -900,7 +910,6 @@
     var payload = {
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
     };
-    lastWrittenJson = JSON.stringify(payload); // vân tay bản vừa ghi, để nhận ra snapshot dội ngược
     // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
     // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
     // Trường này chỉ để tham khảo, không nơi nào trong app đọc tới.
@@ -999,24 +1008,30 @@
       docUnsub = MAIN_DOC.onSnapshot(function (snap) {
         if (!snap.exists) return;
         var d = snap.data();
-        state.quotes = Array.isArray(d.quotes) ? d.quotes : [];
-        PRICE_CATALOG = (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice();
-        PROJECTS = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
-        CUSTOMERS = Array.isArray(d.customers) ? d.customers : [];
+        // Chuẩn hoá TRƯỚC rồi mới so với thứ đang hiện trên màn: câu hỏi đúng phải là "có gì khác cái
+        // đang hiện không", chứ không phải "có phải bản mình vừa ghi không". So với bản vừa ghi thì
+        // Firestore chuẩn hoá lại dữ liệu (bỏ field rỗng...) là lệch vân tay → tưởng nhầm có thay đổi.
+        var nQuotes = Array.isArray(d.quotes) ? d.quotes : [];
+        var nCatalog = (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice();
+        var nProjects = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
+        var nCustomers = Array.isArray(d.customers) ? d.customers : [];
+        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers]);
+        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS]);
+        state.quotes = nQuotes;
+        PRICE_CATALOG = nCatalog;
+        PROJECTS = nProjects;
+        CUSTOMERS = nCustomers;
         if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
-        // Snapshot do CHÍNH MÌNH vừa ghi: dữ liệu trên màn đã đúng sẵn rồi (người dùng vừa gõ ra nó),
-        // vẽ lại chỉ tổ huỷ ô đang gõ và làm văng con trỏ — đây chính là lỗi "gõ 1 ký tự là thoát khỏi ô".
-        // Vẫn nhận dữ liệu ở trên (không bỏ sót gì), chỉ bỏ qua việc vẽ lại.
-        // Lần vẽ ĐẦU TIÊN luôn phải chạy, kể cả khi đang có ghi treo, nếu không màn hình sẽ trắng.
-        //
-        // So VÂN TAY DỮ LIỆU chứ không chỉ đếm lượt ghi: Firestore giải quyết promise của set() TRƯỚC
-        // rồi mới bắn snapshot xác nhận, nên tới lúc đó inflightWrites đã về 0 và hasPendingWrites
-        // cũng đã false — chỉ đếm lượt ghi là lọt đúng lần vẽ lại gây lỗi (bài học lần vá hụt đầu tiên).
+        // Không khác gì cái đang hiện → không việc gì phải vẽ lại, và cũng KHÔNG hẹn vẽ lại.
+        if (firstPaintDone && incomingJson === onScreenJson) return;
+        // Dữ liệu có khác thật, nhưng do CHÍNH MÌNH vừa ghi (Firestore dội bản ghi của mình về):
+        // màn hình đã đúng sẵn, vẽ lại chỉ tổ huỷ ô đang gõ → bỏ qua. Lần vẽ ĐẦU TIÊN luôn phải chạy,
+        // nếu không màn hình sẽ trắng.
+        // Phải kiểm cả inflightWrites chứ không chỉ hasPendingWrites: Firestore giải quyết promise của
+        // set() TRƯỚC rồi mới bắn snapshot xác nhận (bài học lần vá hụt đầu tiên).
         if (firstPaintDone) {
-          var incomingJson = JSON.stringify({
-            quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
-          });
-          if (snap.metadata.hasPendingWrites || inflightWrites > 0 || incomingJson === lastWrittenJson) return;
+          if (snap.metadata.hasPendingWrites || inflightWrites > 0) return;
+          // Thay đổi thật từ nơi khác mà mình đang gõ dở: hẹn vẽ lại sau, đừng cướp ô đang gõ.
           if (typingInsideContent()) { repaintPending = true; return; }
         }
         firstPaintDone = true;
