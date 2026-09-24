@@ -485,6 +485,34 @@
   .modal-head { border-bottom-color: var(--line-orange); }
   .modal-actions { border-top-color: var(--line-orange); }
 
+  /* ---------- Nhà thầu ---------- */
+  .trade-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .trade-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border-soft); }
+  .trade-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .trade-chip { font-family: inherit; border: 1px solid var(--border); background: transparent; color: var(--ink-soft); border-radius: 999px; padding: 4px 11px; font-size: 12px; }
+  .trade-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .trade-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tel-link, .zalo-link { color: var(--ink-soft); text-decoration: none; }
+  .tel-link:hover { color: var(--accent); text-decoration: underline; }
+  .zalo-link { font-size: 10.5px; font-weight: 600; margin-left: 4px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-mute); }
+  .zalo-link:hover { border-color: var(--accent); color: var(--accent); }
+  .link-btn { background: transparent; border: none; padding: 0; font: inherit; color: var(--accent); font-weight: 600; text-decoration: underline; cursor: pointer; }
+  .ctr-select { font-family: inherit; font-size: 12.8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); max-width: 200px; }
+  .prj-jobs-block { margin-bottom: 16px; }
+  .prj-jobs-block .panel-head h2 { font-size: 15px; }
+  .prj-empty-note { margin: 8px 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; }
+  .ct-job-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 6px; }
+  .job-preview { font-size: 12.5px; padding: 9px 12px; border-radius: 8px; background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border-soft); }
+  .job-preview.active { background: var(--good-soft); color: var(--good); border-color: transparent; }
+  .job-preview.soon { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .toolbar-right { flex-wrap: wrap; }
+  @media (max-width: 640px) {
+    .toolbar-right { width: 100%; }
+    .toolbar-right .search-box { flex: 1 1 100%; min-width: 0; }
+    .toolbar-right .ctr-select { flex: 1 1 100%; max-width: none; }
+    .prj-jobs-block .panel-head { flex-wrap: wrap; gap: 10px; }
+  }
+
   /* ---------- Toast ---------- */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: var(--paper); padding: 11px 20px; border-radius: 9px; font-size: 12.8px; font-weight: 500; box-shadow: var(--shadow-lift); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 50; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -794,6 +822,8 @@
     { id: "sunshine", name: "Sunshine Golden River", client: "Mrs Ngô Thị Vân", type: "Chung cư", full: "Indust | KatStudio | Sunshine Golden River" }
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
+  var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
+  var CONTRACTOR_JOBS = []; // gói việc: nhà thầu × công trình × phạm vi, kèm ngày nghiệm thu + số tháng bảo hành
   var CUSTOMERS = []; // đồng bộ từ tab "Danh sách khách hàng" — xem ở màn renderCustomersScreen() (nav "Danh sách khách hàng")
 
   function projectById(id) { return PROJECTS.filter(function (p) { return p.id === id; })[0]; }
@@ -966,7 +996,7 @@
   var fbStorage = firebase.storage();
   var MAIN_DOC = db.collection("baogia").doc("main");
 
-  var docUnsub = null, saveTimer = null, pendingSave = false;
+  var docUnsub = null, saveTimer = null, pendingSave = false, docSizeWarned = false;
   // Đếm số lần ghi đang bay lên server. Firestore bắn onSnapshot NGAY cho bản ghi của chính mình
   // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
   // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
@@ -1011,7 +1041,8 @@
     if (!pendingSave) return;
     pendingSave = false;
     var payload = {
-      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
+      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS
     };
     // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
     // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
@@ -1019,7 +1050,16 @@
     payload.updatedAt = Date.now();
     payload.updatedBy = (fbAuth.currentUser && fbAuth.currentUser.email) || null;
     inflightWrites++;
-    MAIN_DOC.set(payload).then(function () { inflightWrites--; }, function (err) {
+    // Firestore giới hạn 1MB / tài liệu, mà mọi thứ đang nằm chung 1 tài liệu — báo sớm khi đã gần 70%.
+    try {
+      var bytes = new Blob([JSON.stringify(payload)]).size;
+      if (bytes > 700 * 1024 && !docSizeWarned) {
+        docSizeWarned = true;
+        toast("Dữ liệu đã lên " + Math.round(bytes / 1024) + "KB (giới hạn 1024KB) — báo Claude để tách bớt trước khi đầy.");
+      }
+    } catch (e) {}
+    // merge:true — tab cũ (chưa biết 2 mảng nhà thầu) ghi đè cũng không xoá mất dữ liệu nhà thầu.
+    MAIN_DOC.set(payload, { merge: true }).then(function () { inflightWrites--; }, function (err) {
       inflightWrites--;
       toast("Không lưu được lên server — " + err.message);
     });
@@ -1029,7 +1069,7 @@
   function localSeed() {
     // Lần đầu tiên chưa có gì trên Firestore: dùng bản đã lưu sẵn trong máy này (nếu có, để không mất
     // dữ liệu Nam đã sửa trước khi nối server), không thì dùng bộ dữ liệu mẫu gốc.
-    var seed = { quotes: seedQuotes(), priceCatalog: DEFAULT_PRICE_CATALOG.slice(), projects: DEFAULT_PROJECTS.slice(), customers: [] };
+    var seed = { quotes: seedQuotes(), priceCatalog: DEFAULT_PRICE_CATALOG.slice(), projects: DEFAULT_PROJECTS.slice(), customers: [], contractors: [], contractorJobs: [] };
     try { var a = localStorage.getItem(STORAGE_KEY); if (a) { var da = JSON.parse(a); if (da && Array.isArray(da.quotes) && da.quotes.length) seed.quotes = da.quotes; } } catch (e) {}
     try { var b = localStorage.getItem(CATALOG_KEY); if (b) { var db2 = JSON.parse(b); if (db2 && Array.isArray(db2.items) && db2.items.length) seed.priceCatalog = db2.items; } } catch (e) {}
     try { var c = localStorage.getItem(PROJECTS_KEY); if (c) { var dc = JSON.parse(c); if (dc && Array.isArray(dc.items) && dc.items.length) seed.projects = dc.items; } } catch (e) {}
@@ -1092,6 +1132,7 @@
     else if (view.screen === "catalog") renderCatalogScreen();
     else if (view.screen === "print") renderPrintPreview();
     else if (view.screen === "projects") renderProjectsScreen();
+    else if (view.screen === "contractors") renderContractorsScreen();
     else renderList();
     renderNav();
   }
@@ -1105,6 +1146,7 @@
       var seed = localSeed();
       return MAIN_DOC.set({
         quotes: seed.quotes, priceCatalog: seed.priceCatalog, projects: seed.projects, customers: seed.customers,
+        contractors: seed.contractors, contractorJobs: seed.contractorJobs,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }).then(function () {
@@ -1118,12 +1160,16 @@
         var nCatalog = (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice();
         var nProjects = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
         var nCustomers = Array.isArray(d.customers) ? d.customers : [];
-        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers]);
-        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS]);
+        var nContractors = Array.isArray(d.contractors) ? d.contractors : [];
+        var nJobs = Array.isArray(d.contractorJobs) ? d.contractorJobs : [];
+        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs]);
+        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS]);
         state.quotes = nQuotes;
         PRICE_CATALOG = nCatalog;
         PROJECTS = nProjects;
         CUSTOMERS = nCustomers;
+        CONTRACTORS = nContractors;
+        CONTRACTOR_JOBS = nJobs;
         if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
         // Không khác gì cái đang hiện → không việc gì phải vẽ lại, và cũng KHÔNG hẹn vẽ lại.
         if (firstPaintDone && incomingJson === onScreenJson) return;
@@ -1628,6 +1674,15 @@
       return { "Tên": c.name || "", "Điện thoại": c.phone || "", "Email": c.email || "",
         "Công trình": c.project || "", "Ghi chú": c.note || "" };
     }));
+    add("Nha thau", CONTRACTORS.map(function (c) {
+      return { "Mã": c.id || "", "Tên": c.name || "", "Nhóm nghề": (c.trades || []).join(", "), "Người liên hệ": c.contact || "",
+        "Điện thoại": c.phone || "", "Email": c.email || "", "Địa chỉ": c.address || "", "Mã số thuế": c.taxCode || "", "Ghi chú": c.note || "" };
+    }));
+    add("Phan cong nha thau", CONTRACTOR_JOBS.map(function (j) {
+      var c = contractorById(j.contractorId), p = projectById(j.projectId), w = warrantyInfo(j);
+      return { "Nhà thầu": c ? c.name : "", "Công trình": p ? p.name : "", "Gói việc": j.scope || "", "Bắt đầu": j.startDate || "",
+        "Nghiệm thu": j.handoverDate || "", "Bảo hành (tháng)": w.months, "Hết bảo hành": w.endIso, "Trạng thái": w.label, "Ghi chú": j.note || "" };
+    }));
     try {
       XLSX.writeFile(wb, "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".xlsx");
       toast("Đã tải file Excel sao lưu.");
@@ -1636,7 +1691,8 @@
   function exportBackupJson() {
     var payload = {
       _app: "bao-gia-noi-that", _backupAt: new Date().toISOString(),
-      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS
+      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS
     };
     try {
       var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1660,7 +1716,7 @@
         '<div class="modal-body">' +
           '<div class="sync-status" id="backupSummary"></div>' +
           '<ol class="modal-steps">' +
-            '<li><b>File Excel (.xlsx)</b> — 5 trang tính: tổng hợp báo giá, chi tiết từng dòng, thư viện vật tư, công trình, khách hàng. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
+            '<li><b>File Excel (.xlsx)</b> — 8 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
             '<li><b>File sao lưu đầy đủ (.json)</b> — bản sao y nguyên toàn bộ dữ liệu. Nếu app mất dữ liệu, đưa file này cho Claude là khôi phục lại được đúng từng dòng. Excel không làm được việc đó vì đã làm phẳng bảng.</li>' +
           '</ol>' +
           '<div class="sync-status">Nên tải cả 2 file và cất vào Dropbox mỗi khi có thay đổi lớn.</div>' +
@@ -1681,7 +1737,8 @@
     document.getElementById("backupModalOverlay").hidden = false;
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
-      PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng.";
+      PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc).";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -1859,7 +1916,7 @@
       { label: "Nhật ký thi công", soon: true },
       { label: "Quản lý giao thoa", soon: true },
       { label: "Danh sách khách hàng", screen: "customers" },
-      { label: "Danh sách nhà thầu", soon: true }
+      { label: "Danh sách nhà thầu", screen: "contractors" }
     ]},
     { group: "Nhân sự & Lương", items: [
       { label: "Bảng lương", soon: true },
@@ -1897,6 +1954,7 @@
         else if (screen === "projects" && view.screen !== "projects") { view.screen = "projects"; renderProjectsScreen(); renderNav(); }
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
         else if (screen === "catalog" && view.screen !== "catalog") { view.screen = "catalog"; renderCatalogScreen(); renderNav(); }
+        else if (screen === "contractors" && view.screen !== "contractors") { view.screen = "contractors"; renderContractorsScreen(); renderNav(); }
       });
     });
   }
@@ -2015,16 +2073,23 @@
   function renderProjectsScreen() {
     var rowsHtml;
     if (!PROJECTS.length) {
-      rowsHtml = '<tr class="empty-row"><td colspan="6">Chưa có công trình nào.</td></tr>';
+      rowsHtml = '<tr class="empty-row"><td colspan="7">Chưa có công trình nào.</td></tr>';
     } else {
       rowsHtml = PROJECTS.map(function (p) {
         var used = quotesUsingProject(p.id);
+        var pjobs = jobsOfProject(p.id);
+        var pnear = nearestWarrantyJob(pjobs);
+        var ctrCell = !pjobs.length ? '<span class="cell-muted">—</span>'
+          : '<button class="link-btn" data-prjjobs="' + escapeHtml(p.id) + '" type="button">' +
+            new Set(pjobs.map(function (j) { return j.contractorId; })).size + ' nhà thầu · ' + pjobs.length + ' gói</button>' +
+            (pnear ? '<div class="cell-muted">BH sớm nhất hết ' + fmtDate(pnear.info.endIso) + '</div>' : "");
         return '<tr>' +
           '<td><div class="cell-title">' + escapeHtml(p.name || "—") + '</div><div class="cell-muted">' + escapeHtml(p.id) + '</div></td>' +
           '<td>' + escapeHtml(p.client || "—") + '</td>' +
           '<td><input class="prj-addr-input" data-prjaddr="' + escapeHtml(p.id) + '" value="' + escapeHtml(p.address || "") + '" placeholder="Địa chỉ công trình"></td>' +
           '<td class="cell-muted">' + escapeHtml(p.type || "—") + '</td>' +
           '<td class="cell-muted">' + (used.length ? used.length + " báo giá" : "chưa có báo giá") + '</td>' +
+          '<td>' + ctrCell + '</td>' +
           '<td><div class="row-actions">' +
             '<button class="icon-btn danger" data-delprj="' + escapeHtml(p.id) + '" title="Xoá công trình">' + iconTrash() + '</button>' +
           '</div></td>' +
@@ -2041,7 +2106,7 @@
         '</div>' +
       '</div>' +
       '<div class="table-wrap"><div class="table-scroll"><table>' +
-        '<thead><tr><th>Tên công trình</th><th>Khách hàng</th><th style="min-width:200px;">Địa chỉ (hiện trên bản in)</th><th>Loại</th><th>Đang dùng</th><th></th></tr></thead>' +
+        '<thead><tr><th>Tên công trình</th><th>Khách hàng</th><th style="min-width:200px;">Địa chỉ (hiện trên bản in)</th><th>Loại</th><th>Đang dùng</th><th>Nhà thầu / Bảo hành</th><th></th></tr></thead>' +
         '<tbody>' + rowsHtml + '</tbody>' +
       '</table></div></div>';
 
@@ -2059,6 +2124,13 @@
       });
     });
 
+    document.querySelectorAll("[data-prjjobs]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        view.cProject = b.dataset.prjjobs; view.ctab = "projects"; view.cSearch = ""; view.cTrade = "";
+        view.screen = "contractors"; renderContractorsScreen(); renderNav();
+      });
+    });
+
     document.querySelectorAll("[data-delprj]").forEach(function (b) {
       b.addEventListener("click", function () {
         var id = b.dataset.delprj;
@@ -2070,6 +2142,11 @@
           alert('Không xoá được "' + p.name + '" vì còn ' + used.length + ' báo giá đang gắn vào công trình này:\n\n' +
             used.map(function (q) { return "• " + q.name; }).join("\n") +
             '\n\nChuyển các báo giá đó sang công trình khác (mở báo giá → đổi ô "Công trình") hoặc xoá chúng trước.');
+          return;
+        }
+        var pj = jobsOfProject(id);
+        if (pj.length) {
+          alert('Không xoá được "' + p.name + '" vì còn ' + pj.length + ' gói việc của nhà thầu đang gắn vào công trình này.\n\nVào "Danh sách nhà thầu" → tab "Theo công trình" để xoá hoặc chuyển các gói việc đó trước.');
           return;
         }
         if (!confirm('Xoá công trình "' + p.name + '" khỏi danh sách dùng chung?\n\nApp FF&E cũng sẽ không còn thấy công trình này trong danh sách chọn dự án. Bảng kê FF&E đã lập cho nó (nếu có) vẫn còn bên FF&E.')) return;
@@ -2117,6 +2194,659 @@
     document.getElementById("crumbCurrent").textContent = "Danh sách khách hàng";
 
     document.getElementById("btnAddCustomer").addEventListener("click", openAddCustomerModal);
+  }
+
+  /* ===================== NHÀ THẦU ===================== */
+  // Nhà thầu THI CÔNG (khác "Nhà cung cấp" vật tư bên FF&E). Nhập tay ngay trong app, KHÔNG qua Google Sheet,
+  // nên đồng bộ Sheet (applyMasterDataFromSheet) không bao giờ đụng tới 2 mảng này.
+  //   CONTRACTORS     = [{ id, name, trades:[], contact, phone, email, address, taxCode, note }]
+  //   CONTRACTOR_JOBS = [{ id, contractorId, projectId, scope, startDate, handoverDate, warrantyMonths, note }]
+  // Mỗi dòng CONTRACTOR_JOBS là 1 GÓI VIỆC (nhà thầu × công trình × phạm vi) có ngày nghiệm thu và số tháng bảo
+  // hành riêng. Hạn bảo hành + trạng thái được TÍNH RA lúc vẽ (warrantyInfo), không lưu — để không bao giờ lệch
+  // khi sửa ngày nghiệm thu hay số tháng.
+  var TRADE_SUGGESTIONS = ["Thi công thô", "Điện nước", "Trần thạch cao", "Sơn bả", "Mộc / nội thất", "Ốp lát, đá",
+    "Điều hòa, thông gió", "Chiếu sáng", "Chống thấm", "Kính, nhôm kính", "Cửa", "Cơ khí, inox", "Thang máy", "PCCC", "Cảnh quan"];
+  var WARRANTY_SOON_DAYS = 30;
+  var WARRANTY_DEFAULT_MONTHS = 12;
+
+  /* ---------- Ngày tháng (chuỗi YYYY-MM-DD, tính theo lịch địa phương) ---------- */
+  function isoParts(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+    return m ? { y: +m[1], m: +m[2], d: +m[3] } : null;
+  }
+  function isoFromParts(y, m, d) { return y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0"); }
+  function todayIso() { var n = new Date(); return isoFromParts(n.getFullYear(), n.getMonth() + 1, n.getDate()); }
+  // Cộng n tháng, kẹp về cuối tháng nếu ngày không tồn tại: 31/01 + 1 tháng = 28/02 (hoặc 29/02 năm nhuận).
+  function addMonthsIso(iso, n) {
+    var p = isoParts(iso);
+    if (!p) return "";
+    var total = p.y * 12 + (p.m - 1) + n;
+    var ty = Math.floor(total / 12), tm = total % 12;
+    var last = new Date(ty, tm + 1, 0).getDate();
+    return isoFromParts(ty, tm + 1, Math.min(p.d, last));
+  }
+  function daysBetweenIso(a, b) {
+    var pa = isoParts(a), pb = isoParts(b);
+    if (!pa || !pb) return null;
+    return Math.round((Date.UTC(pb.y, pb.m - 1, pb.d) - Date.UTC(pa.y, pa.m - 1, pa.d)) / 86400000);
+  }
+
+  /* ---------- Bảo hành: tính từ ngày nghiệm thu + số tháng ---------- */
+  function warrantyInfo(job) {
+    var months = Number(job.warrantyMonths);
+    if (!isFinite(months) || months < 1) months = WARRANTY_DEFAULT_MONTHS;
+    if (!isoParts(job.handoverDate)) {
+      return { key: "building", label: "Chưa nghiệm thu", pill: "pill-neutral", endIso: "", daysLeft: null, months: months };
+    }
+    var endIso = addMonthsIso(job.handoverDate, months);
+    var left = daysBetweenIso(todayIso(), endIso);
+    if (left < 0) return { key: "expired", label: "Hết bảo hành", pill: "pill-neutral", endIso: endIso, daysLeft: left, months: months };
+    if (left <= WARRANTY_SOON_DAYS) return { key: "soon", label: "Sắp hết hạn", pill: "pill-warn", endIso: endIso, daysLeft: left, months: months };
+    return { key: "active", label: "Đang bảo hành", pill: "pill-good", endIso: endIso, daysLeft: left, months: months };
+  }
+  function warrantyRemainText(info) {
+    if (info.daysLeft == null) return "";
+    if (info.daysLeft < 0) return "quá hạn " + (-info.daysLeft) + " ngày";
+    if (info.daysLeft === 0) return "hết hạn hôm nay";
+    if (info.daysLeft <= 90) return "còn " + info.daysLeft + " ngày";
+    var mo = Math.floor(info.daysLeft / 30.4375);
+    if (mo < 12) return "còn " + mo + " tháng";
+    return "còn " + Math.floor(mo / 12) + " năm" + (mo % 12 ? " " + (mo % 12) + " tháng" : "");
+  }
+
+  function contractorById(id) { return CONTRACTORS.filter(function (c) { return c.id === id; })[0]; }
+  function jobsOfContractor(id) { return CONTRACTOR_JOBS.filter(function (j) { return j.contractorId === id; }); }
+  function jobsOfProject(id) { return CONTRACTOR_JOBS.filter(function (j) { return j.projectId === id; }); }
+  // Gói còn hạn bảo hành sớm hết nhất (bỏ qua gói chưa nghiệm thu và gói đã hết hạn).
+  function nearestWarrantyJob(jobs) {
+    var best = null;
+    jobs.forEach(function (j) {
+      var w = warrantyInfo(j);
+      if (w.key !== "active" && w.key !== "soon") return;
+      if (!best || w.endIso < best.info.endIso) best = { job: j, info: w };
+    });
+    return best;
+  }
+  function allTrades() {
+    var out = TRADE_SUGGESTIONS.slice();
+    CONTRACTORS.forEach(function (c) {
+      (c.trades || []).forEach(function (t) { if (out.indexOf(t) === -1) out.push(t); });
+    });
+    return out;
+  }
+
+  function contractorPhoneHtml(phone) {
+    var p = String(phone || "").trim();
+    if (!p) return "";
+    var digits = p.replace(/[^\d+]/g, "");
+    var local = digits.replace(/^\+?84/, "0").replace(/^\+/, "");
+    return '<a class="tel-link" href="tel:' + escapeHtml(digits) + '">' + escapeHtml(p) + '</a>' +
+      ' <a class="zalo-link" href="https://zalo.me/' + escapeHtml(local) + '" target="_blank" rel="noopener" title="Nhắn Zalo">Zalo</a>';
+  }
+  function warrantyCellHtml(info) {
+    if (info.key === "building") return '<span class="pill ' + info.pill + '">' + info.label + '</span>';
+    return '<span class="pill ' + info.pill + '">' + info.label + '</span>' +
+      '<div class="cell-muted" style="margin-top:4px;">đến ' + fmtDate(info.endIso) + ' · ' + escapeHtml(warrantyRemainText(info)) + '</div>';
+  }
+
+  /* ---------- Màn hình ---------- */
+  function contractorMatches(c) {
+    if (view.cTrade && (c.trades || []).indexOf(view.cTrade) === -1) return false;
+    var q = (view.cSearch || "").trim().toLowerCase();
+    if (!q) return true;
+    var jobsText = jobsOfContractor(c.id).map(function (j) {
+      var p = projectById(j.projectId);
+      return (j.scope || "") + " " + (p ? p.name : "");
+    }).join(" ");
+    var hay = [c.name, c.contact, c.phone, String(c.phone || "").replace(/\D/g, ""), c.email, (c.trades || []).join(" "), jobsText].join(" ").toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+  function jobMatches(j) {
+    var c = contractorById(j.contractorId);
+    if (!c) return false;
+    if (view.cTrade && (c.trades || []).indexOf(view.cTrade) === -1) return false;
+    var q = (view.cSearch || "").trim().toLowerCase();
+    if (!q) return true;
+    var p = projectById(j.projectId);
+    var hay = [c.name, c.contact, c.phone, String(c.phone || "").replace(/\D/g, ""), (c.trades || []).join(" "), j.scope, p ? p.name : ""].join(" ").toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
+  function contractorTabList() {
+    var list = CONTRACTORS.filter(contractorMatches).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "vi"); });
+    if (!list.length) {
+      return '<tr class="empty-row"><td colspan="5">' + (CONTRACTORS.length
+        ? "Không có nhà thầu nào khớp bộ lọc."
+        : 'Chưa có nhà thầu nào. Bấm "Thêm nhà thầu" để bắt đầu.') + '</td></tr>';
+    }
+    return list.map(function (c) {
+      var jobs = jobsOfContractor(c.id);
+      var prjNames = [];
+      jobs.forEach(function (j) {
+        var p = projectById(j.projectId);
+        var n = p ? p.name : "(công trình đã xoá)";
+        if (prjNames.indexOf(n) === -1) prjNames.push(n);
+      });
+      var prjCell = prjNames.length
+        ? escapeHtml(prjNames.slice(0, 2).join(", ")) + (prjNames.length > 2 ? ' <span class="cell-muted">+' + (prjNames.length - 2) + '</span>' : "") +
+          '<div class="cell-muted">' + jobs.length + ' gói việc</div>'
+        : '<span class="cell-muted">Chưa gán công trình</span>';
+      var near = nearestWarrantyJob(jobs);
+      var building = jobs.filter(function (j) { return warrantyInfo(j).key === "building"; }).length;
+      var warCell;
+      if (near) warCell = warrantyCellHtml(near.info);
+      else if (building) warCell = '<span class="cell-muted">' + building + ' gói chưa nghiệm thu</span>';
+      else if (jobs.length) warCell = '<span class="cell-muted">Đã hết bảo hành</span>';
+      else warCell = '<span class="cell-muted">—</span>';
+      var tags = (c.trades || []).map(function (t) { return '<span class="trade-tag">' + escapeHtml(t) + '</span>'; }).join("");
+      return '<tr class="row-click" data-edit-ctr="' + escapeHtml(c.id) + '">' +
+        '<td><div class="cell-title">' + escapeHtml(c.name || "—") + '</div>' + (tags ? '<div class="trade-tags">' + tags + '</div>' : "") + '</td>' +
+        '<td>' + (c.contact ? '<div>' + escapeHtml(c.contact) + '</div>' : "") +
+          (c.phone ? '<div class="cell-muted">' + contractorPhoneHtml(c.phone) + '</div>' : "") +
+          (c.email ? '<div class="cell-muted">' + escapeHtml(c.email) + '</div>' : "") +
+          (!c.contact && !c.phone && !c.email ? '<span class="cell-muted">—</span>' : "") + '</td>' +
+        '<td>' + prjCell + '</td>' +
+        '<td>' + warCell + '</td>' +
+        '<td><div class="row-actions">' +
+          '<button class="icon-btn" data-edit-ctr="' + escapeHtml(c.id) + '" title="Sửa">' + iconEdit() + '</button>' +
+          '<button class="icon-btn danger" data-del-ctr="' + escapeHtml(c.id) + '" title="Xoá nhà thầu">' + iconTrash() + '</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  function jobRowHtml(j, withProject) {
+    var c = contractorById(j.contractorId);
+    var p = projectById(j.projectId);
+    var w = warrantyInfo(j);
+    return '<tr class="row-click" data-edit-job="' + escapeHtml(j.id) + '">' +
+      (withProject ? '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div></td>' : "") +
+      '<td><div class="cell-title">' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</div>' +
+        (c && c.phone ? '<div class="cell-muted">' + contractorPhoneHtml(c.phone) + '</div>' : "") + '</td>' +
+      '<td>' + escapeHtml(j.scope || "—") + '</td>' +
+      '<td class="cell-muted">' + (isoParts(j.handoverDate) ? fmtDate(j.handoverDate) : "—") + '</td>' +
+      '<td>' + (w.endIso ? fmtDate(w.endIso) + '<div class="cell-muted">' + w.months + ' tháng</div>' : '<span class="cell-muted">' + w.months + ' tháng</span>') + '</td>' +
+      '<td><span class="pill ' + w.pill + '">' + w.label + '</span>' +
+        (w.daysLeft != null ? '<div class="cell-muted" style="margin-top:4px;">' + escapeHtml(warrantyRemainText(w)) + '</div>' : "") + '</td>' +
+      '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-edit-job="' + escapeHtml(j.id) + '" title="Sửa gói việc">' + iconEdit() + '</button>' +
+        '<button class="icon-btn danger" data-del-job="' + escapeHtml(j.id) + '" title="Xoá gói việc">' + iconTrash() + '</button>' +
+      '</div></td>' +
+    '</tr>';
+  }
+
+  function contractorTabProjects() {
+    var blocks = "", noJobNames = [];
+    PROJECTS.forEach(function (p) {
+      if (view.cProject && p.id !== view.cProject) return;
+      var all = jobsOfProject(p.id);
+      var jobs = all.filter(jobMatches);
+      if (!all.length) { noJobNames.push(p); return; }
+      if (!jobs.length) return;
+      jobs.sort(function (a, b) { return String(a.scope).localeCompare(String(b.scope), "vi"); });
+      blocks += '<div class="panel prj-jobs-block">' +
+        '<div class="panel-head"><div><h2>' + escapeHtml(p.name) + '</h2>' +
+          '<div class="cell-muted">' + escapeHtml(p.client || "") + (p.client && p.address ? " · " : "") + escapeHtml(p.address || "") + '</div></div>' +
+          '<button class="btn btn-sm" data-add-job-prj="' + escapeHtml(p.id) + '">' + iconPlus() + ' Thêm gói việc</button></div>' +
+        '<div class="table-scroll"><table>' +
+          '<thead><tr><th>Nhà thầu</th><th>Gói việc</th><th>Nghiệm thu</th><th>Hết bảo hành</th><th>Bảo hành</th><th></th></tr></thead>' +
+          '<tbody>' + jobs.map(function (j) { return jobRowHtml(j, false); }).join("") + '</tbody>' +
+        '</table></div>' +
+      '</div>';
+    });
+    if (!blocks) {
+      blocks = '<div class="table-wrap"><div class="empty-row" style="padding:50px 20px;text-align:center;color:var(--ink-mute);font-size:13.3px;">' +
+        (CONTRACTOR_JOBS.length ? "Không có gói việc nào khớp bộ lọc." : 'Chưa có gói việc nào. Mở một nhà thầu rồi bấm "Thêm gói việc", hoặc bấm tên công trình bên dưới để gán nhà thầu.') + '</div></div>';
+    }
+    if (noJobNames.length && !view.cProject) {
+      blocks += '<div class="prj-empty-note"><span class="cell-muted">Công trình chưa có nhà thầu (bấm để gán):</span> ' +
+        noJobNames.map(function (p) { return '<button class="trade-chip" data-add-job-prj="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</button>'; }).join(" ") + '</div>';
+    }
+    return blocks;
+  }
+
+  function contractorTabWarranty() {
+    var order = { soon: 0, active: 1, building: 2, expired: 3 };
+    var jobs = CONTRACTOR_JOBS.filter(jobMatches).map(function (j) { return { job: j, info: warrantyInfo(j) }; });
+    jobs.sort(function (a, b) {
+      if (order[a.info.key] !== order[b.info.key]) return order[a.info.key] - order[b.info.key];
+      if (a.info.key === "expired") return a.info.endIso < b.info.endIso ? 1 : -1; // vừa hết hạn gần đây lên trước
+      return String(a.info.endIso).localeCompare(String(b.info.endIso));
+    });
+    if (!jobs.length) {
+      return '<div class="table-wrap"><div class="empty-row" style="padding:50px 20px;text-align:center;color:var(--ink-mute);font-size:13.3px;">' +
+        (CONTRACTOR_JOBS.length ? "Không có gói việc nào khớp bộ lọc." : "Chưa có gói việc nào để theo dõi bảo hành.") + '</div></div>';
+    }
+    return '<div class="table-wrap"><div class="table-scroll"><table>' +
+      '<thead><tr><th>Công trình</th><th>Nhà thầu</th><th>Gói việc</th><th>Nghiệm thu</th><th>Hết bảo hành</th><th>Bảo hành</th><th></th></tr></thead>' +
+      '<tbody>' + jobs.map(function (x) { return jobRowHtml(x.job, true); }).join("") + '</tbody>' +
+    '</table></div></div>';
+  }
+
+  function renderContractorsScreen() {
+    view.ctab = view.ctab || "list";
+    view.cSearch = view.cSearch || "";
+    view.cTrade = view.cTrade || "";
+    view.cProject = view.cProject || "";
+
+    var infos = CONTRACTOR_JOBS.map(warrantyInfo);
+    var nBuilding = infos.filter(function (w) { return w.key === "building"; }).length;
+    var nActive = infos.filter(function (w) { return w.key === "active" || w.key === "soon"; }).length;
+    var nSoon = infos.filter(function (w) { return w.key === "soon"; }).length;
+
+    var trades = allTrades();
+    var tradeOpts = '<option value="">Tất cả nhóm nghề</option>' + trades.map(function (t) {
+      return '<option value="' + escapeHtml(t) + '"' + (view.cTrade === t ? " selected" : "") + '>' + escapeHtml(t) + '</option>';
+    }).join("");
+
+    var body;
+    if (view.ctab === "projects") body = contractorTabProjects();
+    else if (view.ctab === "warranty") body = contractorTabWarranty();
+    else {
+      body = '<div class="table-wrap"><div class="table-scroll"><table>' +
+        '<thead><tr><th>Nhà thầu</th><th>Liên hệ</th><th>Công trình</th><th>Bảo hành gần nhất</th><th></th></tr></thead>' +
+        '<tbody>' + contractorTabList() + '</tbody></table></div></div>';
+    }
+
+    var prjFilterChip = "";
+    if (view.cProject) {
+      var fp = projectById(view.cProject);
+      prjFilterChip = '<div class="mock-note">' + iconInfo() + ' Đang xem riêng công trình <b>' + escapeHtml(fp ? fp.name : view.cProject) +
+        '</b>. <button class="link-btn" id="btnClearCPrj" type="button">Xem tất cả công trình</button></div>';
+    }
+
+    var html =
+      '<div class="page-head">' +
+        '<div><h1>Danh sách nhà thầu</h1><div class="page-sub">Thông tin liên hệ, nhà thầu nào làm công trình nào và thời hạn bảo hành từng gói việc.</div></div>' +
+        '<div class="head-actions">' +
+          '<button class="btn" id="btnAddJob">' + iconPlus() + ' Thêm gói việc</button>' +
+          '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="stats">' +
+        '<div class="stat-tile"><div class="stat-label">Nhà thầu</div><div class="stat-value">' + CONTRACTORS.length + '</div><div class="stat-foot">' + CONTRACTOR_JOBS.length + ' gói việc</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nBuilding + '</div><div class="stat-foot">gói việc đang làm</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đang bảo hành</div><div class="stat-value">' + nActive + '</div><div class="stat-foot">gói việc</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Sắp hết hạn</div><div class="stat-value' + (nSoon ? " accent" : "") + '">' + nSoon + '</div><div class="stat-foot">trong ' + WARRANTY_SOON_DAYS + ' ngày tới</div></div>' +
+      '</div>' +
+      prjFilterChip +
+      '<div class="toolbar">' +
+        '<div class="tabs">' +
+          '<button class="tab' + (view.ctab === "list" ? " active" : "") + '" data-ctab="list">Nhà thầu (' + CONTRACTORS.length + ')</button>' +
+          '<button class="tab' + (view.ctab === "projects" ? " active" : "") + '" data-ctab="projects">Theo công trình</button>' +
+          '<button class="tab' + (view.ctab === "warranty" ? " active" : "") + '" data-ctab="warranty">Bảo hành (' + CONTRACTOR_JOBS.length + ')</button>' +
+        '</div>' +
+        '<div class="toolbar-right">' +
+          '<select id="cTradeSel" class="ctr-select">' + tradeOpts + '</select>' +
+          '<div class="search-box">' + iconSearch() + '<input id="cSearchInput" placeholder="Tìm nhà thầu, SĐT, công trình…" value="' + escapeHtml(view.cSearch) + '"></div>' +
+        '</div>' +
+      '</div>' +
+      body;
+
+    document.getElementById("content").innerHTML = html;
+    document.getElementById("crumbCurrent").textContent = "Danh sách nhà thầu";
+
+    document.getElementById("btnAddContractor").addEventListener("click", function () { openContractorEditor(null); });
+    document.getElementById("btnAddJob").addEventListener("click", function () { openJobEditor(null, {}); });
+    var clr = document.getElementById("btnClearCPrj");
+    if (clr) clr.addEventListener("click", function () { view.cProject = ""; renderContractorsScreen(); });
+    document.querySelectorAll("[data-ctab]").forEach(function (t) {
+      t.addEventListener("click", function () { view.ctab = t.dataset.ctab; renderContractorsScreen(); });
+    });
+    document.getElementById("cTradeSel").addEventListener("change", function (e) { view.cTrade = e.target.value; renderContractorsScreen(); });
+    var search = document.getElementById("cSearchInput");
+    search.addEventListener("input", function () { view.cSearch = search.value; renderContractorsScreen(); preserveFocus(search); });
+
+    document.querySelectorAll("tr[data-edit-ctr]").forEach(function (r) {
+      r.addEventListener("click", function () { openContractorEditor(r.dataset.editCtr); });
+    });
+    document.querySelectorAll("button[data-edit-ctr]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openContractorEditor(b.dataset.editCtr); });
+    });
+    document.querySelectorAll("[data-del-ctr]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); deleteContractor(b.dataset.delCtr); });
+    });
+    document.querySelectorAll("tr[data-edit-job]").forEach(function (r) {
+      r.addEventListener("click", function () { openJobEditor(r.dataset.editJob, {}); });
+    });
+    document.querySelectorAll("button[data-edit-job]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openJobEditor(b.dataset.editJob, {}); });
+    });
+    document.querySelectorAll("[data-del-job]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); deleteJob(b.dataset.delJob); });
+    });
+    document.querySelectorAll("[data-add-job-prj]").forEach(function (b) {
+      b.addEventListener("click", function () { openJobEditor(null, { projectId: b.dataset.addJobPrj }); });
+    });
+    // Bấm số điện thoại / Zalo trong dòng không được mở hộp thoại sửa.
+    document.querySelectorAll(".tel-link, .zalo-link").forEach(function (a) {
+      a.addEventListener("click", function (e) { e.stopPropagation(); });
+    });
+  }
+
+  function deleteContractor(id) {
+    var c = contractorById(id);
+    if (!c) return;
+    var jobs = jobsOfContractor(id);
+    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành) của nhà thầu này." : "");
+    if (!confirm(msg)) return;
+    CONTRACTORS = CONTRACTORS.filter(function (x) { return x.id !== id; });
+    CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (j) { return j.contractorId !== id; });
+    saveState();
+    closeContractorEditor();
+    if (view.screen === "contractors") renderContractorsScreen();
+    toast('Đã xoá nhà thầu "' + c.name + '".');
+  }
+  function deleteJob(id) {
+    var j = CONTRACTOR_JOBS.filter(function (x) { return x.id === id; })[0];
+    if (!j) return;
+    var c = contractorById(j.contractorId), p = projectById(j.projectId);
+    if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?")) return;
+    CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (x) { return x.id !== id; });
+    saveState();
+    closeJobEditor();
+    if (ctEditingId) paintContractorJobs();
+    if (view.screen === "contractors") renderContractorsScreen();
+    if (view.screen === "projects") renderProjectsScreen();
+    toast("Đã xoá gói việc.");
+  }
+
+  /* ---------- Hộp thoại nhà thầu ---------- */
+  var ctEditingId = null;   // id nhà thầu đang sửa (null = đang thêm mới, chưa lưu)
+  var ctDraftTrades = [];
+
+  function ensureContractorModal() {
+    if (document.getElementById("contractorModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "contractorModalOverlay";
+    el.className = "modal-overlay";
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:640px;">' +
+        '<div class="modal-head"><h3 id="ctModalTitle">Nhà thầu</h3><button class="icon-btn" id="ctModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="field" style="margin-bottom:14px;"><label>Tên nhà thầu</label><input id="ctName" placeholder="vd. Công ty Việt Cao Minh"></div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Nhóm nghề</label>' +
+            '<div class="trade-chips" id="ctTrades"></div>' +
+            '<div style="display:flex; gap:8px; margin-top:8px;"><div class="field" style="flex:1;"><input id="ctTradeNew" placeholder="Thêm nhóm nghề khác…"></div>' +
+              '<button class="btn btn-sm" id="ctTradeAdd" type="button">' + iconPlus() + '</button></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Người liên hệ</label><input id="ctContact"></div>' +
+            '<div class="field"><label>Điện thoại</label><input id="ctPhone" inputmode="tel"></div>' +
+            '<div class="field"><label>Email</label><input id="ctEmail" inputmode="email"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="field" style="grid-column: span 2;"><label>Địa chỉ</label><input id="ctAddress"></div>' +
+            '<div class="field"><label>Mã số thuế</label><input id="ctTax"></div>' +
+          '</div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Ghi chú</label><textarea id="ctNote" rows="2"></textarea></div>' +
+          '<div class="field"><label>Gói việc đã / đang làm</label>' +
+            '<div id="ctJobs"></div>' +
+            '<button class="btn btn-sm" id="ctAddJob" type="button" style="margin-top:8px;">' + iconPlus() + ' Thêm gói việc</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="ctDelete" type="button" style="margin-right:auto;">Xoá nhà thầu</button>' +
+          '<button class="btn" id="ctCancel" type="button">Đóng</button>' +
+          '<button class="btn btn-primary" id="ctSave" type="button">' + iconCheck() + ' Lưu</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("ctModalClose").addEventListener("click", closeContractorEditor);
+    document.getElementById("ctCancel").addEventListener("click", closeContractorEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closeContractorEditor(); });
+  }
+  function closeContractorEditor() {
+    var el = document.getElementById("contractorModalOverlay");
+    if (el) el.hidden = true;
+    ctEditingId = null;
+  }
+
+  function paintContractorTrades() {
+    var wrap = document.getElementById("ctTrades");
+    var all = allTrades();
+    ctDraftTrades.forEach(function (t) { if (all.indexOf(t) === -1) all.push(t); });
+    wrap.innerHTML = all.map(function (t) {
+      return '<button type="button" class="trade-chip' + (ctDraftTrades.indexOf(t) !== -1 ? " on" : "") + '" data-trade="' + escapeHtml(t) + '">' + escapeHtml(t) + '</button>';
+    }).join("");
+    wrap.querySelectorAll("[data-trade]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.trade, i = ctDraftTrades.indexOf(t);
+        if (i === -1) ctDraftTrades.push(t); else ctDraftTrades.splice(i, 1);
+        paintContractorTrades();
+      });
+    });
+  }
+
+  function paintContractorJobs() {
+    var wrap = document.getElementById("ctJobs");
+    if (!wrap) return;
+    var jobs = ctEditingId ? jobsOfContractor(ctEditingId) : [];
+    if (!jobs.length) {
+      wrap.innerHTML = '<div class="cell-muted" style="font-size:12px;">' + (ctEditingId ? "Chưa có gói việc nào." : "Chưa có gói việc. Bấm nút bên dưới để thêm (nhà thầu sẽ được lưu trước).") + '</div>';
+      return;
+    }
+    wrap.innerHTML = jobs.map(function (j) {
+      var p = projectById(j.projectId), w = warrantyInfo(j);
+      return '<div class="ct-job-row" data-ct-job="' + escapeHtml(j.id) + '">' +
+        '<div style="min-width:0;flex:1;"><div class="cell-title" style="font-size:12.8px;">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + ' · ' + escapeHtml(j.scope || "—") + '</div>' +
+          '<div class="cell-muted" style="font-size:11.8px;">' + (w.endIso ? "Bảo hành đến " + fmtDate(w.endIso) + " · " + escapeHtml(warrantyRemainText(w)) : "Chưa nghiệm thu") + '</div></div>' +
+        '<span class="pill ' + w.pill + '">' + w.label + '</span>' +
+        '<button type="button" class="icon-btn" data-ct-edit-job="' + escapeHtml(j.id) + '" title="Sửa">' + iconEdit() + '</button>' +
+        '<button type="button" class="icon-btn danger" data-ct-del-job="' + escapeHtml(j.id) + '" title="Xoá">' + iconTrash() + '</button>' +
+      '</div>';
+    }).join("");
+    wrap.querySelectorAll("[data-ct-edit-job]").forEach(function (b) {
+      b.addEventListener("click", function () { openJobEditor(b.dataset.ctEditJob, {}); });
+    });
+    wrap.querySelectorAll("[data-ct-del-job]").forEach(function (b) {
+      b.addEventListener("click", function () { deleteJob(b.dataset.ctDelJob); });
+    });
+  }
+
+  // Đọc form → ghi vào CONTRACTORS. Trả về bản ghi (hoặc null nếu thiếu tên).
+  function saveContractorFromForm() {
+    var name = document.getElementById("ctName").value.trim();
+    if (!name) { toast("Cần nhập tên nhà thầu."); return null; }
+    var rec = {
+      id: ctEditingId || uid("ct_"),
+      name: name,
+      trades: ctDraftTrades.slice(),
+      contact: document.getElementById("ctContact").value.trim(),
+      phone: document.getElementById("ctPhone").value.trim(),
+      email: document.getElementById("ctEmail").value.trim(),
+      address: document.getElementById("ctAddress").value.trim(),
+      taxCode: document.getElementById("ctTax").value.trim(),
+      note: document.getElementById("ctNote").value.trim()
+    };
+    var idx = -1;
+    CONTRACTORS.forEach(function (c, i) { if (c.id === rec.id) idx = i; });
+    if (idx > -1) CONTRACTORS[idx] = rec; else CONTRACTORS.push(rec);
+    ctEditingId = rec.id;
+    saveState();
+    return rec;
+  }
+
+  function openContractorEditor(id) {
+    ensureContractorModal();
+    var c = id ? contractorById(id) : null;
+    ctEditingId = c ? c.id : null;
+    ctDraftTrades = c ? (c.trades || []).slice() : [];
+    document.getElementById("ctModalTitle").textContent = c ? "Sửa nhà thầu" : "Thêm nhà thầu";
+    document.getElementById("ctName").value = c ? c.name : "";
+    document.getElementById("ctContact").value = c ? (c.contact || "") : "";
+    document.getElementById("ctPhone").value = c ? (c.phone || "") : "";
+    document.getElementById("ctEmail").value = c ? (c.email || "") : "";
+    document.getElementById("ctAddress").value = c ? (c.address || "") : "";
+    document.getElementById("ctTax").value = c ? (c.taxCode || "") : "";
+    document.getElementById("ctNote").value = c ? (c.note || "") : "";
+    document.getElementById("ctTradeNew").value = "";
+    document.getElementById("ctDelete").style.display = c ? "" : "none";
+    paintContractorTrades();
+    paintContractorJobs();
+
+    document.getElementById("ctTradeAdd").onclick = function () {
+      var inp = document.getElementById("ctTradeNew");
+      var t = inp.value.trim();
+      if (!t) return;
+      if (ctDraftTrades.indexOf(t) === -1) ctDraftTrades.push(t);
+      inp.value = "";
+      paintContractorTrades();
+    };
+    document.getElementById("ctTradeNew").onkeydown = function (e) {
+      if (e.key === "Enter") { e.preventDefault(); document.getElementById("ctTradeAdd").click(); }
+    };
+    document.getElementById("ctAddJob").onclick = function () {
+      // Gói việc cần nhà thầu đã tồn tại → lưu nhà thầu trước (giữ nguyên hộp thoại đang mở).
+      var rec = saveContractorFromForm();
+      if (!rec) return;
+      if (view.screen === "contractors") renderContractorsScreen();
+      openJobEditor(null, { contractorId: rec.id });
+    };
+    document.getElementById("ctDelete").onclick = function () { if (ctEditingId) deleteContractor(ctEditingId); };
+    document.getElementById("ctSave").onclick = function () {
+      var isNew = !ctEditingId;
+      var rec = saveContractorFromForm();
+      if (!rec) return;
+      closeContractorEditor();
+      if (view.screen === "contractors") renderContractorsScreen();
+      toast(isNew ? 'Đã thêm nhà thầu "' + rec.name + '".' : "Đã lưu nhà thầu.");
+    };
+
+    document.getElementById("contractorModalOverlay").hidden = false;
+  }
+
+  /* ---------- Hộp thoại gói việc ---------- */
+  var jobEditingId = null;
+
+  function ensureJobModal() {
+    if (document.getElementById("jobModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "jobModalOverlay";
+    el.className = "modal-overlay";
+    el.style.zIndex = "65"; // luôn nằm trên hộp thoại nhà thầu (mở từ trong đó)
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:560px;">' +
+        '<div class="modal-head"><h3 id="jobModalTitle">Gói việc</h3><button class="icon-btn" id="jobModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Nhà thầu</label><select id="jobContractor"></select></div>' +
+            '<div class="field"><label>Công trình</label><select id="jobProject"></select></div>' +
+          '</div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Gói việc / phạm vi</label><input id="jobScope" list="jobScopeList" placeholder="vd. Điện nước, Trần thạch cao"><datalist id="jobScopeList"></datalist></div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Ngày bắt đầu</label><input id="jobStart" type="date"></div>' +
+            '<div class="field"><label>Ngày nghiệm thu / bàn giao</label><input id="jobHandover" type="date"></div>' +
+            '<div class="field"><label>Bảo hành (tháng)</label><input id="jobMonths" type="number" min="1" max="600" inputmode="numeric"></div>' +
+          '</div>' +
+          '<div class="trade-chips" id="jobMonthChips" style="margin-bottom:10px;"></div>' +
+          '<div class="job-preview" id="jobPreview"></div>' +
+          '<div class="field" style="margin-top:14px;"><label>Ghi chú</label><input id="jobNote"></div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="jobDelete" type="button" style="margin-right:auto;">Xoá gói việc</button>' +
+          '<button class="btn" id="jobCancel" type="button">Huỷ</button>' +
+          '<button class="btn btn-primary" id="jobSave" type="button">' + iconCheck() + ' Lưu</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("jobModalClose").addEventListener("click", closeJobEditor);
+    document.getElementById("jobCancel").addEventListener("click", closeJobEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closeJobEditor(); });
+  }
+  function closeJobEditor() {
+    var el = document.getElementById("jobModalOverlay");
+    if (el) el.hidden = true;
+    jobEditingId = null;
+  }
+
+  // Dòng xem trước hạn bảo hành, cập nhật ngay khi sửa ngày / số tháng.
+  function paintJobPreview() {
+    var box = document.getElementById("jobPreview");
+    var w = warrantyInfo({
+      handoverDate: document.getElementById("jobHandover").value,
+      warrantyMonths: document.getElementById("jobMonths").value
+    });
+    box.className = "job-preview " + (w.key === "building" ? "" : w.key);
+    box.textContent = w.key === "building"
+      ? "Chưa có ngày nghiệm thu — bảo hành sẽ bắt đầu tính khi nhập ngày nghiệm thu."
+      : w.label + ": bảo hành đến " + fmtDate(w.endIso) + " (" + warrantyRemainText(w) + ").";
+    document.querySelectorAll("#jobMonthChips [data-months]").forEach(function (b) {
+      b.classList.toggle("on", Number(b.dataset.months) === Number(document.getElementById("jobMonths").value));
+    });
+  }
+
+  function openJobEditor(id, preset) {
+    ensureJobModal();
+    var j = id ? CONTRACTOR_JOBS.filter(function (x) { return x.id === id; })[0] : null;
+    jobEditingId = j ? j.id : null;
+    preset = preset || {};
+
+    if (!CONTRACTORS.length) { toast("Cần thêm nhà thầu trước, rồi mới gán gói việc."); return; }
+    if (!PROJECTS.length) { toast("Chưa có công trình nào để gán."); return; }
+
+    var cid = j ? j.contractorId : (preset.contractorId || (CONTRACTORS[0] && CONTRACTORS[0].id));
+    var pid = j ? j.projectId : (preset.projectId || view.cProject || (PROJECTS[0] && PROJECTS[0].id));
+    document.getElementById("jobContractor").innerHTML = CONTRACTORS.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "vi"); })
+      .map(function (c) { return '<option value="' + escapeHtml(c.id) + '"' + (c.id === cid ? " selected" : "") + '>' + escapeHtml(c.name) + '</option>'; }).join("");
+    document.getElementById("jobProject").innerHTML = PROJECTS.map(function (p) {
+      return '<option value="' + escapeHtml(p.id) + '"' + (p.id === pid ? " selected" : "") + '>' + escapeHtml(p.name) + '</option>';
+    }).join("");
+    var scopes = allTrades();
+    CONTRACTOR_JOBS.forEach(function (x) { if (x.scope && scopes.indexOf(x.scope) === -1) scopes.push(x.scope); });
+    document.getElementById("jobScopeList").innerHTML = scopes.map(function (s) { return '<option value="' + escapeHtml(s) + '">'; }).join("");
+
+    document.getElementById("jobModalTitle").textContent = j ? "Sửa gói việc" : "Thêm gói việc";
+    document.getElementById("jobScope").value = j ? (j.scope || "") : "";
+    document.getElementById("jobStart").value = j ? (j.startDate || "") : "";
+    document.getElementById("jobHandover").value = j ? (j.handoverDate || "") : "";
+    document.getElementById("jobMonths").value = j ? (j.warrantyMonths || WARRANTY_DEFAULT_MONTHS) : WARRANTY_DEFAULT_MONTHS;
+    document.getElementById("jobNote").value = j ? (j.note || "") : "";
+    document.getElementById("jobDelete").style.display = j ? "" : "none";
+
+    var chips = document.getElementById("jobMonthChips");
+    chips.innerHTML = [6, 12, 24, 36, 60].map(function (m) {
+      return '<button type="button" class="trade-chip" data-months="' + m + '">' + (m % 12 === 0 ? (m / 12) + " năm" : m + " tháng") + '</button>';
+    }).join("");
+    chips.querySelectorAll("[data-months]").forEach(function (b) {
+      b.addEventListener("click", function () { document.getElementById("jobMonths").value = b.dataset.months; paintJobPreview(); });
+    });
+    ["jobHandover", "jobMonths"].forEach(function (fid) { document.getElementById(fid).oninput = paintJobPreview; });
+    paintJobPreview();
+
+    document.getElementById("jobDelete").onclick = function () { if (jobEditingId) deleteJob(jobEditingId); };
+    document.getElementById("jobSave").onclick = function () {
+      var contractorId = document.getElementById("jobContractor").value;
+      var projectId = document.getElementById("jobProject").value;
+      var scope = document.getElementById("jobScope").value.trim();
+      var start = document.getElementById("jobStart").value;
+      var handover = document.getElementById("jobHandover").value;
+      var months = Math.round(Number(document.getElementById("jobMonths").value));
+      if (!contractorId || !projectId) { toast("Cần chọn nhà thầu và công trình."); return; }
+      if (!scope) { toast("Cần nhập gói việc / phạm vi (vd. Điện nước)."); return; }
+      if (!isFinite(months) || months < 1) { toast("Số tháng bảo hành phải từ 1 trở lên."); return; }
+      if (start && handover && handover < start) { toast("Ngày nghiệm thu không thể trước ngày bắt đầu."); return; }
+      var rec = {
+        id: jobEditingId || uid("jb_"),
+        contractorId: contractorId, projectId: projectId, scope: scope,
+        startDate: start, handoverDate: handover, warrantyMonths: months,
+        note: document.getElementById("jobNote").value.trim()
+      };
+      var idx = -1;
+      CONTRACTOR_JOBS.forEach(function (x, i) { if (x.id === rec.id) idx = i; });
+      var isNew = idx === -1;
+      if (idx > -1) CONTRACTOR_JOBS[idx] = rec; else CONTRACTOR_JOBS.push(rec);
+      saveState();
+      closeJobEditor();
+      if (ctEditingId) paintContractorJobs();
+      if (view.screen === "contractors") renderContractorsScreen();
+      if (view.screen === "projects") renderProjectsScreen();
+      toast(isNew ? "Đã thêm gói việc." : "Đã lưu gói việc.");
+    };
+
+    document.getElementById("jobModalOverlay").hidden = false;
   }
 
   /* ===================== THƯ VIỆN VẬT TƯ ===================== */
