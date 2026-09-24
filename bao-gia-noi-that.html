@@ -607,6 +607,13 @@
 
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
+    /* FOOTER mỗi trang giấy (Nam chốt 2026-09-24): trái "measure & make", phải "Page X/Y".
+       Dùng margin box của @page nên nằm trong lề dưới 14mm, không chiếm chỗ nội dung. Chỉ hiện khi IN
+       (xem trước trên màn hình không có). Chữ 7px, than-xanh nhạt hơn ink một chút. */
+    @page {
+      @bottom-left { content: "measure & make"; font-family: 'Montserrat', 'Segoe UI', sans-serif; font-size: 7px; color: #4F5F68; vertical-align: top; padding-top: 4mm; }
+      @bottom-right { content: "Page " counter(page) "/" counter(pages); font-family: 'Montserrat', 'Segoe UI', sans-serif; font-size: 7px; color: #4F5F68; vertical-align: top; padding-top: 4mm; }
+    }
     body { background: #fff; }
     .sidebar, .topbar, .toast, .modal-overlay, .no-print { display: none !important; }
     .app { display: block; }
