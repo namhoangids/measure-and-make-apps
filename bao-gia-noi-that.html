@@ -2,94 +2,93 @@
 <title>M&amp;M Báo Giá Nội Thất</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Montserrat:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
-  /* Họ màu nền / viền / chữ lấy đúng theo app FF&E (bộ token Industry) để 2 app nhìn cùng một hệ.
-     Trước đây bên này dùng tông kem ấm (#F2F1EC / #E7E2D5), FF&E dùng xám trung tính.
-     Màu nhấn (accent) và màu trạng thái (good/warn) giữ nguyên của app này. */
+  /* Bộ nhận diện measure&make: chữ xanh than #22333B, điểm nhấn cam #F15A22, font Montserrat.
+     Nền/viền là xám ấm rất nhạt, không dùng thêm màu nhấn nào khác. Màu trạng thái (good/warn) giữ nguyên. */
   :root {
-    --paper: #ececed;
+    --paper: #F4F3F0;
     --surface: #ffffff;
-    --surface-2: #eeeef1;
+    --surface-2: #F1EFEB;
     --sidebar: #ffffff;
-    --sidebar-line: #e4e4e7;
-    --sidebar-text: #5a5a5d;
-    --sidebar-text-dim: #9a9a9d;
-    --sidebar-active: #f4f4f7;
-    --sidebar-heading: #1d1f20;
-    --ink: #1d1f20;
-    --ink-soft: #5a5a5d;
-    --ink-mute: #7a7a7d;
-    --border: #d2d2d6;
-    --border-soft: #e4e4e7;
-    --accent: #24507A;
+    --sidebar-line: #E6E2DC;
+    --sidebar-text: #4F5F68;
+    --sidebar-text-dim: #9AA3A9;
+    --sidebar-active: #FDEDE5;
+    --sidebar-heading: #22333B;
+    --ink: #22333B;
+    --ink-soft: #4F5F68;
+    --ink-mute: #6F7C84;
+    --border: #D5D0C8;
+    --border-soft: #E6E2DC;
+    --accent: #F15A22;
     --accent-ink: #ffffff;
-    --accent-soft: #DCE7F0;
-    --accent-soft-border: #B7CFE0;
+    --accent-soft: #FDEDE5;
+    --accent-soft-border: #F8C9B3;
     --good: #2f7d5d;
     --good-soft: #dfeee6;
     --warn: #a8722f;
     --warn-soft: #f3e6d3;
-    --neutral-pill: #eeeef1;
-    --shadow: 0 1px 2px rgba(20,24,28,.06), 0 6px 20px rgba(20,24,28,.05);
-    --shadow-lift: 0 10px 34px rgba(20,24,28,.14);
+    --neutral-pill: #F1EFEB;
+    --shadow: 0 1px 2px rgba(34,51,59,.06), 0 6px 20px rgba(34,51,59,.05);
+    --shadow-lift: 0 10px 34px rgba(34,51,59,.16);
     --radius: 10px;
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --paper: #131517;
-      --surface: #1b1e21;
-      --surface-2: #25292e;
-      --sidebar: #1b1e21;
-      --sidebar-line: #2c3035;
-      --sidebar-text: #b6b6b9;
-      --sidebar-text-dim: #74747a;
-      --sidebar-active: #202327;
-      --sidebar-heading: #e9e9ea;
-      --ink: #e9e9ea;
-      --ink-soft: #b6b6b9;
-      --ink-mute: #96969a;
-      --border: #3a3f45;
-      --border-soft: #2c3035;
-      --accent: #6FA8D6;
-      --accent-ink: #131517;
-      --accent-soft: #1F3A50;
-      --accent-soft-border: #2C4A63;
+      --paper: #12191D;
+      --surface: #1A2328;
+      --surface-2: #26333A;
+      --sidebar: #1A2328;
+      --sidebar-line: #2B383F;
+      --sidebar-text: #B4BFC5;
+      --sidebar-text-dim: #6E7C85;
+      --sidebar-active: #2E2019;
+      --sidebar-heading: #EAEEF0;
+      --ink: #EAEEF0;
+      --ink-soft: #B4BFC5;
+      --ink-mute: #8E9BA3;
+      --border: #3A4A52;
+      --border-soft: #2B383F;
+      --accent: #FF7A45;
+      --accent-ink: #1A1008;
+      --accent-soft: #3A2216;
+      --accent-soft-border: #6B3A22;
       --good: #6fbb96;
       --good-soft: #1c3128;
       --warn: #d4a35f;
       --warn-soft: #382c19;
-      --neutral-pill: #25292e;
+      --neutral-pill: #26333A;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
       --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
     }
   }
 
   :root[data-theme="dark"] {
-    --paper: #131517;
-    --surface: #1b1e21;
-    --surface-2: #25292e;
-    --sidebar: #1b1e21;
-    --sidebar-line: #2c3035;
-    --sidebar-text: #b6b6b9;
-    --sidebar-text-dim: #74747a;
-    --sidebar-active: #202327;
-    --sidebar-heading: #e9e9ea;
-    --ink: #e9e9ea;
-    --ink-soft: #b6b6b9;
-    --ink-mute: #96969a;
-    --border: #3a3f45;
-    --border-soft: #2c3035;
-    --accent: #6FA8D6;
-    --accent-ink: #131517;
-    --accent-soft: #1F3A50;
-    --accent-soft-border: #2C4A63;
+    --paper: #12191D;
+    --surface: #1A2328;
+    --surface-2: #26333A;
+    --sidebar: #1A2328;
+    --sidebar-line: #2B383F;
+    --sidebar-text: #B4BFC5;
+    --sidebar-text-dim: #6E7C85;
+    --sidebar-active: #2E2019;
+    --sidebar-heading: #EAEEF0;
+    --ink: #EAEEF0;
+    --ink-soft: #B4BFC5;
+    --ink-mute: #8E9BA3;
+    --border: #3A4A52;
+    --border-soft: #2B383F;
+    --accent: #FF7A45;
+    --accent-ink: #1A1008;
+    --accent-soft: #3A2216;
+    --accent-soft-border: #6B3A22;
     --good: #6fbb96;
     --good-soft: #1c3128;
     --warn: #d4a35f;
     --warn-soft: #382c19;
-    --neutral-pill: #25292e;
+    --neutral-pill: #26333A;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
     --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
   }
@@ -100,14 +99,14 @@
     margin: 0;
     background: var(--paper);
     color: var(--ink);
-    font-family: 'Barlow', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
   ::selection { background: var(--accent-soft-border); }
 
-  h1, h2, h3 { font-family: 'Barlow', sans-serif; letter-spacing: .01em; text-wrap: balance; margin: 0; }
+  h1, h2, h3 { font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: .01em; text-wrap: balance; margin: 0; }
 
   .app { display: flex; min-height: 100vh; }
 
@@ -132,7 +131,7 @@
     border-bottom: 1px solid var(--sidebar-line);
   }
   .brand-mark { height: 45px; width: auto; flex-shrink: 0; display: block; }
-  .brand-word { font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 15px; color: var(--sidebar-heading); letter-spacing: .01em; line-height: 1.3; }
+  .brand-word { font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 600; font-size: 15px; color: var(--sidebar-heading); letter-spacing: .01em; line-height: 1.3; }
   .brand-word span { color: var(--sidebar-text-dim); font-weight: 400; }
 
   .theme-toggle {
@@ -253,7 +252,7 @@
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 22px 0 26px; }
   .stat-tile { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
   .stat-label { font-size: 11.5px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
-  .stat-value { font-family: 'Barlow', sans-serif; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat-value { font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .stat-value.accent { color: var(--accent); }
   .stat-foot { font-size: 11.5px; color: var(--ink-mute); margin-top: 4px; }
 
@@ -281,9 +280,9 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr.row-click { cursor: pointer; }
   tbody tr.row-click:hover td { background: var(--surface-2); }
-  .cell-code { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-mute); }
+  .cell-code { font-family: inherit; font-size: 12px; color: var(--ink-mute); }
   .cell-title { font-weight: 500; color: var(--ink); }
-  .cell-money { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cell-money { font-family: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cell-muted { color: var(--ink-mute); }
 
   .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
@@ -332,7 +331,7 @@
   .cat-head-name { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
   .cat-head-name .stt { font-size: 11.5px; color: var(--ink-mute); font-weight: 600; flex-shrink: 0; }
   .cat-head input.cat-name-input { background: transparent; border: none; font-weight: 600; font-size: 13.5px; color: var(--ink); font-family: inherit; outline: none; width: 100%; }
-  .cat-total { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--ink); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .cat-total { font-family: inherit; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--ink); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
   .cat-note-row { padding: 0 14px 10px; background: var(--surface-2); }
   .cat-note-row input {
     width: 100%; background: transparent; border: 1px dashed var(--border); border-radius: 6px; padding: 6px 9px;
@@ -349,7 +348,7 @@
     color: var(--ink-soft); font-family: inherit; outline: none;
   }
   .group-head input.group-name-input::placeholder { font-style: italic; color: var(--ink-mute); }
-  .group-total { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12.2px; color: var(--ink-mute); white-space: nowrap; flex-shrink: 0; }
+  .group-total { font-family: inherit; font-variant-numeric: tabular-nums; font-size: 12.2px; color: var(--ink-mute); white-space: nowrap; flex-shrink: 0; }
   .add-group-row { padding: 6px 14px 10px; background: var(--paper); }
   .add-group-row button, .add-item-row button { font-size: 12px; color: var(--ink-mute); background: transparent; border: none; }
   .add-group-row button:hover, .add-item-row button:hover { color: var(--accent); }
@@ -367,12 +366,12 @@
   }
   .item-table input:hover, .item-table select:hover, .item-table textarea:hover { border-color: var(--border); }
   .item-table input:focus, .item-table select:focus, .item-table textarea:focus { border-color: var(--accent); background: var(--surface); }
-  .item-table input.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+  .item-table input.num { text-align: right; font-family: inherit; }
   .item-table input.num.computed { color: var(--ink-mute); background: var(--surface-2); cursor: not-allowed; }
   .item-table textarea.computed { color: var(--ink-mute); cursor: not-allowed; }
   .item-table .col-stt { text-align: center; color: var(--ink-mute); font-size: 12px; padding-top: 12px; }
   .item-table th.col-stt, .item-table th.col-code, .item-table th.col-size, .item-table th.col-unit, .item-table th.col-qty { text-align: center; }
-  .item-table .col-code input { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-transform: uppercase; text-align: center; }
+  .item-table .col-code input { font-family: inherit; font-size: 12px; text-transform: uppercase; text-align: center; }
   .item-table .col-code input.matched { color: var(--accent); font-weight: 600; }
   .item-table .col-detail textarea { color: var(--ink-soft); font-size: 12.2px; }
   .item-table .col-unit select { text-align: center; text-align-last: center; }
@@ -381,25 +380,25 @@
   .size-inputs input { font-size: 12px; color: var(--ink-soft); text-align: center; padding: 6px 2px; width: auto; flex: 1 1 0; min-width: 18px; }
   .size-inputs input::placeholder { color: var(--ink-mute); font-style: italic; }
   .size-inputs span { color: var(--ink-mute); font-size: 10px; flex-shrink: 0; }
-  .item-table .col-amount { text-align: right; padding-top: 12px; padding-right: 12px; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--ink); white-space: nowrap; }
+  .item-table .col-amount { text-align: right; padding-top: 12px; padding-right: 12px; font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--ink); white-space: nowrap; }
   /* Bảng diễn giải khối lượng */
   .tk-table input { width: 100%; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 6px; font: inherit; font-size: 12px; color: var(--ink); }
   .tk-table input:hover { border-color: var(--border-soft); }
   .tk-table input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-  .tk-table input.num { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+  .tk-table input.num { text-align: right; font-family: inherit; font-variant-numeric: tabular-nums; }
   .tk-table input.tk-over { color: var(--warn); font-weight: 600; }
-  .tk-table input.tk-formula { font-family: 'IBM Plex Mono', monospace; color: var(--accent); font-weight: 600; text-align: left; }
+  .tk-table input.tk-formula { font-family: inherit; color: var(--accent); font-weight: 600; text-align: left; }
   .tk-table input:disabled { opacity: .35; }
   .tk-result.tk-bad, .group-total.tk-bad { color: var(--warn); font-weight: 600; }
   .tk-table td { padding: 2px 4px; vertical-align: middle; }
-  .tk-table .tk-result { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; white-space: nowrap; }
-  .tk-code-input { font-family: 'IBM Plex Mono', monospace !important; text-transform: uppercase; font-weight: 600 !important; letter-spacing: .02em; }
+  .tk-table .tk-result { text-align: right; font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; white-space: nowrap; }
+  .tk-code-input { font-family: inherit !important; text-transform: uppercase; font-weight: 600 !important; letter-spacing: .02em; }
   .prj-addr-input { width: 100%; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 6px; font: inherit; font-size: 13px; color: var(--ink); }
   .prj-addr-input:hover { border-color: var(--border-soft); }
   .prj-addr-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
   .tk-table .col-stt { text-align: center; color: var(--ink-mute); font-size: 11px; }
   .tk-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .tk-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); color: var(--ink); font-family: 'IBM Plex Mono', monospace; }
+  .tk-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); color: var(--ink); font-family: inherit; }
   .tk-chip.idle { background: var(--neutral-pill); border-color: var(--border-soft); color: var(--ink-mute); }
   .tk-chip.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
   .item-table input.from-takeoff.computed { color: var(--accent); font-weight: 600; }
@@ -418,7 +417,7 @@
   .summary-table-wrap td { padding: 9px 14px; border-bottom: 1px solid var(--border-soft); font-size: 12.8px; vertical-align: top; }
   .summary-table-wrap tr:last-child td { border-bottom: none; }
   .summary-table-wrap .stt-col { width: 34px; color: var(--ink-mute); }
-  .summary-table-wrap .money-col { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .summary-table-wrap .money-col { font-family: inherit; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   .summary-table-wrap .note-col { color: var(--ink-mute); font-size: 12px; white-space: nowrap; }
   .summary-table-wrap tr.summary-total td { font-weight: 700; border-top: 1px solid var(--border); border-bottom: none; background: var(--surface-2); }
   .summary-table-wrap tr.summary-row-link { cursor: pointer; }
@@ -428,8 +427,8 @@
   .summary-row { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-soft); }
   .summary-row.total { font-size: 19px; font-weight: 700; color: var(--ink); }
   .summary-row .label { white-space: nowrap; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-mute); }
-  .summary-row .val { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .vat-input { width: 56px; text-align: right; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--paper); color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 12.6px; outline: none; }
+  .summary-row .val { font-family: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .vat-input { width: 56px; text-align: right; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--paper); color: var(--ink); font-family: inherit; font-size: 12.6px; outline: none; }
   .vat-input:focus { border-color: var(--accent); }
 
   .amount-words { font-size: 11.5px; font-style: italic; color: var(--ink-mute); line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-soft); }
@@ -447,7 +446,7 @@
   .modal-head h3 { font-size: 16px; font-weight: 600; color: var(--ink); }
   .modal-body { padding: 18px 20px; overflow-y: auto; }
   .modal-steps { margin: 0 0 14px; padding-left: 18px; color: var(--ink-soft); font-size: 12.6px; line-height: 1.6; }
-  .sync-textarea { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--paper); color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 11.8px; padding: 10px 12px; outline: none; }
+  .sync-textarea { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--paper); color: var(--ink); font-family: inherit; font-size: 11.8px; padding: 10px 12px; outline: none; }
   .sync-textarea:focus { border-color: var(--accent); }
   .sync-status { min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--warn); }
   .form-hint { font-size: 11.8px; color: var(--ink-mute); margin-top: 4px; }
@@ -516,7 +515,7 @@
      trên Mac) — đây là hành động gốc của trình duyệt, không bị sandbox chặn. */
   .print-toolbar { display: flex; align-items: center; gap: 14px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px; }
   .print-toolbar .print-hint { font-size: 12.8px; color: var(--accent); }
-  .print-toolbar .print-hint b { font-family: 'IBM Plex Mono', monospace; }
+  .print-toolbar .print-hint b { font-family: inherit; }
   /* Toàn bộ bản in dùng màu cố định (không theo var(--...) đổi theo theme sáng/tối của app) —
      đây là bản mô phỏng TỜ GIẤY TRẮNG sẽ in ra, nên luôn phải trông giống nhau bất kể app đang ở
      theme nào lúc xem trước.
@@ -1003,7 +1002,7 @@
     var el = showAuthOverlay(); el.style.display = "grid";
     el.innerHTML =
       '<form class="panel" id="loginForm" style="width:min(360px,100%);padding:28px 26px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-lift)">' +
-        '<div style="font-family:\'Barlow\',sans-serif;font-weight:700;font-size:22px;color:var(--ink)">measure<span style="color:var(--ink-mute)">&amp;</span>make</div>' +
+        '<div style="font-family:\'Montserrat\',sans-serif;font-weight:700;font-size:22px;color:var(--ink)">measure<span style="color:var(--ink-mute)">&amp;</span>make</div>' +
         '<div class="page-sub" style="margin:0">Báo giá nội thất · đăng nhập để xem / sửa dữ liệu</div>' +
         '<div class="field"><label>Email</label><input id="loginEmail" type="email" required autocomplete="username"></div>' +
         '<div class="field"><label>Mật khẩu</label><input id="loginPass" type="password" required autocomplete="current-password"></div>' +

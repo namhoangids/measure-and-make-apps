@@ -12,47 +12,47 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="FF&E - Specification">
 <meta name="twitter:description" content="Measure &amp; Make | Indust Design">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
 <style>
-/* Industry design system — tokens từ bộ kit gốc (_ds/industry-…/styles.css) + bộ tối. */
+/* Bộ nhận diện measure&make: chữ xanh than #22333B, điểm nhấn cam #F15A22, font Montserrat. */
 :root{
-  --bg:#ececed; --surface:#ffffff; --panel:#f4f4f7; --panel-2:#eeeef1;
-  --ink:#1d1f20; --ink-2:#5a5a5d; --ink-3:#7a7a7d; --ink-4:#9a9a9d;
-  --line:#e4e4e7; --line-2:#d2d2d6;
-  --accent:#5980a6; --accent-strong:#456a8e; --accent-deep:#33506c; --accent-ink:#f4f6f8;
-  --wash:#e9f1fa; --wash-line:#bcd4ea; --wash-ink:#2c455d; --sel:#e4eef8;
-  --ordered:#5980a6; --approved:#2f7d55; --specified:#9a9a9d; --danger:#a5514b;
-  --shadow:0 1px 2px rgba(29,31,32,.12), 0 8px 26px -12px rgba(29,31,32,.22);
+  --bg:#F4F3F0; --surface:#ffffff; --panel:#F7F6F3; --panel-2:#F1EFEB;
+  --ink:#22333B; --ink-2:#4F5F68; --ink-3:#6F7C84; --ink-4:#9AA3A9;
+  --line:#E6E2DC; --line-2:#D5D0C8;
+  --accent:#F15A22; --accent-strong:#D94A15; --accent-deep:#B93B0C; --accent-ink:#ffffff;
+  --wash:#FDEDE5; --wash-line:#F8C9B3; --wash-ink:#7A2A0B; --sel:#FDF1EA;
+  --ordered:#3F5A66; --approved:#2f7d55; --specified:#9AA3A9; --danger:#a5514b;
+  --shadow:0 1px 2px rgba(34,51,59,.12), 0 8px 26px -12px rgba(34,51,59,.22);
   color-scheme:light;
 }
 :root:not([data-theme="light"]){ @media (prefers-color-scheme: dark){ color-scheme:dark;
-  --bg:#131517; --surface:#1b1e21; --panel:#202327; --panel-2:#25292e;
-  --ink:#e9e9ea; --ink-2:#b6b6b9; --ink-3:#96969a; --ink-4:#74747a;
-  --line:#2c3035; --line-2:#3a3f45;
-  --accent:#7ba5cd; --accent-strong:#94b8db; --accent-deep:#a7c6e6; --accent-ink:#10161c;
-  --wash:#1e2a35; --wash-line:#33475a; --wash-ink:#bdd6ef; --sel:#1d2933;
-  --ordered:#7ba5cd; --approved:#6db98a; --specified:#74747a; --danger:#d98b84;
+  --bg:#12191D; --surface:#1A2328; --panel:#1F2A30; --panel-2:#26333A;
+  --ink:#EAEEF0; --ink-2:#B4BFC5; --ink-3:#8E9BA3; --ink-4:#6E7C85;
+  --line:#2B383F; --line-2:#3A4A52;
+  --accent:#FF7A45; --accent-strong:#FF9364; --accent-deep:#FFB08C; --accent-ink:#1A1008;
+  --wash:#3A2216; --wash-line:#6B3A22; --wash-ink:#FFCDB5; --sel:#2E2019;
+  --ordered:#8FB0C0; --approved:#6db98a; --specified:#6E7C85; --danger:#d98b84;
   --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px -14px rgba(0,0,0,.7);
 }}
 :root[data-theme="dark"]{ color-scheme:dark;
-  --bg:#131517; --surface:#1b1e21; --panel:#202327; --panel-2:#25292e;
-  --ink:#e9e9ea; --ink-2:#b6b6b9; --ink-3:#96969a; --ink-4:#74747a;
-  --line:#2c3035; --line-2:#3a3f45;
-  --accent:#7ba5cd; --accent-strong:#94b8db; --accent-deep:#a7c6e6; --accent-ink:#10161c;
-  --wash:#1e2a35; --wash-line:#33475a; --wash-ink:#bdd6ef; --sel:#1d2933;
-  --ordered:#7ba5cd; --approved:#6db98a; --specified:#74747a; --danger:#d98b84;
+  --bg:#12191D; --surface:#1A2328; --panel:#1F2A30; --panel-2:#26333A;
+  --ink:#EAEEF0; --ink-2:#B4BFC5; --ink-3:#8E9BA3; --ink-4:#6E7C85;
+  --line:#2B383F; --line-2:#3A4A52;
+  --accent:#FF7A45; --accent-strong:#FF9364; --accent-deep:#FFB08C; --accent-ink:#1A1008;
+  --wash:#3A2216; --wash-line:#6B3A22; --wash-ink:#FFCDB5; --sel:#2E2019;
+  --ordered:#8FB0C0; --approved:#6db98a; --specified:#6E7C85; --danger:#d98b84;
   --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px -14px rgba(0,0,0,.7);
 }
 
 *,*::before,*::after{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Barlow,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
-h1,h2,h3,h4{font-family:"Barlow Condensed",Barlow,system-ui,sans-serif;font-weight:600;margin:0;line-height:1.1}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Montserrat',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:'Montserrat',system-ui,sans-serif;font-weight:600;margin:0;line-height:1.1}
 button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
 input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -65,7 +65,7 @@ input,select,textarea{font:inherit;color:inherit}
 .loadwrap{min-height:100vh;display:grid;place-items:center;color:var(--ink-3);font-size:13px}
 .loginwrap{min-height:100vh;display:grid;place-items:center;padding:20px}
 .loginbox{width:min(340px,100%);border:1px solid var(--line-2);background:var(--surface);padding:28px 26px;display:flex;flex-direction:column;gap:12px}
-.loginbrand{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:22px;letter-spacing:.03em}
+.loginbrand{font-family:'Montserrat',sans-serif;font-weight:600;font-size:22px;letter-spacing:.03em}
 .loginsub{font-size:12.5px;color:var(--ink-3);margin-bottom:6px}
 .loginbox .field label{display:block;font-size:11px;color:var(--ink-3);margin-bottom:4px}
 .loginbox .field input{width:100%;padding:8px 9px;font-size:13px;background:var(--panel);border:1px solid var(--line-2);color:var(--ink)}
@@ -73,7 +73,7 @@ input,select,textarea{font:inherit;color:inherit}
 .loginfoot{font-size:10.5px;color:var(--ink-4);text-align:center;margin-top:4px}
 
 .topbar{display:flex;align-items:center;gap:13px;padding:11px 16px;border-bottom:1px solid var(--line-2);position:relative}
-.brand{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:18px;letter-spacing:.03em;color:var(--ink);padding:0}
+.brand{font-family:'Montserrat',sans-serif;font-weight:600;font-size:18px;letter-spacing:.03em;color:var(--ink);padding:0}
 .brand:hover{color:var(--accent)}
 .crumb{font-size:12px;color:var(--ink-3)}
 .tabs{display:flex;gap:1px;margin-left:auto}
@@ -82,7 +82,7 @@ input,select,textarea{font:inherit;color:inherit}
 .tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
 .iconbtn{width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line-2);color:var(--ink-3)}
 .iconbtn:hover{color:var(--ink);border-color:var(--ink-4)}
-.avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-deep));display:grid;place-items:center;color:#fff;font-size:10px;font-weight:600;font-family:"Barlow Condensed",sans-serif}
+.avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-deep));display:grid;place-items:center;color:#fff;font-size:10px;font-weight:600;font-family:'Montserrat',sans-serif}
 .menu{position:absolute;right:16px;top:46px;background:var(--surface);border:1px solid var(--line-2);box-shadow:var(--shadow);z-index:30;min-width:210px}
 .menu button{display:block;width:100%;text-align:left;font-size:12.5px;padding:8px 12px}
 .menu button:hover{background:var(--panel)}
@@ -103,7 +103,7 @@ input,select,textarea{font:inherit;color:inherit}
 .seg button{font-size:11px;padding:5px 10px;color:var(--ink-3)}
 .seg button+button{border-left:1px solid var(--line-2)}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
-.btn{display:inline-flex;align-items:center;gap:6px;font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:13px;padding:6px 12px;border:1px solid var(--line-2);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:'Montserrat',sans-serif;font-weight:600;font-size:13px;padding:6px 12px;border:1px solid var(--line-2);white-space:nowrap}
 .btn:hover{border-color:var(--ink-4)}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn-primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
@@ -123,7 +123,7 @@ input,select,textarea{font:inherit;color:inherit}
   .stat:nth-child(-n+2){border-bottom:1px solid var(--line)}
   .dform{grid-template-columns:1fr}
 }
-.stat .v{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:18px;margin-top:1px}
+.stat .v{font-family:'Montserrat',sans-serif;font-weight:600;font-size:18px;margin-top:1px}
 .bar{height:5px;background:var(--panel-2);margin-top:6px;position:relative;overflow:hidden}
 .bar i{position:absolute;inset:0 auto 0 0;background:var(--accent)}
 .bar.warn i{background:#b9863f}
@@ -183,7 +183,7 @@ input,select,textarea{font:inherit;color:inherit}
 .ed:hover{border-bottom-color:var(--ink-4);background:var(--panel-2)}
 .ed:empty::before{content:"—";color:var(--ink-4)}
 .ed-input{width:100%;min-width:60px;padding:2px 4px;font:inherit;font-size:12px;background:var(--surface);border:1px solid var(--accent);color:var(--ink)}
-.grouphd .ed{font:inherit;font-family:"Barlow Condensed",sans-serif}
+.grouphd .ed{font:inherit;font-family:'Montserrat',sans-serif}
 
 /* cards */
 .cards{padding:6px 0}
@@ -238,7 +238,7 @@ input,select,textarea{font:inherit;color:inherit}
 .plabels span.on{color:var(--ink-2)}
 
 .selbar{position:sticky;bottom:0;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--accent);color:var(--accent-ink);z-index:5;flex-wrap:wrap}
-.selbar b{font-family:"Barlow Condensed",sans-serif;font-size:15px}
+.selbar b{font-family:'Montserrat',sans-serif;font-size:15px}
 .selbar .btn{border-color:rgba(255,255,255,.4);color:var(--accent-ink)}
 .selbar .btn-white{background:var(--accent-ink);border-color:var(--accent-ink);color:var(--accent)}
 .selbar button.link{margin-left:auto;font-size:12px;text-decoration:underline;opacity:.9}
@@ -256,13 +256,13 @@ input,select,textarea{font:inherit;color:inherit}
 .polist{display:flex;flex-direction:column;gap:10px}
 .pocard{border:1px solid var(--line-2);padding:12px 14px}
 .pocard .poh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.pocard .poh b{font-family:"Barlow Condensed",sans-serif;font-size:15px}
+.pocard .poh b{font-family:'Montserrat',sans-serif;font-size:15px}
 .pocard .poh .st{font-size:11px;color:var(--ink-3);margin-left:auto}
 .pocard ul{margin:8px 0 0;padding:0;list-style:none;font-size:12px;color:var(--ink-2)}
 .pocard li{display:flex;justify-content:space-between;padding:2px 0;gap:10px}
 .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .vcard{border:1px solid var(--line-2);padding:12px 13px}
-.vcard b{font-family:"Barlow Condensed",sans-serif;font-size:15px}
+.vcard b{font-family:'Montserrat',sans-serif;font-size:15px}
 .vcard .m{font-size:11.5px;color:var(--ink-3);margin-top:3px}
 
 /* Màn danh sách dự án: tiêu đề dính đầu trang, nút Đăng xuất ghim đáy — danh sách dài vẫn thấy cả hai.
@@ -279,7 +279,7 @@ input,select,textarea{font:inherit;color:inherit}
 .prjcard{border:1px solid var(--line-2);background:var(--surface);padding:18px 16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;font:inherit;color:inherit}
 .prjcard:hover{border-color:var(--accent)}
 .prjcard.picked{border-color:var(--accent);background:var(--panel)}
-.prjcard b{font-family:"Barlow Condensed",sans-serif;font-size:16px}
+.prjcard b{font-family:'Montserrat',sans-serif;font-size:16px}
 .prjcard .m{font-size:11.5px;color:var(--ink-3)}
 .prjcard-new{align-items:center;justify-content:center;color:var(--accent);font-weight:600;border-style:dashed}
 
@@ -288,7 +288,7 @@ input,select,textarea{font:inherit;color:inherit}
 .dhead .bc{font-size:12px;color:var(--ink-3)}
 .dhead .bc a{color:var(--accent);cursor:pointer}
 .dhead .bc a:hover{text-decoration:underline}
-.dhead .dcode{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:16px}
+.dhead .dcode{font-family:'Montserrat',sans-serif;font-weight:600;font-size:16px}
 .dhead .statustag{display:inline-flex;align-items:center;font-size:10px;padding:3px 8px;border:1px solid var(--line-2);color:var(--ink-2)}
 .dnav{margin-left:auto;display:flex;gap:4px}
 .dnav button{font-size:11.5px;color:var(--ink-3);padding:5px 10px;border:1px solid var(--line-2)}
@@ -301,7 +301,7 @@ input,select,textarea{font:inherit;color:inherit}
 .dhero{width:100%;height:230px;position:relative;overflow:hidden;cursor:pointer;background:var(--panel)}
 .dhero img{width:100%;height:100%;object-fit:cover;display:block}
 .dhero.ph{display:grid;place-items:center}
-.dhero .phlabel{font-family:"Barlow Condensed",sans-serif;font-size:13px;color:var(--ink-4)}
+.dhero .phlabel{font-family:'Montserrat',sans-serif;font-size:13px;color:var(--ink-4)}
 .dhero .hint{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;font-size:10px;text-align:center;color:#fff;background:color-mix(in srgb,#000 55%,transparent);opacity:0;transition:opacity .12s}
 .dhero:hover .hint{opacity:1}
 .posbtn{position:absolute;top:6px;right:6px;width:24px;height:24px;display:grid;place-items:center;background:color-mix(in srgb,#000 55%,transparent);color:#fff;font-size:12px;z-index:2;border-radius:2px}
@@ -321,7 +321,7 @@ input,select,textarea{font:inherit;color:inherit}
 .imghint{font-size:10px;color:var(--ink-4);line-height:1.35;margin-top:8px}
 .drule{height:1px;background:var(--line);margin:14px 0}
 .dright{flex:1;min-width:0;padding:16px}
-.dtitle{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:26px;line-height:1.08;text-wrap:balance}
+.dtitle{font-family:'Montserrat',sans-serif;font-weight:600;font-size:26px;line-height:1.08;text-wrap:balance}
 .dsub{font-size:12.5px;color:var(--ink-3);margin-bottom:6px}
 .dsec{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin:15px 0 7px}
 .dsec.mut{color:var(--ink-3)}
@@ -1365,12 +1365,12 @@ function cardsView(){
         <div class="thumb ${img?"":"slot bp"}">${img?`<img src="${img}" alt="" style="object-position:${itemImgPos(it,img)}">`:`<i class="mk tl"></i><i class="mk tr"></i><i class="mk bl"></i><i class="mk br"></i>`}</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:10.5px;color:var(--accent)">${it.code}</span>
-            <span style="font-family:'Barlow Condensed';font-weight:600;font-size:15px" class="cell-ell">${esc(it.name)}</span></div>
+            <span style="font-family:'Montserrat';font-weight:600;font-size:15px" class="cell-ell">${esc(it.name)}</span></div>
           <div style="font-size:11.5px;color:var(--ink-3)" class="cell-ell">${[it.vendor,it.model,it.dims].filter(Boolean).map(esc).join(" · ")||"—"}</div>
           <div class="tags"><span class="tag ${it.status==="Ordered"?"accent":""}">${STATUS_LABEL[it.status]}</span>${it.lead?`<span class="tag">${it.lead} tuần</span>`:""}${it.uom?`<span class="tag">${esc(it.uom)}</span>`:""}</div>
         </div>
         <div style="text-align:right;flex:none">
-          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:14px" class="tnum">${t==null?"—":money(t)}</div>
+          <div style="font-family:'Montserrat';font-weight:600;font-size:14px" class="tnum">${t==null?"—":money(t)}</div>
           <div style="font-size:11px;color:var(--ink-4)" class="tnum">${it.qty} × ${it.unit==null?"—":num(it.unit)}</div>
         </div>
       </div>`;
@@ -1956,7 +1956,7 @@ function openMaterialLibrary(){
         const img = m.images && m.images[0];
         return `<div class="roomrow" style="grid-template-columns:36px 1fr 90px 52px">
           <span class="slot ${img?"":"bp"}" style="width:32px;height:32px;overflow:hidden;display:block">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:cover;object-position:${imgPos(m,img)};display:block">`:""}</span>
-          <span><b style="font-family:'Barlow Condensed';font-size:13px">${esc(m.code)}</b>
+          <span><b style="font-family:'Montserrat';font-size:13px">${esc(m.code)}</b>
             <div style="font-size:11px;color:var(--ink-3)" class="cell-ell">${esc(m.name)}${m.vendor?" · "+esc(m.vendor):""}${m.model?" · Mã NCC: "+esc(m.model):""}</div></span>
           <span class="tnum" style="font-size:11.5px;text-align:right">${money(m.unit)}</span>
           <span class="rx"><button data-medit="${esc(m.code)}" title="Sửa">✎</button><button class="del" data-mdel="${esc(m.code)}" title="Xoá">×</button></span>
