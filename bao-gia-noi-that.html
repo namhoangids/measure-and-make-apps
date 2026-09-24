@@ -580,7 +580,7 @@
        · trang 2+ = mỗi hạng mục (q.sections[i]) một trang riêng, đúng thứ tự bảng tổng hợp
      Header (logo + measure&make + số/ngày) lặp lại ở đầu MỌI trang — xem @media print bên dưới. */
   .print-doc { --print-hair: 0.5px; --print-orange: #F15A22; --print-ink: #22333B; --print-dash: rgba(241,90,34,.5);
-    font-family: 'Montserrat', 'Segoe UI', sans-serif; max-width: 100%; margin: 20px 0 40px; color: var(--print-ink); font-size: 12px; line-height: 1.5; overflow-x: auto; }
+    font-family: 'Montserrat', 'Segoe UI', sans-serif; max-width: 100%; margin: 20px 0 40px; color: var(--print-ink); font-size: 13px; line-height: 1.5; overflow-x: auto; }
   /* Cả tài liệu nằm trong 1 <table>: <thead> chính là HEADER LẶP LẠI ở đầu mọi trang giấy khi in
      (trình duyệt tự lặp thead qua các trang). Đã thử position:fixed + top âm trước đó và Chrome
      đẩy header xuống ĐÁY trang — đo bằng bản in PDF thật, đừng quay lại cách đó. */
@@ -593,66 +593,67 @@
   .print-runhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: var(--print-hair) solid var(--print-orange); padding-bottom: 9px; margin-bottom: 34px; background: #ffffff; }
   .print-brand { display: flex; align-items: center; gap: 10px; }
   .print-logo { height: 32px; width: auto; display: block; }
-  .print-brand-word { font-weight: 600; font-size: 14.5px; line-height: 1.25; color: var(--print-ink); }
+  .print-brand-word { font-weight: 600; font-size: 15px; line-height: 1.25; color: var(--print-ink); }
   .print-brand-word span { color: #8C8178; font-weight: 400; }
-  .print-doc-meta { text-align: right; font-size: 11px; line-height: 1.6; color: #62707A; }
+  .print-doc-meta { text-align: right; font-size: 12px; line-height: 1.6; color: #62707A; }
   /* Thông tin báo giá: CĐT + Địa chỉ bên trái, Trạng thái + Cập nhật bên phải (yêu cầu của Nam). */
-  .print-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; font-size: 12px; margin-bottom: 18px; }
+  .print-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; font-size: 13px; margin-bottom: 18px; }
   .print-meta .col-right { text-align: right; }
   .print-meta .lbl { color: #8C8178; }
-  .print-title { font-size: 17px; font-weight: 700; text-align: center; margin: 0 0 4px; letter-spacing: .02em; text-transform: uppercase; color: var(--print-ink); }
-  .print-subtitle { text-align: center; font-size: 12px; color: #62707A; margin-bottom: 16px; }
-  .print-intro { font-size: 12px; margin-bottom: 14px; }
+  .print-title { font-size: 18px; font-weight: 700; text-align: center; margin: 0 0 4px; letter-spacing: .02em; text-transform: uppercase; color: var(--print-ink); }
+  .print-subtitle { text-align: center; font-size: 13px; color: #62707A; margin-bottom: 16px; }
+  .print-intro { font-size: 13px; margin-bottom: 14px; }
 
   /* Khối TỔNG GIÁ TRỊ DỰ TOÁN ở đầu trang 1: con số tổng lớn + Tạm tính + VAT + Bằng chữ. */
   .print-total-block { border-top: var(--print-hair) solid var(--print-orange); border-bottom: var(--print-hair) solid var(--print-orange); padding: 12px 4px 10px; margin-bottom: 16px; }
-  .print-total-block .tb-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #62707A; margin-bottom: 4px; }
+  .print-total-block .tb-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #62707A; margin-bottom: 4px; }
   .print-total-block .tb-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
   .print-total-block .tb-grand { font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--print-orange); font-variant-numeric: tabular-nums; }
-  .print-total-block .tb-parts { min-width: 230px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .print-total-block .tb-parts { min-width: 250px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .print-total-block .tb-parts div { display: flex; justify-content: space-between; gap: 24px; padding: 3px 0; }
   .print-total-block .tb-parts span:first-child { color: #62707A; }
   .print-total-block .tb-parts b { font-weight: 700; }
-  .print-total-block .tb-words { margin-top: 12px; font-size: 11.5px; font-style: italic; }
+  .print-total-block .tb-words { margin-top: 12px; font-size: 12.5px; font-style: italic; }
   .print-total-block .tb-words b { font-style: normal; font-weight: 600; }
 
   /* Tiêu đề trang hạng mục: ô chữ cái cam (A/B/C… đúng thứ tự ở bảng tổng hợp) + tên in hoa. */
   .print-block-title { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
-  .print-letter { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; background: var(--print-orange); color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
-  .print-block-title h2 { font-family: inherit; margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; text-transform: uppercase; color: var(--print-ink); }
+  .print-letter { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 6px; background: var(--print-orange); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  .print-block-title h2 { font-family: inherit; margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .01em; text-transform: uppercase; color: var(--print-ink); }
   /* Ghi chú cố định — nội dung giống nhau ở mọi báo giá, sửa ở hằng PRINT_FIXED_NOTES trong JS. */
-  .print-notes { margin-top: 14px; font-size: 10.5px; line-height: 1.45; }
+  .print-notes { margin-top: 14px; font-size: 12px; line-height: 1.45; }
   .print-notes .nt-title { font-weight: 700; margin-bottom: 3px; }
   .print-notes .nt-item { display: flex; gap: 8px; margin-bottom: 2px; }
   .print-notes .nt-no { flex: 0 0 26px; }
   .print-notes ul { margin: 2px 0 4px; padding-left: 16px; }
   .print-notes li { margin-bottom: 1px; }
-  .print-summary-note { font-size: 11px; font-style: italic; color: #62707A; margin-top: 12px; white-space: pre-wrap; }
+  .print-summary-note { font-size: 12px; font-style: italic; color: #62707A; margin-top: 12px; white-space: pre-wrap; }
   .print-section { margin-bottom: 8px; }
-  .print-section-note { font-size: 11px; font-style: italic; color: #8C8178; margin: 0 0 30px; padding-left: 34px; }
-  .print-group-title { font-size: 12.5px; font-weight: 700; margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--print-orange); color: var(--print-ink); }
+  .print-section-note { font-size: 12px; font-style: italic; color: #8C8178; margin: 0 0 30px; padding-left: 36px; }
+  .print-group-title { font-size: 13.5px; font-weight: 700; margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--print-orange); color: var(--print-ink); }
   .print-group-title:not(:first-child) { margin-top: 22px; }
 
-  .print-item-table, .print-summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; margin-bottom: 6px; }
+  .print-item-table, .print-summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; margin-bottom: 6px; }
   .print-item-table th, .print-item-table td, .print-summary-table th, .print-summary-table td { border: none; border-right: 1px dashed var(--print-dash); padding: 9px 10px; vertical-align: top; overflow-wrap: break-word; }
   .print-summary-table th, .print-summary-table td { padding: 4px 10px; }
+  .print-item-table th:first-child, .print-item-table td:first-child { padding-left: 4px; padding-right: 4px; } /* cột STT hẹp */
   .print-item-table th:last-child, .print-item-table td:last-child, .print-summary-table th:last-child, .print-summary-table td:last-child { border-right: none; }
-  .print-item-table th, .print-summary-table th { background: transparent; text-align: left; font-size: 9.6px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #62707A; border-bottom: var(--print-hair) solid var(--print-orange); padding-bottom: 8px; }
+  .print-item-table th, .print-summary-table th { white-space: normal; background: transparent; text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #62707A; border-bottom: var(--print-hair) solid var(--print-orange); padding-bottom: 8px; }
   .print-item-table tbody tr:nth-child(even), .print-summary-table tbody tr:nth-child(even) { background: #F7F6F3; }
   .print-summary-table tbody tr:last-child td { border-bottom: var(--print-hair) solid var(--print-orange); }
   .print-item-table td.num, .print-summary-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .print-item-table th.num, .print-summary-table th.num { text-align: right; }
   .print-item-table td.center, .print-item-table th.center, .print-summary-table td.center, .print-summary-table th.center { text-align: center; }
-  .print-item-table td.name-cell b { font-size: 12.3px; font-weight: 600; }
-  .print-item-table td.name-cell .detail-line { display: block; color: #8C8178; font-size: 10.5px; margin-top: 3px; line-height: 1.45; }
-  /* 3 tầng số cộng, tăng dần độ nổi: số trong dòng → "Cộng:" (đậm, CÙNG cỡ cột Thành tiền = 12px)
-     → "Cộng hạng mục X:" (to hơn 1 cỡ = 14px, đậm, cam, có đường kẻ cam phía trên). */
-  .print-group-total { text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 10px 0 0; color: var(--print-ink); }
-  .print-cat-total { text-align: right; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; border-top: var(--print-hair) solid var(--print-orange); margin-top: 20px; padding-top: 12px; color: var(--print-orange); }
-  .print-signoff { display: flex; justify-content: space-between; margin-top: 16px; text-align: center; font-size: 11.5px; color: var(--print-ink); }
+  .print-item-table td.name-cell b { font-size: 13px; font-weight: 600; }
+  .print-item-table td.name-cell .detail-line { display: block; color: #8C8178; font-size: 12px; margin-top: 3px; line-height: 1.45; }
+  /* 3 tầng số cộng, tăng dần độ nổi: số trong dòng → "Cộng:" (đậm, CÙNG cỡ cột Thành tiền = 13px)
+     → "Cộng hạng mục X:" (to hơn 1 cỡ = 15px, đậm, cam, có đường kẻ cam phía trên). */
+  .print-group-total { text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 10px 0 0; color: var(--print-ink); }
+  .print-cat-total { text-align: right; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; border-top: var(--print-hair) solid var(--print-orange); margin-top: 20px; padding-top: 12px; color: var(--print-orange); }
+  .print-signoff { display: flex; justify-content: space-between; margin-top: 16px; text-align: center; font-size: 12.5px; color: var(--print-ink); }
   .print-signoff .sign-block { width: 45%; }
   .print-signoff .sign-title { font-weight: 700; margin-bottom: 2px; }
-  .print-signoff .sign-sub { color: #8C8178; font-size: 10px; margin-bottom: 30px; }
+  .print-signoff .sign-sub { color: #8C8178; font-size: 11px; margin-bottom: 30px; }
 
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
@@ -1286,20 +1287,69 @@
     return colWidths[k] || DEFAULT_COL_WIDTHS[k];
   }
   // Khổ giấy A4 hẹp hơn bảng nhập liệu nhiều, nên tỉ lệ cột chỉ ĐI THEO độ rộng đã kéo trong
-  // khoảng an toàn [min, max] dưới đây. Không có sàn thì cột Đơn giá / Thành tiền bị bóp lại,
-  // số tiền hàng tỉ (nowrap) tràn ra ngoài và dính vào nhau — đã dính thật khi soi bản in.
-  // Cột Tên hạng mục ăn nốt phần % còn thừa.
-  var PRINT_COL_PCT_RANGE = { stt: [5.5, 6.5], size: [9, 14], unit: [5, 8], qty: [6, 9], price: [12, 16], amount: [12, 16], note: [8, 13] };
-  function printColgroupHtml() {
+  // khoảng an toàn [min, max] dưới đây. Riêng các cột SỐ (KL / Đơn giá / Thành tiền) còn phải đủ chỗ cho
+  // số dài nhất trong bảng — số tiền hàng tỉ là nowrap nên nếu ô hẹp hơn số, chữ số tràn ra ngoài ô
+  // và dính sang cột bên cạnh (Nam gặp lại lần 2, 2026-09-24): vì thế bề rộng cột số = max(khoảng an
+  // toàn, độ dài số dài nhất đo theo cỡ chữ). Cột Tên hạng mục ăn nốt phần % còn thừa.
+  var PRINT_COL_PCT_RANGE = { stt: [5.5, 6.5], size: [11, 14], unit: [5, 8], qty: [6, 9], price: [12, 16], amount: [12, 16], note: [8, 13] };
+  var PRINT_PAGE_CONTENT_PX = 703;  // A4 210mm − 2 × 12mm lề = 186mm ≈ 703px
+  var PRINT_NUM_FONT_PX = 13;       // phải khớp font-size của .print-item-table (CSS bản in)
+  var PRINT_CELL_EXTRA_PX = 26;     // padding trái/phải 2 × 10 + đường kẻ dọc 1 + dự phòng
+  // Chữ số Montserrat khi bật tabular-nums rộng ≈ 0.68em; dấu chấm/phẩy/khoảng trắng ≈ 0.27em.
+  function printNumWidthPx(str, fontPx, extra) {
+    var digits = 0, others = 0;
+    String(str).split("").forEach(function (ch) { if (ch >= "0" && ch <= "9") digits++; else others++; });
+    return digits * 0.68 * fontPx + others * 0.27 * fontPx + (extra == null ? PRINT_CELL_EXTRA_PX : extra);
+  }
+  // Cột chữ (ĐVT, Kích thước, Ghi chú) không được co hẹp hơn TỪ dài nhất trong cột, nếu không chữ bị
+  // bẻ giữa từ ("chiế/c"). Chữ thường tiếng Việt Montserrat rộng ≈ 0.64em/ký tự.
+  function printWordWidthPx(text, fontPx) {
+    var longest = 0;
+    String(text == null ? "" : text).split(/\s+/).forEach(function (w) { longest = Math.max(longest, w.length); });
+    return longest ? longest * 0.64 * fontPx + PRINT_CELL_EXTRA_PX : 0;
+  }
+  // Từ dài nhất trong tiêu đề mỗi cột (chữ in hoa đậm 10.5px, cách chữ .06em ≈ 0.92em/ký tự) — tiêu đề
+  // không được bẻ giữa từ ("ST/T"). Cột STT có padding hẹp hơn (4px, xem CSS) nên phần cộng thêm ít hơn.
+  var PRINT_HEAD_WORD = { stt: "STT", size: "THƯỚC", unit: "ĐVT", qty: "KL", price: "ĐƠN", amount: "THÀNH", note: "CHÚ" };
+  function printHeadWidthPx(k) {
+    return PRINT_HEAD_WORD[k].length * 0.92 * 10.5 + (k === "stt" ? 11 : PRINT_CELL_EXTRA_PX);
+  }
+  function printColgroupHtml(items) {
     var total = PRINT_COL_KEYS.reduce(function (s, k) { return s + printColWidth(k); }, 0);
-    var pct = {}, used = 0;
+    var pct = {}, minPct = {};
+    var need = {};
+    Object.keys(PRINT_HEAD_WORD).forEach(function (k) { need[k] = printHeadWidthPx(k); });
+    (items || []).forEach(function (it) {
+      need.unit = Math.max(need.unit, printWordWidthPx(it.unit, PRINT_NUM_FONT_PX));
+      need.size = Math.max(need.size, printWordWidthPx([it.sizeD, it.sizeR, it.sizeC].join(" "), PRINT_NUM_FONT_PX));
+      need.note = Math.max(need.note, printWordWidthPx(it.note, PRINT_NUM_FONT_PX));
+      need.qty = Math.max(need.qty, printNumWidthPx(fmtQty(it.qty), PRINT_NUM_FONT_PX));
+      need.price = Math.max(need.price, printNumWidthPx(moneyPlain(it.price), PRINT_NUM_FONT_PX));
+      need.amount = Math.max(need.amount, printNumWidthPx(moneyPlain(itemAmount(it)), PRINT_NUM_FONT_PX));
+    });
     PRINT_COL_KEYS.forEach(function (k) {
       if (k === "nameDetail") return;
       var raw = (printColWidth(k) / total) * 100;
       var range = PRINT_COL_PCT_RANGE[k] || [0, 100];
       pct[k] = Math.min(Math.max(raw, range[0]), range[1]);
-      used += pct[k];
+      minPct[k] = range[0];
+      if (need[k]) {
+        var needPct = need[k] / PRINT_PAGE_CONTENT_PX * 100;
+        pct[k] = Math.max(pct[k], needPct);
+        minPct[k] = Math.max(minPct[k], needPct);   // cột không bao giờ bị ép nhỏ hơn số / từ dài nhất của nó
+      }
     });
+    // Cột Tên hạng mục giữ tối thiểu 26%; thiếu thì co dần các cột chữ (kích thước, ghi chú, ĐVT, STT)
+    // về mức sàn của chúng — cột số không co.
+    var NAME_MIN = 26;
+    var used = PRINT_COL_KEYS.reduce(function (s, k) { return s + (k === "nameDetail" ? 0 : pct[k]); }, 0);
+    var over = used - (100 - NAME_MIN);
+    ["size", "note", "unit", "stt"].forEach(function (k) {
+      if (over <= 0) return;
+      var cut = Math.min(over, pct[k] - minPct[k]);
+      pct[k] -= cut; over -= cut;
+    });
+    used = PRINT_COL_KEYS.reduce(function (s, k) { return s + (k === "nameDetail" ? 0 : pct[k]); }, 0);
     pct.nameDetail = Math.max(100 - used, 16);
     return "<colgroup>" + PRINT_COL_KEYS.map(function (k) {
       return '<col style="width:' + pct[k].toFixed(2) + '%">';
@@ -3664,6 +3714,10 @@
       '</tr>';
     }).join("");
 
+    var sumNeedPct = q.sections.reduce(function (m, sec) {
+      return Math.max(m, printNumWidthPx(money(sectionTotal(sec)), PRINT_NUM_FONT_PX) / PRINT_PAGE_CONTENT_PX * 100);
+    }, 22);
+
     var totalBlockHtml =
       '<div class="print-total-block">' +
         '<div class="tb-eyebrow">Tổng giá trị dự toán</div>' +
@@ -3695,7 +3749,7 @@
         }).join("");
         return (g.name ? '<div class="print-group-title">' + toRoman(gIdx + 1) + '. ' + escapeHtml(g.name) + '</div>' : "") +
           '<table class="print-item-table">' +
-            printColgroupHtml() +
+            printColgroupHtml(g.items) +
             '<thead><tr>' +
               '<th class="center">STT</th><th>Tên hạng mục / Nội dung chi tiết</th>' +
               '<th class="center">Kích thước</th><th class="center">ĐVT</th><th class="center">KL</th>' +
@@ -3738,7 +3792,7 @@
           '<div class="print-intro">INDUST DESIGN trân trọng gửi dự toán thi công hoàn thiện công trình chi tiết như sau:</div>' +
           totalBlockHtml +
           '<table class="print-summary-table">' +
-            '<thead><tr><th class="center" style="width:7%;">STT</th><th>Hạng mục</th><th class="num" style="width:22%;">Giá trị (VNĐ)</th><th class="center" style="width:15%;">Ghi chú</th></tr></thead>' +
+            '<thead><tr><th class="center" style="width:7%;">STT</th><th>Hạng mục</th><th class="num" style="width:' + sumNeedPct.toFixed(1) + '%;">Giá trị (VNĐ)</th><th class="center" style="width:15%;">Ghi chú</th></tr></thead>' +
             '<tbody>' + summaryRows + '</tbody>' +
           '</table>' +
           (q.summaryNote ? '<div class="print-summary-note">' + escapeHtml(q.summaryNote) + '</div>' : "") +
