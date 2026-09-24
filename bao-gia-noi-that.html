@@ -33,6 +33,9 @@
     --shadow: 0 1px 2px rgba(34,51,59,.06), 0 6px 20px rgba(34,51,59,.05);
     --shadow-lift: 0 10px 34px rgba(34,51,59,.16);
     --radius: 10px;
+    --line-orange: rgba(241,90,34,.55);
+    --dash-orange: rgba(241,90,34,.4);
+    --zebra: #F7F6F3;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -62,6 +65,9 @@
       --neutral-pill: #26333A;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
       --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
+      --line-orange: rgba(255,122,69,.5);
+      --dash-orange: rgba(255,122,69,.35);
+      --zebra: #1F2A30;
     }
   }
 
@@ -91,6 +97,9 @@
     --neutral-pill: #26333A;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
     --shadow-lift: 0 10px 34px rgba(0,0,0,.5);
+    --line-orange: rgba(255,122,69,.5);
+    --dash-orange: rgba(255,122,69,.35);
+    --zebra: #1F2A30;
   }
 
   * { box-sizing: border-box; }
@@ -434,6 +443,38 @@
   .amount-words { font-size: 11.5px; font-style: italic; color: var(--ink-mute); line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-soft); }
 
   .status-select-wrap { margin-top: 16px; }
+
+  /* ---------- Màu trang soạn báo giá — theo bản in PDF ----------
+     Chỉ đổi màu: đường ngang cam mảnh, nét đứt cam giữa các cột, nền xen kẽ, chữ xanh than,
+     số tổng hạng mục màu cam, thanh cam bên trái tên phòng/nhóm. Không đổi cỡ chữ hay bố cục. */
+  :root { accent-color: var(--accent); }
+  .panel-head { border-bottom-color: var(--line-orange); }
+
+  .cat-block { background: var(--surface); border-color: var(--line-orange); }
+  .cat-head, .cat-note-row, .add-group-row { background: var(--surface); }
+  .cat-head-name .stt { color: var(--accent); }
+  .cat-total { color: var(--accent); }
+  .cat-note-row input { border-color: var(--dash-orange); }
+
+  .group-block { border-top-color: var(--line-orange); }
+  .group-head { background: var(--zebra); box-shadow: inset 3px 0 0 var(--accent); }
+  .group-head-name .roman { color: var(--accent); }
+  .group-head input.group-name-input { color: var(--ink); }
+  .group-total { color: var(--ink); }
+  .add-group-row button, .add-item-row button { color: var(--ink-soft); }
+
+  .item-table th { background: transparent; color: var(--ink-soft); border-bottom-color: var(--line-orange); border-right: 1px dashed var(--dash-orange); }
+  .item-table td { border-bottom-color: transparent; border-right: 1px dashed var(--dash-orange); }
+  .item-table th:last-child, .item-table td:last-child { border-right: none; }
+  .item-table tbody tr:nth-child(even) { background: var(--zebra); }
+  .item-table .col-stt { color: var(--ink-soft); }
+  .item-table th.col-stt { padding-left: 2px; padding-right: 2px; letter-spacing: 0; } /* chữ "STT" Montserrat rộng hơn Barlow, cột hẹp bị cắt */
+
+  .summary-table-wrap th { background: transparent; color: var(--ink-soft); border-bottom-color: var(--line-orange); }
+  .summary-table-wrap td { border-bottom-color: transparent; }
+  .summary-table-wrap tbody tr:nth-child(even) td { background: var(--zebra); }
+  .summary-table-wrap tr.summary-total td { background: transparent; color: var(--accent); border-top-color: var(--line-orange); }
+  .summary-row.total { color: var(--accent); }
 
   /* ---------- Toast ---------- */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: var(--paper); padding: 11px 20px; border-radius: 9px; font-size: 12.8px; font-weight: 500; box-shadow: var(--shadow-lift); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 50; }
