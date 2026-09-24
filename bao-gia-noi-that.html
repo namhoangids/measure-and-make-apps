@@ -2,7 +2,7 @@
 <title>M&amp;M Báo Giá Nội Thất</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Montserrat:wght@400;500;600;700;800&display=swap');
 
   /* Họ màu nền / viền / chữ lấy đúng theo app FF&E (bộ token Industry) để 2 app nhìn cùng một hệ.
      Trước đây bên này dùng tông kem ấm (#F2F1EC / #E7E2D5), FF&E dùng xám trung tính.
@@ -520,11 +520,18 @@
   /* Toàn bộ bản in dùng màu cố định (không theo var(--...) đổi theo theme sáng/tối của app) —
      đây là bản mô phỏng TỜ GIẤY TRẮNG sẽ in ra, nên luôn phải trông giống nhau bất kể app đang ở
      theme nào lúc xem trước.
+     BẢNG MÀU + FONT bản in (Nam duyệt bản nháp 2026-09-24, lấy từ tài liệu review của Nam):
+       cam #F15A22 (điểm nhấn + MỌI đường kẻ) · chữ than-xanh #22333B (không dùng đen tuyệt đối)
+       xám ấm #8C8178 / #62707A (chữ phụ) · nền vằn #F7F6F3 · font Montserrat.
+     ĐƯỜNG KẺ: mọi đường ngang = cam, dày --print-hair (0.5px, mảnh nhất trình duyệt còn vẽ khi in A4);
+     kẻ dọc giữa các cột = nét đứt cam. KHÔNG có viền bao quanh bảng, KHÔNG kẻ ngang giữa các dòng —
+     phân dòng bằng nền vằn.
      CẤU TRÚC (Nam chốt 2026-09-23): mỗi `.print-page` = ĐÚNG 1 tờ giấy A4.
-       · trang 1  = thông tin CĐT/địa chỉ/trạng thái/cập nhật + bảng TỔNG GIÁ TRỊ DỰ TOÁN + ghi chú + ký
+       · trang 1  = khối TỔNG GIÁ TRỊ DỰ TOÁN (tạm tính + VAT + bằng chữ) → bảng hạng mục → ghi chú → ký
        · trang 2+ = mỗi hạng mục (q.sections[i]) một trang riêng, đúng thứ tự bảng tổng hợp
      Header (logo + measure&make + số/ngày) lặp lại ở đầu MỌI trang — xem @media print bên dưới. */
-  .print-doc { max-width: 100%; margin: 20px 0 40px; color: #2A2A2E; font-size: 12px; line-height: 1.5; overflow-x: auto; }
+  .print-doc { --print-hair: 0.5px; --print-orange: #F15A22; --print-ink: #22333B; --print-dash: rgba(241,90,34,.5);
+    font-family: 'Montserrat', 'Segoe UI', sans-serif; max-width: 100%; margin: 20px 0 40px; color: var(--print-ink); font-size: 12px; line-height: 1.5; overflow-x: auto; }
   /* Cả tài liệu nằm trong 1 <table>: <thead> chính là HEADER LẶP LẠI ở đầu mọi trang giấy khi in
      (trình duyệt tự lặp thead qua các trang). Đã thử position:fixed + top âm trước đó và Chrome
      đẩy header xuống ĐÁY trang — đo bằng bản in PDF thật, đừng quay lại cách đó. */
@@ -534,50 +541,70 @@
      nó ăn cả vào ô của bảng bọc này và vẽ 1 gạch mờ ở cuối mỗi trang in (đã thấy trong PDF thật). */
   .print-sheet > thead > tr > td, .print-sheet > tbody > tr > td { padding: 0; border: none; background: transparent; vertical-align: top; }
   .print-page { width: 210mm; max-width: 100%; min-height: 297mm; margin: 0 auto 20px; background: #ffffff; border: 1px solid #DAD5C7; border-radius: 8px; box-shadow: 0 1px 2px rgba(20,24,28,.06), 0 6px 20px rgba(20,24,28,.05); padding: 14mm 12mm 16mm; }
-  .print-runhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 2px solid #2A2A2E; padding-bottom: 8px; margin-bottom: 12px; background: #ffffff; }
+  .print-runhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: var(--print-hair) solid var(--print-orange); padding-bottom: 9px; margin-bottom: 34px; background: #ffffff; }
   .print-brand { display: flex; align-items: center; gap: 10px; }
-  .print-logo { height: 34px; width: auto; display: block; }
-  .print-brand-word { font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: .01em; line-height: 1.25; color: #2A2A2E; }
-  .print-brand-word span { color: #726D62; font-weight: 400; }
-  .print-doc-meta { text-align: right; font-size: 11.5px; color: #4C4A45; }
+  .print-logo { height: 32px; width: auto; display: block; }
+  .print-brand-word { font-weight: 600; font-size: 14.5px; line-height: 1.25; color: var(--print-ink); }
+  .print-brand-word span { color: #8C8178; font-weight: 400; }
+  .print-doc-meta { text-align: right; font-size: 11px; line-height: 1.6; color: #62707A; }
   /* Thông tin báo giá: CĐT + Địa chỉ bên trái, Trạng thái + Cập nhật bên phải (yêu cầu của Nam). */
-  .print-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; font-size: 12px; margin-bottom: 10px; }
+  .print-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; font-size: 12px; margin-bottom: 18px; }
   .print-meta .col-right { text-align: right; }
-  .print-meta .lbl { color: #726D62; }
-  .print-title { font-family: 'Barlow', sans-serif; font-size: 19px; font-weight: 700; text-align: center; margin: 8px 0 2px; letter-spacing: .02em; text-transform: uppercase; color: #2A2A2E; }
-  .print-subtitle { text-align: center; font-size: 12.5px; color: #4C4A45; margin-bottom: 14px; }
-  .print-intro { font-size: 12px; margin-bottom: 10px; }
-  .print-block-title { font-family: 'Barlow', sans-serif; font-size: 14px; font-weight: 700; text-align: center; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 6px; color: #2A2A2E; }
+  .print-meta .lbl { color: #8C8178; }
+  .print-title { font-size: 17px; font-weight: 700; text-align: center; margin: 0 0 4px; letter-spacing: .02em; text-transform: uppercase; color: var(--print-ink); }
+  .print-subtitle { text-align: center; font-size: 12px; color: #62707A; margin-bottom: 16px; }
+  .print-intro { font-size: 12px; margin-bottom: 14px; }
+
+  /* Khối TỔNG GIÁ TRỊ DỰ TOÁN ở đầu trang 1: con số tổng lớn + Tạm tính + VAT + Bằng chữ. */
+  .print-total-block { border-top: var(--print-hair) solid var(--print-orange); border-bottom: var(--print-hair) solid var(--print-orange); padding: 12px 4px 10px; margin-bottom: 16px; }
+  .print-total-block .tb-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #62707A; margin-bottom: 4px; }
+  .print-total-block .tb-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .print-total-block .tb-grand { font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--print-orange); font-variant-numeric: tabular-nums; }
+  .print-total-block .tb-parts { min-width: 230px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .print-total-block .tb-parts div { display: flex; justify-content: space-between; gap: 24px; padding: 3px 0; }
+  .print-total-block .tb-parts div + div { border-top: var(--print-hair) solid var(--print-orange); }
+  .print-total-block .tb-parts span:first-child { color: #62707A; }
+  .print-total-block .tb-parts b { font-weight: 700; }
+  .print-total-block .tb-words { margin-top: 12px; padding-top: 10px; border-top: var(--print-hair) solid var(--print-orange); font-size: 11.5px; font-style: italic; }
+  .print-total-block .tb-words b { font-style: normal; font-weight: 600; }
+
+  /* Tiêu đề trang hạng mục: ô chữ cái cam (A/B/C… đúng thứ tự ở bảng tổng hợp) + tên in hoa. */
+  .print-block-title { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  .print-letter { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; background: var(--print-orange); color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  .print-block-title h2 { font-family: inherit; margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; text-transform: uppercase; color: var(--print-ink); }
   /* Ghi chú cố định — nội dung giống nhau ở mọi báo giá, sửa ở hằng PRINT_FIXED_NOTES trong JS. */
-  .print-notes { margin-top: 16px; font-size: 11.3px; }
+  .print-notes { margin-top: 14px; font-size: 10.5px; line-height: 1.45; }
   .print-notes .nt-title { font-weight: 700; margin-bottom: 3px; }
   .print-notes .nt-item { display: flex; gap: 8px; margin-bottom: 2px; }
   .print-notes .nt-no { flex: 0 0 26px; }
   .print-notes ul { margin: 2px 0 4px; padding-left: 16px; }
   .print-notes li { margin-bottom: 1px; }
-  .print-summary-note { font-size: 11.3px; font-style: italic; color: #4C4A45; margin-top: 12px; white-space: pre-wrap; }
+  .print-summary-note { font-size: 11px; font-style: italic; color: #62707A; margin-top: 12px; white-space: pre-wrap; }
   .print-section { margin-bottom: 8px; }
-  .print-section-title { font-size: 14px; font-weight: 700; margin: 18px 0 3px; color: #2A2A2E; }
-  .print-section-note { font-size: 11px; color: #726D62; font-style: italic; margin-bottom: 6px; }
-  .print-group-title { font-size: 12.3px; font-weight: 600; margin: 10px 0 4px; color: #4C4A45; }
-  .print-item-table, .print-summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 11.2px; margin-bottom: 6px; }
-  .print-item-table th, .print-item-table td, .print-summary-table th, .print-summary-table td { border: 1px solid #DAD5C7; padding: 5px 6px; vertical-align: top; overflow-wrap: break-word; }
-  .print-item-table th, .print-summary-table th { background: #EDE9DC; font-weight: 600; text-align: left; color: #2A2A2E; }
-  .print-item-table td, .print-summary-table td { color: #2A2A2E; }
+  .print-section-note { font-size: 11px; font-style: italic; color: #8C8178; margin: 0 0 30px; padding-left: 34px; }
+  .print-group-title { font-size: 12.5px; font-weight: 700; margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--print-orange); color: var(--print-ink); }
+  .print-group-title:not(:first-child) { margin-top: 22px; }
+
+  .print-item-table, .print-summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; margin-bottom: 6px; }
+  .print-item-table th, .print-item-table td, .print-summary-table th, .print-summary-table td { border: none; border-right: 1px dashed var(--print-dash); padding: 9px 10px; vertical-align: top; overflow-wrap: break-word; }
+  .print-summary-table th, .print-summary-table td { padding: 4px 10px; }
+  .print-item-table th:last-child, .print-item-table td:last-child, .print-summary-table th:last-child, .print-summary-table td:last-child { border-right: none; }
+  .print-item-table th, .print-summary-table th { background: transparent; text-align: left; font-size: 9.6px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #62707A; border-bottom: var(--print-hair) solid var(--print-orange); padding-bottom: 8px; }
+  .print-item-table tbody tr:nth-child(even), .print-summary-table tbody tr:nth-child(even) { background: #F7F6F3; }
+  .print-summary-table tbody tr:last-child td { border-bottom: var(--print-hair) solid var(--print-orange); }
   .print-item-table td.num, .print-summary-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .print-item-table th.num, .print-summary-table th.num { text-align: right; }
   .print-item-table td.center, .print-item-table th.center, .print-summary-table td.center, .print-summary-table th.center { text-align: center; }
-  .print-summary-table tr.head-total td { background: #EDE9DC; font-weight: 700; font-size: 13px; }
-  .print-summary-table tr.total-row td { background: transparent; border-top: 1px solid #928D80 !important; border-bottom: 1px solid #928D80 !important; font-size: 14px; padding-top: 7px; padding-bottom: 7px; }
-  .print-summary-table tr.sub-row td { font-size: 11.6px; }
-  .print-summary-table tr.words-row td { font-style: italic; font-size: 11.3px; color: #4C4A45; text-align: center; }
-  .print-item-table td.name-cell b { font-size: 12.4px; }
-  .print-item-table td.name-cell .detail-line { display: block; color: #726D62; font-size: 10.6px; margin-top: 2px; }
-  .print-group-total { text-align: right; font-size: 11.3px; font-weight: 600; margin: 2px 0 10px; color: #2A2A2E; }
-  .print-cat-total { text-align: right; font-size: 12.6px; font-weight: 700; border-top: 1px solid #2A2A2E; padding-top: 4px; margin-bottom: 4px; color: #2A2A2E; }
-  .print-signoff { display: flex; justify-content: space-between; margin-top: 34px; text-align: center; font-size: 12px; color: #2A2A2E; }
+  .print-item-table td.name-cell b { font-size: 12.3px; font-weight: 600; }
+  .print-item-table td.name-cell .detail-line { display: block; color: #8C8178; font-size: 10.5px; margin-top: 3px; line-height: 1.45; }
+  /* 3 tầng số cộng, tăng dần độ nổi: số trong dòng → "Cộng:" (đậm, CÙNG cỡ cột Thành tiền = 12px)
+     → "Cộng hạng mục X:" (to hơn 1 cỡ = 14px, đậm, cam, có đường kẻ cam phía trên). */
+  .print-group-total { text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 10px 0 0; color: var(--print-ink); }
+  .print-cat-total { text-align: right; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; border-top: var(--print-hair) solid var(--print-orange); margin-top: 20px; padding-top: 12px; color: var(--print-orange); }
+  .print-signoff { display: flex; justify-content: space-between; margin-top: 16px; text-align: center; font-size: 11.5px; color: var(--print-ink); }
   .print-signoff .sign-block { width: 45%; }
   .print-signoff .sign-title { font-weight: 700; margin-bottom: 2px; }
-  .print-signoff .sign-sub { color: #726D62; font-size: 10.8px; margin-bottom: 62px; }
+  .print-signoff .sign-sub { color: #8C8178; font-size: 10px; margin-bottom: 30px; }
 
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
@@ -587,6 +614,8 @@
     .main { display: block; }
     .content { max-width: 100%; padding: 0; margin: 0; }
     .print-doc { max-width: 100%; margin: 0; overflow: visible; }
+    /* Nền vằn, ô chữ cam, chữ cam… mặc định trình duyệt BỎ khi in — bắt buộc in đủ màu. */
+    .print-doc, .print-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Khi in thì .print-page không còn là "tờ giấy giả" nữa — chính trang giấy thật đảm nhiệm
        khổ và lề, nên bỏ hết khung/bóng/kích thước mô phỏng đi. */
     .print-page { width: auto; max-width: none; min-height: 0; margin: 0; padding: 0; border: none; border-radius: 0; box-shadow: none; }
@@ -596,20 +625,11 @@
     .print-sheet > thead { display: table-header-group; }
     .print-sheet > tbody > tr + tr { break-before: page; page-break-before: always; }
     .print-page > .print-runhead { display: none; }
-    .print-item-table th, .print-summary-table th,
-    .print-summary-table tr.head-total td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    /* Bug trình duyệt: bảng border-collapse bị mất viền ở dòng cuối khi ngắt trang khi in — dùng
-       border riêng từng ô (separate) để viền không biến mất, chấp nhận viền hơi đậm hơn 1 chút. */
-    .print-item-table, .print-summary-table { border-collapse: separate; border-spacing: 0; }
-    .print-item-table th + th, .print-item-table td + td,
-    .print-summary-table th + th, .print-summary-table td + td { border-left: none; }
-    .print-item-table tr:not(:first-child) td, .print-item-table tr:not(:first-child) th,
-    .print-summary-table tr:not(:first-child) td, .print-summary-table tr:not(:first-child) th { border-top: none; }
     /* KHÔNG đặt break-inside:avoid cho .print-section — 1 hạng mục dài hơn 1 trang vẫn phải tràn
        sang trang sau (có header lặp lại + thead của bảng tự lặp), chứ không được đẩy nguyên khối. */
     .print-item-table tr { break-inside: avoid; }
     .print-group-title, .print-block-title { break-after: avoid; }
-    .print-signoff, .print-notes .nt-item { break-inside: avoid; }
+    .print-signoff, .print-notes .nt-item, .print-total-block { break-inside: avoid; }
   }
 
   ::-webkit-scrollbar { height: 8px; width: 8px; }
@@ -1214,7 +1234,7 @@
   // khoảng an toàn [min, max] dưới đây. Không có sàn thì cột Đơn giá / Thành tiền bị bóp lại,
   // số tiền hàng tỉ (nowrap) tràn ra ngoài và dính vào nhau — đã dính thật khi soi bản in.
   // Cột Tên hạng mục ăn nốt phần % còn thừa.
-  var PRINT_COL_PCT_RANGE = { stt: [3, 4.5], size: [9, 14], unit: [5, 8], qty: [6, 9], price: [12, 16], amount: [12, 16], note: [8, 13] };
+  var PRINT_COL_PCT_RANGE = { stt: [5.5, 6.5], size: [9, 14], unit: [5, 8], qty: [6, 9], price: [12, 16], amount: [12, 16], note: [8, 13] };
   function printColgroupHtml() {
     var total = PRINT_COL_KEYS.reduce(function (s, k) { return s + printColWidth(k); }, 0);
     var pct = {}, used = 0;
@@ -3578,21 +3598,29 @@
     var vatAmount = subtotal * vatPct / 100;
     var grand = subtotal + vatAmount;
 
-    var summaryRows =
-      '<tr class="head-total"><td></td><td>TỔNG GIÁ TRỊ DỰ TOÁN' + (vatPct ? " (đã gồm VAT " + vatPct + "%)" : "") + '</td>' +
-        '<td class="num">' + money(grand) + '</td><td></td></tr>' +
-      q.sections.map(function (sec, idx) {
-        return '<tr>' +
-          '<td class="center">' + toAlpha(idx + 1) + '</td>' +
-          '<td>' + escapeHtml(sec.name) + '</td>' +
-          '<td class="num">' + money(sectionTotal(sec)) + '</td>' +
-          '<td class="center">' + escapeHtml(sec.note || "") + '</td>' +
-        '</tr>';
-      }).join("") +
-      '<tr class="sub-row"><td></td><td>Cộng các hạng mục</td><td class="num">' + money(subtotal) + '</td><td></td></tr>' +
-      '<tr class="sub-row"><td></td><td>VAT ' + vatPct + '%</td><td class="num">' + money(vatAmount) + '</td><td></td></tr>' +
-      '<tr class="total-row"><td></td><td><b>TỔNG CỘNG</b></td><td class="num"><b>' + money(grand) + '</b></td><td></td></tr>' +
-      '<tr class="words-row"><td colspan="4">Bằng chữ: ' + escapeHtml(soThanhChu(grand)) + '.</td></tr>';
+    // Bảng hạng mục ở trang 1: chỉ còn các dòng A→K. Tổng/Tạm tính/VAT/Bằng chữ đã chuyển lên khối
+    // .print-total-block ở đầu trang (Nam yêu cầu 2026-09-24: thể hiện tổng giá trị dự toán trước tiên).
+    var summaryRows = q.sections.map(function (sec, idx) {
+      return '<tr>' +
+        '<td class="center">' + toAlpha(idx + 1) + '</td>' +
+        '<td>' + escapeHtml(sec.name) + '</td>' +
+        '<td class="num">' + money(sectionTotal(sec)) + '</td>' +
+        '<td class="center">' + escapeHtml(sec.note || "") + '</td>' +
+      '</tr>';
+    }).join("");
+
+    var totalBlockHtml =
+      '<div class="print-total-block">' +
+        '<div class="tb-eyebrow">Tổng giá trị dự toán</div>' +
+        '<div class="tb-row">' +
+          '<div class="tb-grand">' + money(grand) + '</div>' +
+          '<div class="tb-parts">' +
+            '<div><span>Tạm tính</span><b>' + money(subtotal) + '</b></div>' +
+            '<div><span>VAT ' + vatPct + '%</span><b>' + money(vatAmount) + '</b></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tb-words"><b>Bằng chữ:</b> ' + escapeHtml(soThanhChu(grand)) + '.</div>' +
+      '</div>';
 
     var sectionsHtml = q.sections.map(function (sec, sIdx) {
       var groupsHtml = sec.groups.map(function (g, gIdx) {
@@ -3615,8 +3643,8 @@
             printColgroupHtml() +
             '<thead><tr>' +
               '<th class="center">STT</th><th>Tên hạng mục / Nội dung chi tiết</th>' +
-              '<th>Kích thước</th><th>ĐVT</th><th>KL</th>' +
-              '<th>Đơn giá</th><th>Thành tiền</th><th class="center">Ghi chú</th>' +
+              '<th class="center">Kích thước</th><th class="center">ĐVT</th><th class="center">KL</th>' +
+              '<th class="num">Đơn giá</th><th class="num">Thành tiền</th><th class="center">Ghi chú</th>' +
             '</tr></thead>' +
             '<tbody>' + itemRows + '</tbody>' +
           '</table>' +
@@ -3625,8 +3653,8 @@
       // Mỗi hạng mục = 1 TRANG GIẤY riêng, tiêu đề in hoa đúng tên hạng mục ở bảng tổng hợp.
       return '<tr><td><section class="print-page">' +
         printRunHeadHtml(q) +
-        '<div class="print-block-title">' + toAlpha(sIdx + 1) + '. ' + escapeHtml(sec.name) + '</div>' +
-        (sec.note ? '<div class="print-section-note" style="text-align:center;">' + escapeHtml(sec.note) + '</div>' : "") +
+        '<div class="print-block-title"><span class="print-letter">' + toAlpha(sIdx + 1) + '</span><h2>' + escapeHtml(sec.name) + '</h2></div>' +
+        '<div class="print-section-note">' + escapeHtml(sec.note || "") + '</div>' +
         '<div class="print-section">' +
           groupsHtml +
           '<div class="print-cat-total">Cộng hạng mục ' + toAlpha(sIdx + 1) + ': ' + money(sectionTotal(sec)) + '</div>' +
@@ -3653,9 +3681,9 @@
           '<div class="print-title">Bảng tổng hợp dự toán thi công hoàn thiện</div>' +
           '<div class="print-subtitle">' + escapeHtml(p ? p.name : q.name) + '</div>' +
           '<div class="print-intro">INDUST DESIGN trân trọng gửi dự toán thi công hoàn thiện công trình chi tiết như sau:</div>' +
-          '<div class="print-block-title">Tổng giá trị dự toán</div>' +
+          totalBlockHtml +
           '<table class="print-summary-table">' +
-            '<thead><tr><th class="center" style="width:34px;">STT</th><th>Hạng mục</th><th style="width:130px;">Giá trị (VNĐ)</th><th class="center" style="width:140px;">Ghi chú</th></tr></thead>' +
+            '<thead><tr><th class="center" style="width:7%;">STT</th><th>Hạng mục</th><th class="num" style="width:22%;">Giá trị (VNĐ)</th><th class="center" style="width:15%;">Ghi chú</th></tr></thead>' +
             '<tbody>' + summaryRows + '</tbody>' +
           '</table>' +
           (q.summaryNote ? '<div class="print-summary-note">' + escapeHtml(q.summaryNote) + '</div>' : "") +
