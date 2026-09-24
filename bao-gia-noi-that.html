@@ -505,7 +505,21 @@
   .job-preview { font-size: 12.5px; padding: 9px 12px; border-radius: 8px; background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border-soft); }
   .job-preview.active { background: var(--good-soft); color: var(--good); border-color: transparent; }
   .job-preview.soon { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .stats.stats-5 { grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 980px) { .stats.stats-5 { grid-template-columns: repeat(2, 1fr); } }
+  .pill-fix { background: var(--accent-soft); color: var(--accent); }
+  .issue-flag { font-family: inherit; font-size: 11.5px; font-weight: 600; border: none; background: transparent; padding: 0; color: var(--ink-mute); cursor: pointer; text-decoration: underline; }
+  .issue-flag.has-open { color: var(--accent); }
+  .issue-filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .issue-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 360px; }
+  .issue-thumbs { display: flex; gap: 4px; align-items: center; margin-top: 6px; }
+  .issue-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 5px; border: 1px solid var(--border-soft); }
+  .cov { font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .cov-in { color: var(--good); }
+  .cov-out { color: var(--warn); }
+  .cov-none { color: var(--ink-mute); font-weight: 500; }
   .toolbar-right { flex-wrap: wrap; }
+  .head-actions { flex-wrap: wrap; flex-shrink: 1; } /* 3 nút ở màn nhà thầu: xuống dòng thay vì làm rộng cả trang trên điện thoại */
   @media (max-width: 640px) {
     .toolbar-right { width: 100%; }
     .toolbar-right .search-box { flex: 1 1 100%; min-width: 0; }
@@ -823,6 +837,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
+  var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
   var CONTRACTOR_JOBS = []; // gói việc: nhà thầu × công trình × phạm vi, kèm ngày nghiệm thu + số tháng bảo hành
   var CUSTOMERS = []; // đồng bộ từ tab "Danh sách khách hàng" — xem ở màn renderCustomersScreen() (nav "Danh sách khách hàng")
 
@@ -1042,7 +1057,7 @@
     pendingSave = false;
     var payload = {
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES
     };
     // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
     // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
@@ -1069,7 +1084,7 @@
   function localSeed() {
     // Lần đầu tiên chưa có gì trên Firestore: dùng bản đã lưu sẵn trong máy này (nếu có, để không mất
     // dữ liệu Nam đã sửa trước khi nối server), không thì dùng bộ dữ liệu mẫu gốc.
-    var seed = { quotes: seedQuotes(), priceCatalog: DEFAULT_PRICE_CATALOG.slice(), projects: DEFAULT_PROJECTS.slice(), customers: [], contractors: [], contractorJobs: [] };
+    var seed = { quotes: seedQuotes(), priceCatalog: DEFAULT_PRICE_CATALOG.slice(), projects: DEFAULT_PROJECTS.slice(), customers: [], contractors: [], contractorJobs: [], warrantyIssues: [] };
     try { var a = localStorage.getItem(STORAGE_KEY); if (a) { var da = JSON.parse(a); if (da && Array.isArray(da.quotes) && da.quotes.length) seed.quotes = da.quotes; } } catch (e) {}
     try { var b = localStorage.getItem(CATALOG_KEY); if (b) { var db2 = JSON.parse(b); if (db2 && Array.isArray(db2.items) && db2.items.length) seed.priceCatalog = db2.items; } } catch (e) {}
     try { var c = localStorage.getItem(PROJECTS_KEY); if (c) { var dc = JSON.parse(c); if (dc && Array.isArray(dc.items) && dc.items.length) seed.projects = dc.items; } } catch (e) {}
@@ -1146,7 +1161,7 @@
       var seed = localSeed();
       return MAIN_DOC.set({
         quotes: seed.quotes, priceCatalog: seed.priceCatalog, projects: seed.projects, customers: seed.customers,
-        contractors: seed.contractors, contractorJobs: seed.contractorJobs,
+        contractors: seed.contractors, contractorJobs: seed.contractorJobs, warrantyIssues: seed.warrantyIssues,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }).then(function () {
@@ -1162,14 +1177,16 @@
         var nCustomers = Array.isArray(d.customers) ? d.customers : [];
         var nContractors = Array.isArray(d.contractors) ? d.contractors : [];
         var nJobs = Array.isArray(d.contractorJobs) ? d.contractorJobs : [];
-        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs]);
-        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS]);
+        var nIssues = Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [];
+        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs, nIssues]);
+        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS, WARRANTY_ISSUES]);
         state.quotes = nQuotes;
         PRICE_CATALOG = nCatalog;
         PROJECTS = nProjects;
         CUSTOMERS = nCustomers;
         CONTRACTORS = nContractors;
         CONTRACTOR_JOBS = nJobs;
+        WARRANTY_ISSUES = nIssues;
         if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
         // Không khác gì cái đang hiện → không việc gì phải vẽ lại, và cũng KHÔNG hẹn vẽ lại.
         if (firstPaintDone && incomingJson === onScreenJson) return;
@@ -1683,6 +1700,13 @@
       return { "Nhà thầu": c ? c.name : "", "Công trình": p ? p.name : "", "Gói việc": j.scope || "", "Bắt đầu": j.startDate || "",
         "Nghiệm thu": j.handoverDate || "", "Bảo hành (tháng)": w.months, "Hết bảo hành": w.endIso, "Trạng thái": w.label, "Ghi chú": j.note || "" };
     }));
+    add("Su co bao hanh", WARRANTY_ISSUES.map(function (i) {
+      var inf = issueInfo(i);
+      return { "Ngày báo": i.reportedDate || "", "Công trình": inf.project ? inf.project.name : "", "Nhà thầu": inf.contractor ? inf.contractor.name : "",
+        "Gói việc": inf.job ? inf.job.scope : "", "Mô tả": i.description || "", "Trạng thái": (ISSUE_STATUS[i.status] || {}).label || i.status,
+        "Ngày xử lý xong": i.resolvedDate || "", "Cách xử lý": i.resolution || "", "Số ảnh": (i.photos || []).length,
+        "Trong bảo hành": inf.coverage === "in" ? "Trong" : (inf.coverage === "out" ? "Ngoài" : "Chưa tính") };
+    }));
     try {
       XLSX.writeFile(wb, "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".xlsx");
       toast("Đã tải file Excel sao lưu.");
@@ -1692,7 +1716,7 @@
     var payload = {
       _app: "bao-gia-noi-that", _backupAt: new Date().toISOString(),
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES
     };
     try {
       var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1716,7 +1740,7 @@
         '<div class="modal-body">' +
           '<div class="sync-status" id="backupSummary"></div>' +
           '<ol class="modal-steps">' +
-            '<li><b>File Excel (.xlsx)</b> — 8 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
+            '<li><b>File Excel (.xlsx)</b> — 9 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu, sự cố bảo hành. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
             '<li><b>File sao lưu đầy đủ (.json)</b> — bản sao y nguyên toàn bộ dữ liệu. Nếu app mất dữ liệu, đưa file này cho Claude là khôi phục lại được đúng từng dòng. Excel không làm được việc đó vì đã làm phẳng bảng.</li>' +
           '</ol>' +
           '<div class="sync-status">Nên tải cả 2 file và cất vào Dropbox mỗi khi có thay đổi lớn.</div>' +
@@ -1738,7 +1762,7 @@
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
       PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
-      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc).";
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành).";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -2359,6 +2383,7 @@
     var c = contractorById(j.contractorId);
     var p = projectById(j.projectId);
     var w = warrantyInfo(j);
+    var nIssues = issuesOfJob(j.id).length, nOpenIssues = openIssuesOfJob(j.id).length;
     return '<tr class="row-click" data-edit-job="' + escapeHtml(j.id) + '">' +
       (withProject ? '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div></td>' : "") +
       '<td><div class="cell-title">' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</div>' +
@@ -2367,8 +2392,11 @@
       '<td class="cell-muted">' + (isoParts(j.handoverDate) ? fmtDate(j.handoverDate) : "—") + '</td>' +
       '<td>' + (w.endIso ? fmtDate(w.endIso) + '<div class="cell-muted">' + w.months + ' tháng</div>' : '<span class="cell-muted">' + w.months + ' tháng</span>') + '</td>' +
       '<td><span class="pill ' + w.pill + '">' + w.label + '</span>' +
-        (w.daysLeft != null ? '<div class="cell-muted" style="margin-top:4px;">' + escapeHtml(warrantyRemainText(w)) + '</div>' : "") + '</td>' +
+        (w.daysLeft != null ? '<div class="cell-muted" style="margin-top:4px;">' + escapeHtml(warrantyRemainText(w)) + '</div>' : "") +
+        (nIssues ? '<div style="margin-top:4px;"><button type="button" class="issue-flag' + (nOpenIssues ? " has-open" : "") + '" data-goto-issues="' + escapeHtml(j.id) + '">' +
+          (nOpenIssues ? nOpenIssues + " sự cố chưa xong" : nIssues + " sự cố (đã xong)") + '</button></div>' : "") + '</td>' +
       '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button class="icon-btn" data-edit-job="' + escapeHtml(j.id) + '" title="Sửa gói việc">' + iconEdit() + '</button>' +
         '<button class="icon-btn danger" data-del-job="' + escapeHtml(j.id) + '" title="Xoá gói việc">' + iconTrash() + '</button>' +
       '</div></td>' +
@@ -2433,6 +2461,7 @@
     var nBuilding = infos.filter(function (w) { return w.key === "building"; }).length;
     var nActive = infos.filter(function (w) { return w.key === "active" || w.key === "soon"; }).length;
     var nSoon = infos.filter(function (w) { return w.key === "soon"; }).length;
+    var nIssueOpen = WARRANTY_ISSUES.filter(function (i) { return i.status !== "done"; }).length;
 
     var trades = allTrades();
     var tradeOpts = '<option value="">Tất cả nhóm nghề</option>' + trades.map(function (t) {
@@ -2442,6 +2471,7 @@
     var body;
     if (view.ctab === "projects") body = contractorTabProjects();
     else if (view.ctab === "warranty") body = contractorTabWarranty();
+    else if (view.ctab === "issues") body = contractorTabIssues();
     else {
       body = '<div class="table-wrap"><div class="table-scroll"><table>' +
         '<thead><tr><th>Nhà thầu</th><th>Liên hệ</th><th>Công trình</th><th>Bảo hành gần nhất</th><th></th></tr></thead>' +
@@ -2459,15 +2489,17 @@
       '<div class="page-head">' +
         '<div><h1>Danh sách nhà thầu</h1><div class="page-sub">Thông tin liên hệ, nhà thầu nào làm công trình nào và thời hạn bảo hành từng gói việc.</div></div>' +
         '<div class="head-actions">' +
+          '<button class="btn" id="btnAddIssue">' + iconAlert() + ' Ghi sự cố</button>' +
           '<button class="btn" id="btnAddJob">' + iconPlus() + ' Thêm gói việc</button>' +
           '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
         '</div>' +
       '</div>' +
-      '<div class="stats">' +
+      '<div class="stats stats-5">' +
         '<div class="stat-tile"><div class="stat-label">Nhà thầu</div><div class="stat-value">' + CONTRACTORS.length + '</div><div class="stat-foot">' + CONTRACTOR_JOBS.length + ' gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nBuilding + '</div><div class="stat-foot">gói việc đang làm</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Đang bảo hành</div><div class="stat-value">' + nActive + '</div><div class="stat-foot">gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Sắp hết hạn</div><div class="stat-value' + (nSoon ? " accent" : "") + '">' + nSoon + '</div><div class="stat-foot">trong ' + WARRANTY_SOON_DAYS + ' ngày tới</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Sự cố đang mở</div><div class="stat-value' + (nIssueOpen ? " accent" : "") + '">' + nIssueOpen + '</div><div class="stat-foot">' + (WARRANTY_ISSUES.length - nIssueOpen) + ' đã xử lý</div></div>' +
       '</div>' +
       prjFilterChip +
       '<div class="toolbar">' +
@@ -2475,6 +2507,7 @@
           '<button class="tab' + (view.ctab === "list" ? " active" : "") + '" data-ctab="list">Nhà thầu (' + CONTRACTORS.length + ')</button>' +
           '<button class="tab' + (view.ctab === "projects" ? " active" : "") + '" data-ctab="projects">Theo công trình</button>' +
           '<button class="tab' + (view.ctab === "warranty" ? " active" : "") + '" data-ctab="warranty">Bảo hành (' + CONTRACTOR_JOBS.length + ')</button>' +
+          '<button class="tab' + (view.ctab === "issues" ? " active" : "") + '" data-ctab="issues">Sự cố' + (nIssueOpen ? " (" + nIssueOpen + " mở)" : "") + '</button>' +
         '</div>' +
         '<div class="toolbar-right">' +
           '<select id="cTradeSel" class="ctr-select">' + tradeOpts + '</select>' +
@@ -2488,10 +2521,11 @@
 
     document.getElementById("btnAddContractor").addEventListener("click", function () { openContractorEditor(null); });
     document.getElementById("btnAddJob").addEventListener("click", function () { openJobEditor(null, {}); });
+    document.getElementById("btnAddIssue").addEventListener("click", function () { openIssueEditor(null, {}); });
     var clr = document.getElementById("btnClearCPrj");
     if (clr) clr.addEventListener("click", function () { view.cProject = ""; renderContractorsScreen(); });
     document.querySelectorAll("[data-ctab]").forEach(function (t) {
-      t.addEventListener("click", function () { view.ctab = t.dataset.ctab; renderContractorsScreen(); });
+      t.addEventListener("click", function () { view.ctab = t.dataset.ctab; view.cJob = ""; renderContractorsScreen(); });
     });
     document.getElementById("cTradeSel").addEventListener("change", function (e) { view.cTrade = e.target.value; renderContractorsScreen(); });
     var search = document.getElementById("cSearchInput");
@@ -2518,6 +2552,31 @@
     document.querySelectorAll("[data-add-job-prj]").forEach(function (b) {
       b.addEventListener("click", function () { openJobEditor(null, { projectId: b.dataset.addJobPrj }); });
     });
+    // Nhật ký sự cố
+    document.querySelectorAll("[data-add-issue]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openIssueEditor(null, { jobId: b.dataset.addIssue }); });
+    });
+    document.querySelectorAll("[data-goto-issues]").forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        view.cJob = b.dataset.gotoIssues; view.ctab = "issues"; view.cIssueFilter = "all"; view.cSearch = ""; view.cTrade = "";
+        renderContractorsScreen();
+      });
+    });
+    document.querySelectorAll("tr[data-edit-issue]").forEach(function (r) {
+      r.addEventListener("click", function () { openIssueEditor(r.dataset.editIssue, {}); });
+    });
+    document.querySelectorAll("button[data-edit-issue]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openIssueEditor(b.dataset.editIssue, {}); });
+    });
+    document.querySelectorAll("[data-del-issue]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); deleteIssue(b.dataset.delIssue); });
+    });
+    document.querySelectorAll("[data-issue-filter]").forEach(function (b) {
+      b.addEventListener("click", function () { view.cIssueFilter = b.dataset.issueFilter; renderContractorsScreen(); });
+    });
+    var clrJob = document.getElementById("btnClearCJob");
+    if (clrJob) clrJob.addEventListener("click", function () { view.cJob = ""; renderContractorsScreen(); });
     // Bấm số điện thoại / Zalo trong dòng không được mở hộp thoại sửa.
     document.querySelectorAll(".tel-link, .zalo-link").forEach(function (a) {
       a.addEventListener("click", function (e) { e.stopPropagation(); });
@@ -2528,8 +2587,11 @@
     var c = contractorById(id);
     if (!c) return;
     var jobs = jobsOfContractor(id);
-    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành) của nhà thầu này." : "");
+    var nIss = issuesOfContractor(id).length;
+    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành)" + (nIss ? " cùng " + nIss + " sự cố trong nhật ký" : "") + " của nhà thầu này." : "");
     if (!confirm(msg)) return;
+    var jobIds = jobs.map(function (j) { return j.id; });
+    WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return jobIds.indexOf(i.jobId) === -1; });
     CONTRACTORS = CONTRACTORS.filter(function (x) { return x.id !== id; });
     CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (j) { return j.contractorId !== id; });
     saveState();
@@ -2541,7 +2603,11 @@
     var j = CONTRACTOR_JOBS.filter(function (x) { return x.id === id; })[0];
     if (!j) return;
     var c = contractorById(j.contractorId), p = projectById(j.projectId);
-    if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?")) return;
+    var nIss = issuesOfJob(id).length;
+    if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?" +
+      (nIss ? "\n\nXoá luôn " + nIss + " sự cố bảo hành đã ghi của gói này." : ""))) return;
+    WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return i.jobId !== id; });
+    if (view.cJob === id) view.cJob = "";
     CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (x) { return x.id !== id; });
     saveState();
     closeJobEditor();
@@ -2628,15 +2694,20 @@
       return;
     }
     wrap.innerHTML = jobs.map(function (j) {
-      var p = projectById(j.projectId), w = warrantyInfo(j);
+      var p = projectById(j.projectId), w = warrantyInfo(j), nOpen = openIssuesOfJob(j.id).length;
       return '<div class="ct-job-row" data-ct-job="' + escapeHtml(j.id) + '">' +
         '<div style="min-width:0;flex:1;"><div class="cell-title" style="font-size:12.8px;">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + ' · ' + escapeHtml(j.scope || "—") + '</div>' +
-          '<div class="cell-muted" style="font-size:11.8px;">' + (w.endIso ? "Bảo hành đến " + fmtDate(w.endIso) + " · " + escapeHtml(warrantyRemainText(w)) : "Chưa nghiệm thu") + '</div></div>' +
+          '<div class="cell-muted" style="font-size:11.8px;">' + (w.endIso ? "Bảo hành đến " + fmtDate(w.endIso) + " · " + escapeHtml(warrantyRemainText(w)) : "Chưa nghiệm thu") +
+          (nOpen ? ' · <b style="color:var(--accent);">' + nOpen + ' sự cố chưa xong</b>' : "") + '</div></div>' +
         '<span class="pill ' + w.pill + '">' + w.label + '</span>' +
+        '<button type="button" class="icon-btn" data-ct-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-edit-job="' + escapeHtml(j.id) + '" title="Sửa">' + iconEdit() + '</button>' +
         '<button type="button" class="icon-btn danger" data-ct-del-job="' + escapeHtml(j.id) + '" title="Xoá">' + iconTrash() + '</button>' +
       '</div>';
     }).join("");
+    wrap.querySelectorAll("[data-ct-add-issue]").forEach(function (b) {
+      b.addEventListener("click", function () { openIssueEditor(null, { jobId: b.dataset.ctAddIssue }); });
+    });
     wrap.querySelectorAll("[data-ct-edit-job]").forEach(function (b) {
       b.addEventListener("click", function () { openJobEditor(b.dataset.ctEditJob, {}); });
     });
@@ -2847,6 +2918,349 @@
     };
 
     document.getElementById("jobModalOverlay").hidden = false;
+  }
+
+  /* ===================== NHẬT KÝ SỰ CỐ BẢO HÀNH ===================== */
+  // Mỗi sự cố thuộc 1 GÓI VIỆC (WARRANTY_ISSUES[i].jobId) — nhà thầu xử lý = nhà thầu của gói đó.
+  //   WARRANTY_ISSUES = [{ id, jobId, reportedDate, description, photos:[url], status, resolvedDate, resolution }]
+  //   status: "open" (mới báo) → "fixing" (đang xử lý) → "done" (đã xử lý)
+  // "Trong / ngoài bảo hành" được TÍNH RA từ ngày báo so với hạn bảo hành của gói (warrantyInfo) — không lưu.
+  // Ảnh đi thẳng lên Firebase Storage, Firestore chỉ giữ URL (giống ảnh vật tư).
+  var ISSUE_STATUS = {
+    open:   { label: "Mới báo",     pill: "pill-warn" },
+    fixing: { label: "Đang xử lý",  pill: "pill-fix" },
+    done:   { label: "Đã xử lý",    pill: "pill-good" }
+  };
+  var ISSUE_MAX_PHOTOS = 6;
+
+  function issueById(id) { return WARRANTY_ISSUES.filter(function (i) { return i.id === id; })[0]; }
+  function issuesOfJob(jobId) { return WARRANTY_ISSUES.filter(function (i) { return i.jobId === jobId; }); }
+  function issuesOfContractor(cid) {
+    var ids = jobsOfContractor(cid).map(function (j) { return j.id; });
+    return WARRANTY_ISSUES.filter(function (i) { return ids.indexOf(i.jobId) !== -1; });
+  }
+  function openIssuesOfJob(jobId) { return issuesOfJob(jobId).filter(function (i) { return i.status !== "done"; }); }
+
+  // Thông tin dẫn xuất của 1 sự cố: gói việc, nhà thầu, công trình, số ngày, và ngày báo nằm trong / ngoài bảo hành.
+  function issueInfo(i) {
+    var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === i.jobId; })[0] || null;
+    var c = job ? contractorById(job.contractorId) : null;
+    var p = job ? projectById(job.projectId) : null;
+    var w = job ? warrantyInfo(job) : null;
+    var coverage = "unknown";
+    if (w && w.endIso) coverage = (i.reportedDate && i.reportedDate <= w.endIso) ? "in" : "out";
+    var age = null;
+    if (isoParts(i.reportedDate)) {
+      age = i.status === "done" && isoParts(i.resolvedDate)
+        ? daysBetweenIso(i.reportedDate, i.resolvedDate)
+        : daysBetweenIso(i.reportedDate, todayIso());
+    }
+    return { job: job, contractor: c, project: p, warranty: w, coverage: coverage, age: age };
+  }
+  function issueCoverageHtml(cov) {
+    if (cov === "in") return '<span class="cov cov-in">Trong bảo hành</span>';
+    if (cov === "out") return '<span class="cov cov-out">Ngoài bảo hành</span>';
+    return '<span class="cov cov-none">Chưa tính bảo hành</span>';
+  }
+  function issueAgeText(i, info) {
+    if (info.age == null) return "";
+    if (i.status === "done") return "xong sau " + info.age + " ngày";
+    return info.age === 0 ? "mới báo hôm nay" : "đã mở " + info.age + " ngày";
+  }
+
+  function issueMatches(i) {
+    var info = issueInfo(i);
+    var f = view.cIssueFilter || "open";
+    if (f === "open" && i.status === "done") return false;
+    if (f === "done" && i.status !== "done") return false;
+    if (view.cJob && i.jobId !== view.cJob) return false;
+    if (view.cProject && (!info.job || info.job.projectId !== view.cProject)) return false;
+    var c = info.contractor;
+    if (view.cTrade && !(c && (c.trades || []).indexOf(view.cTrade) !== -1)) return false;
+    var q = (view.cSearch || "").trim().toLowerCase();
+    if (!q) return true;
+    var hay = [i.description, i.resolution, c ? c.name : "", info.project ? info.project.name : "", info.job ? info.job.scope : ""].join(" ").toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
+  function contractorTabIssues() {
+    var f = view.cIssueFilter || "open";
+    var nOpen = WARRANTY_ISSUES.filter(function (i) { return i.status !== "done"; }).length;
+    var nDone = WARRANTY_ISSUES.length - nOpen;
+    var chips = [["open", "Chưa xong (" + nOpen + ")"], ["done", "Đã xử lý (" + nDone + ")"], ["all", "Tất cả (" + WARRANTY_ISSUES.length + ")"]].map(function (x) {
+      return '<button type="button" class="trade-chip' + (f === x[0] ? " on" : "") + '" data-issue-filter="' + x[0] + '">' + x[1] + '</button>';
+    }).join(" ");
+
+    var jobChip = "";
+    if (view.cJob) {
+      var fj = CONTRACTOR_JOBS.filter(function (j) { return j.id === view.cJob; })[0];
+      var fc = fj ? contractorById(fj.contractorId) : null, fp = fj ? projectById(fj.projectId) : null;
+      jobChip = '<div class="mock-note">' + iconInfo() + ' Đang xem sự cố của gói <b>' + escapeHtml(fj ? fj.scope : "") + '</b> — ' + escapeHtml(fc ? fc.name : "") + ' · ' + escapeHtml(fp ? fp.name : "") +
+        '. <button class="link-btn" id="btnClearCJob" type="button">Xem tất cả</button> · <button class="link-btn" data-add-issue="' + escapeHtml(view.cJob) + '" type="button">Ghi sự cố mới cho gói này</button></div>';
+    }
+
+    var list = WARRANTY_ISSUES.filter(issueMatches).sort(function (a, b) {
+      var ad = a.status === "done", bd = b.status === "done";
+      if (ad !== bd) return ad ? 1 : -1;
+      if (!ad) return String(a.reportedDate).localeCompare(String(b.reportedDate));       // chưa xong: cũ nhất (đợi lâu nhất) lên đầu
+      return String(b.resolvedDate || b.reportedDate).localeCompare(String(a.resolvedDate || a.reportedDate)); // đã xong: mới xong lên đầu
+    });
+
+    var rows;
+    if (!list.length) {
+      rows = '<tr class="empty-row"><td colspan="7">' + (WARRANTY_ISSUES.length
+        ? "Không có sự cố nào khớp bộ lọc."
+        : 'Chưa ghi sự cố nào. Bấm "Ghi sự cố" khi khách báo lỗi trong thời gian bảo hành.') + '</td></tr>';
+    } else {
+      rows = list.map(function (i) {
+        var info = issueInfo(i), st = ISSUE_STATUS[i.status] || ISSUE_STATUS.open;
+        var thumbs = (i.photos || []).slice(0, 3).map(function (u) { return '<img class="issue-thumb" src="' + escapeHtml(u) + '" alt="">'; }).join("");
+        return '<tr class="row-click" data-edit-issue="' + escapeHtml(i.id) + '">' +
+          '<td class="cell-muted" style="white-space:nowrap;">' + (isoParts(i.reportedDate) ? fmtDate(i.reportedDate) : "—") + '</td>' +
+          '<td><div class="cell-title">' + escapeHtml(info.project ? info.project.name : "(công trình đã xoá)") + '</div>' +
+            '<div class="cell-muted">' + escapeHtml(info.job ? info.job.scope : "—") + '</div></td>' +
+          '<td>' + escapeHtml(info.contractor ? info.contractor.name : "(nhà thầu đã xoá)") +
+            (info.contractor && info.contractor.phone ? '<div class="cell-muted">' + contractorPhoneHtml(info.contractor.phone) + '</div>' : "") + '</td>' +
+          '<td><div class="issue-desc">' + escapeHtml(i.description || "(chưa mô tả)") + '</div>' +
+            ((i.photos || []).length ? '<div class="issue-thumbs">' + thumbs + ((i.photos || []).length > 3 ? '<span class="cell-muted">+' + ((i.photos || []).length - 3) + '</span>' : "") + '</div>' : "") + '</td>' +
+          '<td><span class="pill ' + st.pill + '">' + st.label + '</span><div class="cell-muted" style="margin-top:4px;">' + escapeHtml(issueAgeText(i, info)) + '</div></td>' +
+          '<td>' + issueCoverageHtml(info.coverage) + '</td>' +
+          '<td><div class="row-actions">' +
+            '<button class="icon-btn" data-edit-issue="' + escapeHtml(i.id) + '" title="Sửa">' + iconEdit() + '</button>' +
+            '<button class="icon-btn danger" data-del-issue="' + escapeHtml(i.id) + '" title="Xoá sự cố">' + iconTrash() + '</button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join("");
+    }
+    return jobChip + '<div class="issue-filter-row">' + chips + '</div>' +
+      '<div class="table-wrap"><div class="table-scroll"><table>' +
+      '<thead><tr><th>Ngày báo</th><th>Công trình / gói việc</th><th>Nhà thầu xử lý</th><th>Mô tả sự cố</th><th>Trạng thái</th><th>Bảo hành</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div></div>';
+  }
+
+  function deleteIssue(id) {
+    var i = issueById(id);
+    if (!i) return;
+    if (!confirm("Xoá sự cố này khỏi nhật ký?\n\n" + (i.description || "(chưa mô tả)").slice(0, 120))) return;
+    WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (x) { return x.id !== id; });
+    saveState();
+    closeIssueEditor();
+    if (ctEditingId) paintContractorJobs();
+    if (view.screen === "contractors") renderContractorsScreen();
+    toast("Đã xoá sự cố.");
+  }
+
+  /* ---------- Hộp thoại sự cố ---------- */
+  var issueEditingId = null;
+
+  function ensureIssueModal() {
+    if (document.getElementById("issueModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "issueModalOverlay";
+    el.className = "modal-overlay";
+    el.style.zIndex = "66"; // trên hộp thoại nhà thầu và gói việc
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:600px;">' +
+        '<div class="modal-head"><h3 id="issueModalTitle">Sự cố bảo hành</h3><button class="icon-btn" id="issueModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="field" style="margin-bottom:14px;"><label>Công trình · nhà thầu · gói việc</label><select id="issueJob"></select></div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Ngày báo</label><input id="issueDate" type="date"></div>' +
+            '<div class="field"><label>Trạng thái</label><select id="issueStatus"></select></div>' +
+            '<div class="field" id="issueResolvedWrap"><label>Ngày xử lý xong</label><input id="issueResolved" type="date"></div>' +
+          '</div>' +
+          '<div class="job-preview" id="issuePreview" style="margin-bottom:14px;"></div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Mô tả sự cố</label><textarea id="issueDesc" rows="3" placeholder="vd. Nứt sơn trần phòng khách, thấm nước chân tường phòng ngủ 2…"></textarea></div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Ảnh hiện trạng (tối đa ' + ISSUE_MAX_PHOTOS + ')</label>' +
+            '<div class="cat-thumb-row" id="issuePhotos"></div>' +
+            '<input type="file" id="issueFile" accept="image/*" multiple hidden>' +
+          '</div>' +
+          '<div class="field"><label>Cách xử lý / ghi chú</label><textarea id="issueResolution" rows="2" placeholder="vd. Nhà thầu hẹn sang sửa 28/09, đã xử lý bả lại và sơn phủ"></textarea></div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="issueDelete" type="button" style="margin-right:auto;">Xoá sự cố</button>' +
+          '<button class="btn" id="issueCancel" type="button">Đóng</button>' +
+          '<button class="btn btn-primary" id="issueSave" type="button">' + iconCheck() + ' Lưu</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("issueModalClose").addEventListener("click", closeIssueEditor);
+    document.getElementById("issueCancel").addEventListener("click", closeIssueEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closeIssueEditor(); });
+  }
+  function closeIssueEditor() {
+    var el = document.getElementById("issueModalOverlay");
+    if (el) el.hidden = true;
+    issueEditingId = null;
+    if (ctEditingId) paintContractorJobs();
+    if (view.screen === "contractors") renderContractorsScreen();
+  }
+
+  function paintIssuePhotos() {
+    var wrap = document.getElementById("issuePhotos");
+    var rec = issueEditingId ? issueById(issueEditingId) : null;
+    var photos = rec ? (rec.photos || []) : [];
+    var html = photos.map(function (src, i) {
+      return '<div class="cat-thumb"><img src="' + escapeHtml(src) + '" alt="" data-zoom="' + i + '" style="cursor:zoom-in;"><button type="button" data-rm-photo="' + i + '">×</button></div>';
+    }).join("");
+    if (photos.length < ISSUE_MAX_PHOTOS) html += '<button type="button" class="cat-thumb-add" id="issueAddPhoto">+</button>';
+    wrap.innerHTML = html;
+    wrap.querySelectorAll("[data-zoom]").forEach(function (im) {
+      im.addEventListener("click", function () { openLightbox(photos[Number(im.dataset.zoom)]); });
+    });
+    wrap.querySelectorAll("[data-rm-photo]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var r = issueById(issueEditingId);
+        if (!r) return;
+        r.photos.splice(Number(b.dataset.rmPhoto), 1);
+        saveState();           // tự lưu ngay — ảnh đã lên Storage thì không được để mồ côi khi quên bấm Lưu
+        paintIssuePhotos();
+      });
+    });
+    var add = document.getElementById("issueAddPhoto");
+    if (add) add.addEventListener("click", function () { document.getElementById("issueFile").click(); });
+  }
+
+  // Xem trước: ngày báo nằm trong hay ngoài thời hạn bảo hành của gói đã chọn.
+  function paintIssuePreview() {
+    var box = document.getElementById("issuePreview");
+    var jobId = document.getElementById("issueJob").value;
+    var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === jobId; })[0];
+    var reported = document.getElementById("issueDate").value;
+    document.getElementById("issueResolvedWrap").style.display = document.getElementById("issueStatus").value === "done" ? "" : "none";
+    if (!job) { box.className = "job-preview"; box.textContent = ""; return; }
+    var w = warrantyInfo(job);
+    if (!w.endIso) {
+      box.className = "job-preview";
+      box.textContent = "Gói việc này chưa có ngày nghiệm thu nên chưa tính được hạn bảo hành.";
+    } else if (reported && reported <= w.endIso) {
+      box.className = "job-preview active";
+      box.textContent = "Ngày báo nằm TRONG thời hạn bảo hành (đến " + fmtDate(w.endIso) + ") — nhà thầu có trách nhiệm xử lý.";
+    } else if (reported) {
+      box.className = "job-preview soon";
+      box.textContent = "Ngày báo đã NGOÀI thời hạn bảo hành (hết hạn " + fmtDate(w.endIso) + ", quá " + daysBetweenIso(w.endIso, reported) + " ngày) — cân nhắc tính phí.";
+    } else {
+      box.className = "job-preview";
+      box.textContent = "";
+    }
+  }
+
+  function readIssueForm() {
+    return {
+      jobId: document.getElementById("issueJob").value,
+      reportedDate: document.getElementById("issueDate").value,
+      status: document.getElementById("issueStatus").value,
+      resolvedDate: document.getElementById("issueStatus").value === "done" ? document.getElementById("issueResolved").value : "",
+      description: document.getElementById("issueDesc").value.trim(),
+      resolution: document.getElementById("issueResolution").value.trim()
+    };
+  }
+  // Tạo bản ghi ngay khi cần (thêm ảnh lần đầu) để ảnh có chỗ gắn vào và không mồ côi nếu quên bấm Lưu.
+  function ensureIssueRecord() {
+    if (issueEditingId) return issueById(issueEditingId);
+    var f = readIssueForm();
+    var rec = { id: uid("is_"), jobId: f.jobId, reportedDate: f.reportedDate || todayIso(), description: f.description,
+      photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution };
+    WARRANTY_ISSUES.push(rec);
+    issueEditingId = rec.id;
+    saveState();
+    document.getElementById("issueDelete").style.display = "";
+    return rec;
+  }
+
+  function openIssueEditor(id, preset) {
+    if (!CONTRACTOR_JOBS.length) { toast("Cần có gói việc (nhà thầu + công trình) trước, rồi mới ghi sự cố."); return; }
+    ensureIssueModal();
+    preset = preset || {};
+    var rec = id ? issueById(id) : null;
+    issueEditingId = rec ? rec.id : null;
+
+    var jobs = CONTRACTOR_JOBS.slice().sort(function (a, b) {
+      var pa = projectById(a.projectId), pb = projectById(b.projectId);
+      return String(pa ? pa.name : "").localeCompare(String(pb ? pb.name : ""), "vi") ||
+        String((contractorById(a.contractorId) || {}).name || "").localeCompare(String((contractorById(b.contractorId) || {}).name || ""), "vi");
+    });
+    var selJob = rec ? rec.jobId : (preset.jobId || view.cJob || (jobs[0] && jobs[0].id));
+    document.getElementById("issueJob").innerHTML = jobs.map(function (j) {
+      var p = projectById(j.projectId), c = contractorById(j.contractorId);
+      return '<option value="' + escapeHtml(j.id) + '"' + (j.id === selJob ? " selected" : "") + '>' +
+        escapeHtml((p ? p.name : "(công trình đã xoá)") + " · " + (c ? c.name : "(nhà thầu đã xoá)") + " · " + (j.scope || "—")) + '</option>';
+    }).join("");
+    document.getElementById("issueStatus").innerHTML = Object.keys(ISSUE_STATUS).map(function (k) {
+      return '<option value="' + k + '"' + ((rec ? rec.status : "open") === k ? " selected" : "") + '>' + ISSUE_STATUS[k].label + '</option>';
+    }).join("");
+
+    document.getElementById("issueModalTitle").textContent = rec ? "Sửa sự cố bảo hành" : "Ghi sự cố bảo hành";
+    document.getElementById("issueDate").value = rec ? (rec.reportedDate || "") : todayIso();
+    document.getElementById("issueResolved").value = rec ? (rec.resolvedDate || "") : "";
+    document.getElementById("issueDesc").value = rec ? (rec.description || "") : "";
+    document.getElementById("issueResolution").value = rec ? (rec.resolution || "") : "";
+    document.getElementById("issueDelete").style.display = rec ? "" : "none";
+    paintIssuePhotos();
+    paintIssuePreview();
+
+    ["issueJob", "issueDate", "issueStatus"].forEach(function (fid) {
+      document.getElementById(fid).onchange = function () {
+        if (fid === "issueStatus" && this.value === "done" && !document.getElementById("issueResolved").value) {
+          document.getElementById("issueResolved").value = todayIso();
+        }
+        paintIssuePreview();
+      };
+    });
+    document.getElementById("issueDate").oninput = paintIssuePreview;
+
+    var fileInput = document.getElementById("issueFile");
+    fileInput.value = "";
+    fileInput.onchange = function () {
+      var files = Array.prototype.slice.call(fileInput.files || []);
+      if (!files.length) return;
+      var r0 = ensureIssueRecord();
+      var room = ISSUE_MAX_PHOTOS - (r0.photos || []).length;
+      var batch = files.slice(0, Math.max(0, room));
+      if (files.length > batch.length) toast("Chỉ nhận tối đa " + ISSUE_MAX_PHOTOS + " ảnh cho mỗi sự cố.");
+      toast("Đang tải " + batch.length + " ảnh lên…");
+      batch.reduce(function (chain, f) {
+        return chain.then(function () {
+          return resizeImageFile(f).then(function (blob) {
+            var path = "baogia/warranty/" + slug(r0.id) + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + ".jpg";
+            return uploadToStorage(path, blob, "image/jpeg");
+          }).then(function (url) {
+            var cur = issueById(r0.id);
+            if (!cur) return;
+            cur.photos = (cur.photos || []).concat([url]);
+            saveState();       // tự lưu ngay sau mỗi ảnh (bài học "quên bấm Lưu là mất ảnh")
+            if (issueEditingId === r0.id) paintIssuePhotos();
+          });
+        });
+      }, Promise.resolve()).catch(function (err) { toast("Không tải được ảnh lên: " + err.message); });
+    };
+
+    document.getElementById("issueDelete").onclick = function () { if (issueEditingId) deleteIssue(issueEditingId); };
+    document.getElementById("issueSave").onclick = function () {
+      var f = readIssueForm();
+      if (!f.jobId) { toast("Cần chọn gói việc."); return; }
+      if (!f.reportedDate) { toast("Cần nhập ngày báo."); return; }
+      if (!f.description) { toast("Cần mô tả sự cố."); return; }
+      if (f.status === "done") {
+        if (!f.resolvedDate) f.resolvedDate = todayIso();
+        if (f.resolvedDate < f.reportedDate) { toast("Ngày xử lý xong không thể trước ngày báo."); return; }
+      }
+      var isNew = !issueEditingId;
+      var cur = issueEditingId ? issueById(issueEditingId) : null;
+      if (cur) {
+        cur.jobId = f.jobId; cur.reportedDate = f.reportedDate; cur.status = f.status; cur.resolvedDate = f.resolvedDate;
+        cur.description = f.description; cur.resolution = f.resolution;
+      } else {
+        WARRANTY_ISSUES.push({ id: uid("is_"), jobId: f.jobId, reportedDate: f.reportedDate, description: f.description,
+          photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution });
+      }
+      saveState();
+      closeIssueEditor();
+      toast(isNew ? "Đã ghi sự cố." : "Đã lưu sự cố.");
+    };
+
+    document.getElementById("issueModalOverlay").hidden = false;
   }
 
   /* ===================== THƯ VIỆN VẬT TƯ ===================== */
@@ -4584,6 +4998,7 @@
   function iconMoon() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 119.5 4a6.8 6.8 0 0010.5 10.5z"/></svg>'; }
   function iconExternal() { return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>'; }
   function iconSync() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 006.5 6.5L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0013.5 4.5L20 15"/><path d="M20 20v-5h-5"/></svg>'; }
+  function iconAlert() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".2" fill="currentColor"/></svg>'; }
   function iconClose() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'; }
 
   /* ===================== INIT ===================== */
