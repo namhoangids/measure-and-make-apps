@@ -476,6 +476,15 @@
   .summary-table-wrap tr.summary-total td { background: transparent; color: var(--accent); border-top-color: var(--line-orange); }
   .summary-row.total { color: var(--accent); }
 
+  /* Trang danh sách báo giá và hộp thoại: cùng ngôn ngữ màu */
+  .table-wrap { border-color: var(--line-orange); }
+  .table-wrap thead th { background: transparent; color: var(--ink-soft); border-bottom-color: var(--line-orange); }
+  .table-wrap tbody td { border-bottom-color: transparent; }
+  .table-wrap tbody tr:nth-child(even) td { background: var(--zebra); }
+  .table-wrap tbody tr.row-click:hover td { background: var(--surface-2); }
+  .modal-head { border-bottom-color: var(--line-orange); }
+  .modal-actions { border-top-color: var(--line-orange); }
+
   /* ---------- Toast ---------- */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--ink); color: var(--paper); padding: 11px 20px; border-radius: 9px; font-size: 12.8px; font-weight: 500; box-shadow: var(--shadow-lift); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 50; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
