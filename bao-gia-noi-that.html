@@ -518,6 +518,8 @@
   .cov-in { color: var(--good); }
   .cov-out { color: var(--warn); }
   .cov-none { color: var(--ink-mute); font-weight: 500; }
+  .cal-help summary { cursor: pointer; font-weight: 600; font-size: 12.8px; color: var(--accent); margin-bottom: 8px; }
+  .cal-help code { font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
   .toolbar-right { flex-wrap: wrap; }
   .head-actions { flex-wrap: wrap; flex-shrink: 1; } /* 3 nút ở màn nhà thầu: xuống dòng thay vì làm rộng cả trang trên điện thoại */
   @media (max-width: 640px) {
@@ -837,6 +839,8 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
+  var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
+  var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
   var CONTRACTOR_JOBS = []; // gói việc: nhà thầu × công trình × phạm vi, kèm ngày nghiệm thu + số tháng bảo hành
   var CUSTOMERS = []; // đồng bộ từ tab "Danh sách khách hàng" — xem ở màn renderCustomersScreen() (nav "Danh sách khách hàng")
@@ -1057,7 +1061,7 @@
     pendingSave = false;
     var payload = {
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES, calendarSync: CALENDAR_CFG
     };
     // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
     // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
@@ -1078,6 +1082,7 @@
       inflightWrites--;
       toast("Không lưu được lên server — " + err.message);
     });
+    scheduleCalendarSync(); // nếu danh sách mốc hết bảo hành đã đổi thì gửi lại vào Google Calendar
   }
   window.addEventListener("beforeunload", function () { if (pendingSave) flushSave(); });
 
@@ -1178,8 +1183,9 @@
         var nContractors = Array.isArray(d.contractors) ? d.contractors : [];
         var nJobs = Array.isArray(d.contractorJobs) ? d.contractorJobs : [];
         var nIssues = Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [];
-        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs, nIssues]);
-        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS, WARRANTY_ISSUES]);
+        var nCal = Object.assign({}, CALENDAR_CFG_DEFAULT, (d.calendarSync && typeof d.calendarSync === "object") ? d.calendarSync : {});
+        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs, nIssues, nCal]);
+        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS, WARRANTY_ISSUES, CALENDAR_CFG]);
         state.quotes = nQuotes;
         PRICE_CATALOG = nCatalog;
         PROJECTS = nProjects;
@@ -1187,6 +1193,7 @@
         CONTRACTORS = nContractors;
         CONTRACTOR_JOBS = nJobs;
         WARRANTY_ISSUES = nIssues;
+        CALENDAR_CFG = nCal;
         if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
         // Không khác gì cái đang hiện → không việc gì phải vẽ lại, và cũng KHÔNG hẹn vẽ lại.
         if (firstPaintDone && incomingJson === onScreenJson) return;
@@ -1204,6 +1211,7 @@
         hideAuthOverlay();
         renderUserFoot();
         renderCurrentScreen();
+        scheduleCalendarSync();
       }, function (err) {
         showLoading("Mất kết nối tới server: [" + err.code + "] " + err.message + " — thử tải lại trang (F5).");
       });
@@ -2489,6 +2497,7 @@
       '<div class="page-head">' +
         '<div><h1>Danh sách nhà thầu</h1><div class="page-sub">Thông tin liên hệ, nhà thầu nào làm công trình nào và thời hạn bảo hành từng gói việc.</div></div>' +
         '<div class="head-actions">' +
+          '<button class="btn" id="btnCalendar">' + iconCalendar() + ' Gửi lịch Google</button>' +
           '<button class="btn" id="btnAddIssue">' + iconAlert() + ' Ghi sự cố</button>' +
           '<button class="btn" id="btnAddJob">' + iconPlus() + ' Thêm gói việc</button>' +
           '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
@@ -2522,6 +2531,7 @@
     document.getElementById("btnAddContractor").addEventListener("click", function () { openContractorEditor(null); });
     document.getElementById("btnAddJob").addEventListener("click", function () { openJobEditor(null, {}); });
     document.getElementById("btnAddIssue").addEventListener("click", function () { openIssueEditor(null, {}); });
+    document.getElementById("btnCalendar").addEventListener("click", openCalendarModal);
     var clr = document.getElementById("btnClearCPrj");
     if (clr) clr.addEventListener("click", function () { view.cProject = ""; renderContractorsScreen(); });
     document.querySelectorAll("[data-ctab]").forEach(function (t) {
@@ -3261,6 +3271,216 @@
     };
 
     document.getElementById("issueModalOverlay").hidden = false;
+  }
+
+  // Bản sao của file warranty-calendar.gs (để chép thẳng từ hộp thoại). Sửa file .gs thì sửa cả chỗ này.
+  var CALENDAR_SCRIPT_CODE = "/**\n * measure&make — gửi HẠN BẢO HÀNH từ app Báo giá vào Google Calendar.\n *\n * CÁCH CÀI (làm 1 lần, ~3 phút):\n *  1. Vào script.google.com → \"Dự án mới\" → xoá code mẫu → dán toàn bộ file này vào → Ctrl+S.\n *  2. Đổi dòng TOKEN bên dưới thành 1 mã bí mật bất kỳ (vd. 12 ký tự chữ + số). Nhớ mã này.\n *  3. Bấm \"Triển khai\" → \"Tùy chọn triển khai mới\" → loại \"Ứng dụng web\":\n *       Thực thi với tư cách: Tôi   ·   Ai có quyền truy cập: Bất kỳ ai\n *     → Triển khai → cấp quyền cho Google Calendar\n *     (Google báo \"ứng dụng chưa được xác minh\": bấm Nâng cao → Tiếp tục — đây là script của chính a).\n *  4. Copy \"URL ứng dụng web\" (đuôi /exec), dán vào app: Danh sách nhà thầu → nút \"Gửi lịch Google\"\n *     cùng mã bí mật ở bước 2 → \"Lưu cài đặt\" → \"Gửi ngay\".\n *\n * Script chỉ tạo / sửa / xoá đúng những sự kiện do chính nó tạo (tự ghi nhớ trong Script Properties),\n * không đụng vào sự kiện khác trong lịch của a. Mỗi gói việc có ngày nghiệm thu → 1 sự kiện cả ngày\n * vào NGÀY HẾT BẢO HÀNH, màu cam, nhắc email trước 4 tuần và nhắc thông báo trước 1 tuần.\n * Sửa ngày nghiệm thu / số tháng bảo hành trong app → sự kiện tự dời theo. Xoá gói việc → sự kiện tự mất.\n */\n\nvar TOKEN = 'ĐỔI-THÀNH-MÃ-BÍ-MẬT';   // <-- phải TRÙNG với ô \"Mã bí mật\" trong app\nvar USE_SEPARATE_CALENDAR = false;    // false: ghi vào lịch chính của a (hiện trên mọi thiết bị).\n                                      // true : tạo riêng lịch \"Bảo hành công trình – measure&make\".\nvar SEPARATE_CALENDAR_NAME = 'Bảo hành công trình – measure&make';\n\nfunction doGet() {\n  return out_({ ok: true, service: 'warranty-calendar' });\n}\n\nfunction doPost(e) {\n  try {\n    var req = JSON.parse(e.postData.contents);\n    if (req.token !== TOKEN) return out_({ ok: false, error: 'Sai mã bí mật (TOKEN) — kiểm tra lại cho khớp giữa app và Apps Script.' });\n    if (req.action !== 'syncWarrantyCalendar') return out_({ ok: false, error: 'Yêu cầu không hợp lệ.' });\n    return out_(sync_(req.events || []));\n  } catch (err) {\n    return out_({ ok: false, error: String(err) });\n  }\n}\n\nfunction out_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction calendar_() {\n  if (!USE_SEPARATE_CALENDAR) return CalendarApp.getDefaultCalendar();\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('calId');\n  var cal = id ? CalendarApp.getCalendarById(id) : null;\n  if (!cal) {\n    cal = CalendarApp.createCalendar(SEPARATE_CALENDAR_NAME);\n    props.setProperty('calId', cal.getId());\n  }\n  return cal;\n}\n\nfunction sync_(events) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);                       // 2 thiết bị cùng gửi 1 lúc thì xếp hàng, không tạo trùng\n  try {\n    var props = PropertiesService.getScriptProperties();\n    var map = JSON.parse(props.getProperty('map') || '{}');   // key gói việc -> { id sự kiện, sig }\n    var cal = calendar_();\n    var seen = {}, created = 0, updated = 0, removed = 0, same = 0;\n\n    events.forEach(function (ev) {\n      seen[ev.key] = true;\n      var sig = ev.date + '|' + ev.title + '|' + ev.description;\n      var m = map[ev.key];\n      var event = null;\n      if (m) { try { event = cal.getEventById(m.id); } catch (x) { event = null; } }\n      if (event && m.sig === sig) { same++; return; }\n\n      var p = String(ev.date).split('-');\n      var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n      if (event) {\n        event.setTitle(ev.title);\n        event.setDescription(ev.description);\n        event.setAllDayDate(day);\n        updated++;\n      } else {\n        event = cal.createAllDayEvent(ev.title, day, { description: ev.description });\n        event.setColor(CalendarApp.EventColor.ORANGE);\n        event.removeAllReminders();\n        event.addEmailReminder(28 * 24 * 60);   // 4 tuần trước (tối đa Google cho phép)\n        event.addPopupReminder(7 * 24 * 60);    // 1 tuần trước\n        created++;\n      }\n      map[ev.key] = { id: event.getId(), sig: sig };\n    });\n\n    // Gói việc đã xoá / hết hạn quá lâu khỏi app -> gỡ sự kiện tương ứng (chỉ sự kiện do script này tạo)\n    Object.keys(map).forEach(function (k) {\n      if (seen[k]) return;\n      try { var old = cal.getEventById(map[k].id); if (old) old.deleteEvent(); } catch (x) {}\n      delete map[k];\n      removed++;\n    });\n\n    props.setProperty('map', JSON.stringify(map));\n    return { ok: true, created: created, updated: updated, removed: removed, same: same, calendar: cal.getName() };\n  } finally {\n    lock.releaseLock();\n  }\n}\n";
+
+  /* ===================== GỬI HẠN BẢO HÀNH VÀO GOOGLE CALENDAR ===================== */
+  // Mỗi gói việc đã có ngày nghiệm thu → 1 sự kiện cả ngày vào NGÀY HẾT BẢO HÀNH. App gọi 1 Google Apps Script
+  // riêng của Nam (mã ở file warranty-calendar.gs, cũng có sẵn trong hộp thoại "Gửi lịch Google") — script mới có
+  // quyền ghi vào lịch, app không giữ khoá Google nào. Cấu hình (URL + mã bí mật) lưu ở Firestore
+  // (`calendarSync` trong baogia/main, chỉ người đăng nhập đọc được) để máy nào cũng dùng chung, KHÔNG viết cứng
+  // trong mã nguồn vì file này công khai trên GitHub Pages.
+  //   CALENDAR_CFG = { url, token, auto, lastSig, lastAt, lastMsg }
+  // "Tự động": sau mỗi lần lưu dữ liệu (và lúc mở app) nếu danh sách mốc thay đổi so với lần gửi trước (lastSig)
+  // thì gửi lại. Script tự tạo / sửa / xoá sự kiện cho khớp — gửi lại nhiều lần cũng không tạo trùng.
+  var CALENDAR_SYNC_KEEP_DAYS = 30;   // gói đã hết bảo hành quá 30 ngày thì gỡ khỏi lịch
+  var calSyncTimer = null, calSyncing = false;
+
+  function warrantyCalendarEvents() {
+    var app = String(location.href).split("#")[0].split("?")[0];
+    var minEnd = addDaysIso(todayIso(), -CALENDAR_SYNC_KEEP_DAYS);
+    var events = [];
+    CONTRACTOR_JOBS.forEach(function (j) {
+      if (!isoParts(j.handoverDate)) return;
+      var w = warrantyInfo(j);
+      if (!w.endIso || w.endIso < minEnd) return;
+      var c = contractorById(j.contractorId), p = projectById(j.projectId);
+      var open = openIssuesOfJob(j.id).length;
+      var lines = [
+        "Công trình: " + (p ? p.name : "?"),
+        "Gói việc: " + (j.scope || "—"),
+        "Nhà thầu: " + (c ? c.name : "?") + (c && c.phone ? " · " + c.phone : ""),
+        "Nghiệm thu: " + fmtDate(j.handoverDate) + " · bảo hành " + w.months + " tháng"
+      ];
+      if (open) lines.push("Sự cố chưa xong: " + open);
+      lines.push("", "Mở app: " + app);
+      events.push({
+        key: j.id,
+        date: w.endIso,
+        title: "Hết bảo hành: " + (p ? p.name : "?") + " – " + (j.scope || "gói việc") + " (" + (c ? c.name : "?") + ")",
+        description: lines.join("\n")
+      });
+    });
+    events.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
+    return events;
+  }
+  function calendarSig(events) { return JSON.stringify(events); }
+
+  // Cộng ngày vào chuỗi YYYY-MM-DD (dùng cho mốc "quá hạn bao lâu thì gỡ khỏi lịch")
+  function addDaysIso(iso, n) {
+    var p = isoParts(iso);
+    if (!p) return "";
+    var d = new Date(Date.UTC(p.y, p.m - 1, p.d) + n * 86400000);
+    return isoFromParts(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+
+  // Gửi lên Apps Script. Trả về Promise<{ok, msg}>. Chỉ ghi nhớ "đã gửi" (lastSig) khi script báo ok.
+  function sendCalendarSync() {
+    if (!CALENDAR_CFG.url || !CALENDAR_CFG.token) return Promise.resolve({ ok: false, msg: "Chưa nhập URL và mã bí mật." });
+    if (calSyncing) return Promise.resolve({ ok: false, msg: "Đang gửi, đợi một chút." });
+    calSyncing = true;
+    var events = warrantyCalendarEvents();
+    var sig = calendarSig(events);
+    // text/plain = "yêu cầu đơn giản", trình duyệt không cần hỏi trước (Apps Script không trả lời được bước hỏi đó)
+    return fetch(CALENDAR_CFG.url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "syncWarrantyCalendar", token: CALENDAR_CFG.token, events: events })
+    }).then(function (res) { return res.json(); }).then(function (r) {
+      calSyncing = false;
+      if (!r || !r.ok) {
+        CALENDAR_CFG.lastMsg = "Lỗi: " + ((r && r.error) || "script không trả về kết quả hợp lệ.");
+        CALENDAR_CFG.lastFailSig = sig;
+        saveState();
+        return { ok: false, msg: CALENDAR_CFG.lastMsg };
+      }
+      CALENDAR_CFG.lastSig = sig;
+      CALENDAR_CFG.lastFailSig = "";
+      CALENDAR_CFG.lastAt = Date.now();
+      CALENDAR_CFG.lastMsg = "Đã gửi " + events.length + " mốc: thêm " + r.created + ", sửa " + r.updated + ", gỡ " + r.removed + ", giữ nguyên " + r.same + ".";
+      saveState();
+      return { ok: true, msg: CALENDAR_CFG.lastMsg };
+    }).catch(function (err) {
+      calSyncing = false;
+      CALENDAR_CFG.lastMsg = "Không gọi được Apps Script (" + err.message + "). Kiểm tra URL, và mục Triển khai phải để \"Ai có quyền truy cập: Bất kỳ ai\".";
+      CALENDAR_CFG.lastFailSig = sig;
+      saveState();
+      return { ok: false, msg: CALENDAR_CFG.lastMsg };
+    });
+  }
+
+  // Gọi sau mỗi lần lưu và lúc mở app; chỉ gửi khi bật tự động và danh sách mốc đã đổi.
+  function scheduleCalendarSync() {
+    if (!CALENDAR_CFG.url || !CALENDAR_CFG.token || !CALENDAR_CFG.auto) return;
+    clearTimeout(calSyncTimer);
+    calSyncTimer = setTimeout(function () {
+      var sig = calendarSig(warrantyCalendarEvents());
+      // Đã gửi đúng nội dung này rồi, hoặc vừa lỗi với đúng nội dung này (không tự thử lại mãi — sửa cấu hình
+      // hoặc bấm "Gửi ngay" mới thử lại) thì thôi.
+      if (sig === CALENDAR_CFG.lastSig || sig === CALENDAR_CFG.lastFailSig) return;
+      sendCalendarSync().then(function (r) {
+        if (r.ok) toast("Đã cập nhật hạn bảo hành vào Google Calendar.");
+        else toast("Chưa gửi được lịch Google — mở \"Gửi lịch Google\" để xem lỗi.");
+        var box = document.getElementById("calResult");
+        if (box) { box.textContent = r.msg; box.className = "job-preview " + (r.ok ? "active" : "soon"); }
+      });
+    }, 4000);
+  }
+
+  function ensureCalendarModal() {
+    if (document.getElementById("calendarModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "calendarModalOverlay";
+    el.className = "modal-overlay";
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:640px;">' +
+        '<div class="modal-head"><h3>Gửi hạn bảo hành vào Google Calendar</h3><button class="icon-btn" id="calClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="job-preview" id="calState" style="margin-bottom:14px;"></div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>URL ứng dụng web (đuôi /exec)</label><input id="calUrl" placeholder="https://script.google.com/macros/s/…/exec"></div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Mã bí mật (trùng với TOKEN trong script)</label><input id="calToken" type="password" autocomplete="off"></div>' +
+            '<div class="field" style="display:flex;align-items:flex-end;"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-size:12.8px;margin:0;color:var(--ink);"><input id="calAuto" type="checkbox" style="width:auto;"> Tự động gửi khi có thay đổi</label></div>' +
+          '</div>' +
+          '<div class="job-preview" id="calResult" style="margin-bottom:14px;display:none;"></div>' +
+          '<details class="cal-help"><summary>Chưa cài? Cách cài (làm 1 lần, ~3 phút)</summary>' +
+            '<ol class="modal-steps">' +
+              '<li>Vào <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> → <b>Dự án mới</b> → xoá code mẫu → dán mã bên dưới (nút <b>Chép mã</b>) → Ctrl+S.</li>' +
+              '<li>Đổi dòng <code>TOKEN</code> đầu file thành một mã bí mật bất kỳ (vd. 12 ký tự chữ + số), rồi nhập đúng mã đó vào ô phía trên.</li>' +
+              '<li><b>Triển khai</b> → <b>Tùy chọn triển khai mới</b> → loại <b>Ứng dụng web</b>: Thực thi với tư cách <b>Tôi</b>, Ai có quyền truy cập <b>Bất kỳ ai</b> → Triển khai → cấp quyền Google Calendar (nếu Google báo "chưa xác minh": Nâng cao → Tiếp tục).</li>' +
+              '<li>Copy <b>URL ứng dụng web</b> dán vào ô trên → <b>Lưu cài đặt</b> → <b>Gửi ngay</b>.</li>' +
+            '</ol>' +
+            '<textarea id="calCode" class="sync-textarea" readonly rows="8"></textarea>' +
+            '<button class="btn btn-sm" id="calCopy" type="button" style="margin-top:8px;">Chép mã</button>' +
+          '</details>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn" id="calCancel" type="button">Đóng</button>' +
+          '<button class="btn" id="calSave" type="button">' + iconCheck() + ' Lưu cài đặt</button>' +
+          '<button class="btn btn-primary" id="calSend" type="button">' + iconSync() + ' Gửi ngay</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("calClose").addEventListener("click", closeCalendarModal);
+    document.getElementById("calCancel").addEventListener("click", closeCalendarModal);
+    el.addEventListener("click", function (e) { if (e.target === el) closeCalendarModal(); });
+  }
+  function closeCalendarModal() {
+    var el = document.getElementById("calendarModalOverlay");
+    if (el) el.hidden = true;
+    if (view.screen === "contractors") renderContractorsScreen();
+  }
+
+  function paintCalendarState() {
+    var st = document.getElementById("calState");
+    var n = warrantyCalendarEvents().length;
+    if (!CALENDAR_CFG.url) {
+      st.className = "job-preview";
+      st.textContent = "Chưa kết nối. Có " + n + " mốc hết bảo hành sẽ được gửi khi a cài xong (xem \"Cách cài\" bên dưới).";
+    } else {
+      var same = calendarSig(warrantyCalendarEvents()) === CALENDAR_CFG.lastSig;
+      st.className = "job-preview " + (same ? "active" : "soon");
+      st.textContent = (same ? "Lịch đang khớp với app" : "Có thay đổi chưa gửi") + " · " + n + " mốc hết bảo hành" +
+        (CALENDAR_CFG.lastAt ? " · gửi lần cuối " + fmtDateTime(new Date(CALENDAR_CFG.lastAt).toISOString()) : "") + ".";
+    }
+    var res = document.getElementById("calResult");
+    if (CALENDAR_CFG.lastMsg) { res.style.display = ""; res.textContent = CALENDAR_CFG.lastMsg; res.className = "job-preview " + (/^Lỗi|^Không gọi/.test(CALENDAR_CFG.lastMsg) ? "soon" : ""); }
+    else res.style.display = "none";
+  }
+
+  function readCalendarForm() {
+    CALENDAR_CFG.url = document.getElementById("calUrl").value.trim();
+    CALENDAR_CFG.token = document.getElementById("calToken").value.trim();
+    CALENDAR_CFG.auto = document.getElementById("calAuto").checked;
+  }
+
+  function openCalendarModal() {
+    ensureCalendarModal();
+    document.getElementById("calUrl").value = CALENDAR_CFG.url || "";
+    document.getElementById("calToken").value = CALENDAR_CFG.token || "";
+    document.getElementById("calAuto").checked = CALENDAR_CFG.auto !== false;
+    document.getElementById("calCode").value = CALENDAR_SCRIPT_CODE;
+    paintCalendarState();
+
+    document.getElementById("calCopy").onclick = function () {
+      var ta = document.getElementById("calCode");
+      ta.select();
+      var done = function () { toast("Đã chép mã Apps Script."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CALENDAR_SCRIPT_CODE).then(done, function () { document.execCommand("copy"); done(); });
+      else { document.execCommand("copy"); done(); }
+    };
+    document.getElementById("calSave").onclick = function () {
+      readCalendarForm();
+      if (CALENDAR_CFG.url && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(CALENDAR_CFG.url)) { toast("URL phải có dạng https://script.google.com/macros/s/…/exec"); return; }
+      CALENDAR_CFG.lastSig = ""; CALENDAR_CFG.lastFailSig = "";   // đổi cấu hình -> lần gửi tới gửi lại toàn bộ
+      saveState();
+      paintCalendarState();
+      toast("Đã lưu cài đặt lịch.");
+      scheduleCalendarSync();
+    };
+    document.getElementById("calSend").onclick = function () {
+      readCalendarForm();
+      var btn = this; btn.disabled = true;
+      sendCalendarSync().then(function (r) {
+        btn.disabled = false;
+        paintCalendarState();
+        toast(r.ok ? "Đã gửi vào Google Calendar." : "Chưa gửi được — xem thông báo trong hộp thoại.");
+      });
+    };
+    document.getElementById("calendarModalOverlay").hidden = false;
   }
 
   /* ===================== THƯ VIỆN VẬT TƯ ===================== */
@@ -4999,6 +5219,7 @@
   function iconExternal() { return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>'; }
   function iconSync() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 006.5 6.5L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0013.5 4.5L20 15"/><path d="M20 20v-5h-5"/></svg>'; }
   function iconAlert() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".2" fill="currentColor"/></svg>'; }
+  function iconCalendar() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'; }
   function iconClose() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'; }
 
   /* ===================== INIT ===================== */
