@@ -544,7 +544,33 @@
   .stat-tile { min-width: 0; }
   .stat-value.sm { font-size: 20px; }
   @media (max-width: 640px) { .stat-value.sm { font-size: 15px; } }
+  .ack-results { display: flex; flex-direction: column; gap: 6px; }
+  .ack-radio { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border-soft); border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .ack-radio.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .ack-radio input { width: auto; accent-color: var(--accent); }
+  .ack-row { grid-template-columns: 1fr 1.4fr 1.4fr; }
+  /* Bản in biên bản nghiệm thu (dùng chung khung .print-doc / .print-page của báo giá) */
+  .print-ack-h { font-size: 13.5px; font-weight: 700; margin: 16px 0 6px; padding-left: 10px; border-left: 3px solid var(--print-orange); color: var(--print-ink); }
+  .print-ack-info { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .print-ack-info td { padding: 3px 10px 3px 0; vertical-align: top; border: none; }
+  .print-ack-info td.lbl { width: 30%; color: #62707A; }
+  .print-ack-text { font-size: 13px; white-space: pre-wrap; line-height: 1.55; }
+  .print-doc .ack-line { display: flex; align-items: center; gap: 10px; font-size: 13px; margin: 5px 0; }
+  .print-doc .ack-box { width: 14px; height: 14px; border: 1px solid var(--print-orange); border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .print-doc .ack-box.on { background: var(--print-orange); }
+  .print-doc .ack-box.on::after { content: ""; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+  .print-ack-signs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-top: 26px; text-align: center; font-size: 12.5px; break-inside: avoid; }
+  .print-ack-signs .sg-side { font-weight: 700; text-transform: uppercase; }
+  .print-ack-signs .sg-sub { color: #8C8178; font-size: 11px; margin-bottom: 62px; }
+  .print-ack-signs .sg-name { font-weight: 600; }
+  .print-ack-signs .sg-title { color: #62707A; font-size: 11.5px; }
   .toolbar-right { flex-wrap: wrap; }
+  @media (max-width: 640px) {
+    .toolbar .tabs { flex-wrap: wrap; width: 100%; }
+    .ack-row { grid-template-columns: 1fr; }
+    .modal-actions { flex-wrap: wrap; }
+    .modal-actions .btn { flex: 1 1 auto; justify-content: center; }
+  }
   .head-actions { flex-wrap: wrap; flex-shrink: 1; } /* 3 nút ở màn nhà thầu: xuống dòng thay vì làm rộng cả trang trên điện thoại */
   @media (max-width: 640px) {
     .toolbar-right { width: 100%; }
@@ -863,7 +889,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-09-25-hd1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-09-25-bb1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1748,6 +1774,12 @@
         "Giá trị hiện hành": ci.current, "% giữ lại": ci.pct, "Tiền giữ lại": ci.retention.amount, "Đã thanh toán": ci.paid, "Còn phải trả": ci.remaining,
         "Dự toán đối chiếu": ci.cmp && !ci.cmp.missing ? ci.cmp.est : "", "So với dự toán": cm.text, "Số file": (j.contract.files || []).length });
     }));
+    add("Bien ban nghiem thu", CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).map(function (j) {
+      var a = j.acceptance;
+      return Object.assign(jobLabel(j), { "Số biên bản": a.no || "", "Ngày": a.date || "", "Kết quả": (ACK_RESULTS[a.result] || {}).short || a.result, "Địa điểm": a.place || "",
+        "Nội dung": a.scopeText || "", "Tồn tại": a.findings || "", "Hạn khắc phục": a.fixDeadline || "", "Ý kiến khác": a.note || "",
+        "Thành phần": (a.participants || []).map(function (p) { return p.side + ": " + p.name; }).join("; "), "Số file scan": (a.files || []).length });
+    }));
     add("Dot thanh toan", ctrJobs.reduce(function (acc, j) {
       contractInfo(j).pays.forEach(function (x) {
         acc.push(Object.assign(jobLabel(j), { "Đợt": x.pay.label || "", "Loại": PAY_KINDS[x.pay.kind] || "", "Số tiền": x.amount, "Hạn": x.pay.dueDate || "", "Ngày trả": x.pay.paidDate || "", "Trạng thái": PAY_STATUS[x.status].label }));
@@ -1791,7 +1823,7 @@
         '<div class="modal-body">' +
           '<div class="sync-status" id="backupSummary"></div>' +
           '<ol class="modal-steps">' +
-            '<li><b>File Excel (.xlsx)</b> — 12 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu, sự cố bảo hành, hợp đồng nhà thầu, đợt thanh toán, phụ lục. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
+            '<li><b>File Excel (.xlsx)</b> — 13 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu, sự cố bảo hành, hợp đồng nhà thầu, biên bản nghiệm thu, đợt thanh toán, phụ lục. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
             '<li><b>File sao lưu đầy đủ (.json)</b> — bản sao y nguyên toàn bộ dữ liệu. Nếu app mất dữ liệu, đưa file này cho Claude là khôi phục lại được đúng từng dòng. Excel không làm được việc đó vì đã làm phẳng bảng.</li>' +
           '</ol>' +
           '<div class="sync-status">Nên tải cả 2 file và cất vào Dropbox mỗi khi có thay đổi lớn.</div>' +
@@ -1813,7 +1845,7 @@
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
       PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
-      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng).";
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng, " + CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).length + " biên bản nghiệm thu).";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -1984,7 +2016,7 @@
       { label: "Bảng giá công cụ xây dựng", soon: true },
       { label: "Đơn giá chung xây dựng", soon: true },
       { label: "Hợp đồng nhà thầu", screen: "contracts" },
-      { label: "Biên bản nghiệm thu", soon: true }
+      { label: "Biên bản nghiệm thu", screen: "acceptance" }
     ]},
     { group: "Công trình", items: [
       { label: "Danh sách công trình", screen: "projects" },
@@ -2003,7 +2035,8 @@
   function isNavScreenActive(screen) {
     if (screen === "quotes") return view.screen === "list" || view.screen === "detail" || view.screen === "print";
     if (screen === "contracts") return view.screen === "contractors" && view.ctab === "contracts";
-    if (screen === "contractors") return view.screen === "contractors" && view.ctab !== "contracts";
+    if (screen === "acceptance") return view.screen === "contractors" && view.ctab === "acceptance";
+    if (screen === "contractors") return view.screen === "contractors" && view.ctab !== "contracts" && view.ctab !== "acceptance";
     return view.screen === screen;
   }
 
@@ -2033,7 +2066,10 @@
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
         else if (screen === "catalog" && view.screen !== "catalog") { view.screen = "catalog"; renderCatalogScreen(); renderNav(); }
         else if (screen === "contractors" && !isNavScreenActive("contractors")) {
-          view.screen = "contractors"; if (view.ctab === "contracts") view.ctab = "list"; view.cJob = ""; renderContractorsScreen(); renderNav();
+          view.screen = "contractors"; if (view.ctab === "contracts" || view.ctab === "acceptance") view.ctab = "list"; view.cJob = ""; renderContractorsScreen(); renderNav();
+        }
+        else if (screen === "acceptance" && !isNavScreenActive("acceptance")) {
+          view.screen = "contractors"; view.ctab = "acceptance"; view.cJob = ""; renderContractorsScreen(); renderNav();
         }
         else if (screen === "contracts" && !isNavScreenActive("contracts")) {
           view.screen = "contractors"; view.ctab = "contracts"; view.cJob = ""; renderContractorsScreen(); renderNav();
@@ -2449,7 +2485,7 @@
       (withProject ? '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div></td>' : "") +
       '<td><div class="cell-title">' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</div>' +
         (c && c.phone ? '<div class="cell-muted">' + contractorPhoneHtml(c.phone) + '</div>' : "") + '</td>' +
-      '<td>' + escapeHtml(j.scope || "—") + contractLineHtml(j) + '</td>' +
+      '<td>' + escapeHtml(j.scope || "—") + contractLineHtml(j) + ackLineHtml(j) + '</td>' +
       '<td class="cell-muted">' + (isoParts(j.handoverDate) ? fmtDate(j.handoverDate) : "—") + '</td>' +
       '<td>' + (w.endIso ? fmtDate(w.endIso) + '<div class="cell-muted">' + w.months + ' tháng</div>' : '<span class="cell-muted">' + w.months + ' tháng</span>') + '</td>' +
       '<td><span class="pill ' + w.pill + '">' + w.label + '</span>' +
@@ -2457,6 +2493,7 @@
         (nIssues ? '<div style="margin-top:4px;"><button type="button" class="issue-flag' + (nOpenIssues ? " has-open" : "") + '" data-goto-issues="' + escapeHtml(j.id) + '">' +
           (nOpenIssues ? nOpenIssues + " sự cố chưa xong" : nIssues + " sự cố (đã xong)") + '</button></div>' : "") + '</td>' +
       '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-open-ack="' + escapeHtml(j.id) + '" title="Biên bản nghiệm thu">' + iconAck() + '</button>' +
         '<button class="icon-btn" data-open-contract="' + escapeHtml(j.id) + '" title="Hợp đồng">' + iconDoc() + '</button>' +
         '<button class="icon-btn" data-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button class="icon-btn" data-edit-job="' + escapeHtml(j.id) + '" title="Sửa gói việc">' + iconEdit() + '</button>' +
@@ -2535,6 +2572,7 @@
     else if (view.ctab === "warranty") body = contractorTabWarranty();
     else if (view.ctab === "issues") body = contractorTabIssues();
     else if (view.ctab === "contracts") body = contractorTabContracts();
+    else if (view.ctab === "acceptance") body = contractorTabAcceptance();
     else {
       body = '<div class="table-wrap"><div class="table-scroll"><table>' +
         '<thead><tr><th>Nhà thầu</th><th>Liên hệ</th><th>Công trình</th><th>Bảo hành gần nhất</th><th></th></tr></thead>' +
@@ -2558,7 +2596,7 @@
           '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
         '</div>' +
       '</div>' +
-      (view.ctab === "contracts" ? "" : '<div class="stats stats-5">' +
+      (view.ctab === "contracts" || view.ctab === "acceptance" ? "" : '<div class="stats stats-5">' +
         '<div class="stat-tile"><div class="stat-label">Nhà thầu</div><div class="stat-value">' + CONTRACTORS.length + '</div><div class="stat-foot">' + CONTRACTOR_JOBS.length + ' gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nBuilding + '</div><div class="stat-foot">gói việc đang làm</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Đang bảo hành</div><div class="stat-value">' + nActive + '</div><div class="stat-foot">gói việc</div></div>' +
@@ -2573,6 +2611,7 @@
           '<button class="tab' + (view.ctab === "warranty" ? " active" : "") + '" data-ctab="warranty">Bảo hành (' + CONTRACTOR_JOBS.length + ')</button>' +
           '<button class="tab' + (view.ctab === "issues" ? " active" : "") + '" data-ctab="issues">Sự cố' + (nIssueOpen ? " (" + nIssueOpen + " mở)" : "") + '</button>' +
           '<button class="tab' + (view.ctab === "contracts" ? " active" : "") + '" data-ctab="contracts">Hợp đồng (' + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + ')</button>' +
+          '<button class="tab' + (view.ctab === "acceptance" ? " active" : "") + '" data-ctab="acceptance">Nghiệm thu</button>' +
         '</div>' +
         '<div class="toolbar-right">' +
           '<select id="cTradeSel" class="ctr-select">' + tradeOpts + '</select>' +
@@ -2618,6 +2657,13 @@
     document.querySelectorAll("[data-add-job-prj]").forEach(function (b) {
       b.addEventListener("click", function () { openJobEditor(null, { projectId: b.dataset.addJobPrj }); });
     });
+    // Biên bản nghiệm thu
+    document.querySelectorAll("[data-open-ack]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openAckEditor(b.dataset.openAck); });
+    });
+    document.querySelectorAll("[data-print-ack]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); printAcceptance(b.dataset.printAck); });
+    });
     // Hợp đồng
     document.querySelectorAll("[data-open-contract]").forEach(function (b) {
       b.addEventListener("click", function (e) { e.stopPropagation(); openContractEditor(b.dataset.openContract); });
@@ -2659,7 +2705,7 @@
     var jobs = jobsOfContractor(id);
     var nIss = issuesOfContractor(id).length;
     var nCtr = jobs.filter(function (j) { return j.contract; }).length;
-    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành)" + (nIss ? ", " + nIss + " sự cố trong nhật ký" : "") + (nCtr ? ", " + nCtr + " HỢP ĐỒNG kèm các đợt thanh toán" : "") + " của nhà thầu này." : "");
+    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành)" + (nIss ? ", " + nIss + " sự cố trong nhật ký" : "") + (nCtr ? ", " + nCtr + " HỢP ĐỒNG kèm các đợt thanh toán" : "") + (jobs.filter(function (j) { return j.acceptance; }).length ? ", " + jobs.filter(function (j) { return j.acceptance; }).length + " biên bản nghiệm thu" : "") + " của nhà thầu này." : "");
     if (!confirm(msg)) return;
     var jobIds = jobs.map(function (j) { return j.id; });
     WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return jobIds.indexOf(i.jobId) === -1; });
@@ -2677,7 +2723,8 @@
     var nIss = issuesOfJob(id).length;
     if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?" +
       (nIss ? "\n\nXoá luôn " + nIss + " sự cố bảo hành đã ghi của gói này." : "") +
-      (j.contract ? "\n\nGói này đang có HỢP ĐỒNG " + (j.contract.no || "") + " (" + money(contractInfo(j).current) + ", " + (j.contract.payments || []).length + " đợt thanh toán) — xoá gói là mất luôn hợp đồng." : ""))) return;
+      (j.contract ? "\n\nGói này đang có HỢP ĐỒNG " + (j.contract.no || "") + " (" + money(contractInfo(j).current) + ", " + (j.contract.payments || []).length + " đợt thanh toán) — xoá gói là mất luôn hợp đồng." : "") +
+      (j.acceptance ? "\n\nGói này có biên bản nghiệm thu số " + (j.acceptance.no || "—") + " — xoá gói là mất luôn biên bản." : ""))) return;
     WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return i.jobId !== id; });
     if (view.cJob === id) view.cJob = "";
     CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (x) { return x.id !== id; });
@@ -2772,12 +2819,16 @@
           '<div class="cell-muted" style="font-size:11.8px;">' + (w.endIso ? "Bảo hành đến " + fmtDate(w.endIso) + " · " + escapeHtml(warrantyRemainText(w)) : "Chưa nghiệm thu") +
           (nOpen ? ' · <b style="color:var(--accent);">' + nOpen + ' sự cố chưa xong</b>' : "") + '</div></div>' +
         '<span class="pill ' + w.pill + '">' + w.label + '</span>' +
+        '<button type="button" class="icon-btn" data-ct-ack="' + escapeHtml(j.id) + '" title="Biên bản nghiệm thu">' + iconAck() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-contract="' + escapeHtml(j.id) + '" title="Hợp đồng">' + iconDoc() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-edit-job="' + escapeHtml(j.id) + '" title="Sửa">' + iconEdit() + '</button>' +
         '<button type="button" class="icon-btn danger" data-ct-del-job="' + escapeHtml(j.id) + '" title="Xoá">' + iconTrash() + '</button>' +
       '</div>';
     }).join("");
+    wrap.querySelectorAll("[data-ct-ack]").forEach(function (b) {
+      b.addEventListener("click", function () { openAckEditor(b.dataset.ctAck); });
+    });
     wrap.querySelectorAll("[data-ct-contract]").forEach(function (b) {
       b.addEventListener("click", function () { openContractEditor(b.dataset.ctContract); });
     });
@@ -2920,6 +2971,9 @@
     box.textContent = w.key === "building"
       ? "Chưa có ngày nghiệm thu — bảo hành sẽ bắt đầu tính khi nhập ngày nghiệm thu."
       : w.label + ": bảo hành đến " + fmtDate(w.endIso) + " (" + warrantyRemainText(w) + ").";
+    var jj = CONTRACTOR_JOBS.filter(function (x) { return x.id === jobEditingId; })[0];
+    if (jj && jj.acceptance && jj.acceptance.appliedHandover && jj.acceptance.date === document.getElementById("jobHandover").value)
+      box.textContent += " Ngày nghiệm thu đang lấy từ biên bản số " + (jj.acceptance.no || "—") + " — sửa ở biên bản để đổi.";
     document.querySelectorAll("#jobMonthChips [data-months]").forEach(function (b) {
       b.classList.toggle("on", Number(b.dataset.months) === Number(document.getElementById("jobMonths").value));
     });
@@ -4211,6 +4265,437 @@
     };
 
     modal.hidden = false;
+  }
+
+  /* ===================== BIÊN BẢN NGHIỆM THU ===================== */
+  // Mỗi GÓI VIỆC có tối đa 1 biên bản nghiệm thu: job.acceptance (nằm trong CONTRACTOR_JOBS như job.contract).
+  //   acceptance = { no, date, place, result, scopeText, findings, fixDeadline, note,
+  //                  participants:[{id,side,name,title}], files:[{url,name}], appliedHandover, draft }
+  // QUY TẮC BẢO HÀNH (Nam chốt 2026-09-25): biên bản "đạt" hoặc "đạt có tồn tại" → ngày nghiệm thu của gói
+  // (job.handoverDate) = ngày biên bản → warrantyInfo tự tính hạn bảo hành, lịch Google tự có sự kiện hết bảo hành.
+  // "Chưa đạt" → không đặt ngày; nếu ngày hiện tại chính là do biên bản này đặt thì gỡ (appliedHandover).
+  // draft = true khi biên bản mới chỉ được tạo ngầm để giữ file scan đã tải lên (chưa bấm Lưu) — không áp bảo hành.
+  var ACK_RESULTS = {
+    pass:         { label: "Đạt yêu cầu, chấp nhận nghiệm thu",    short: "Đạt",            pill: "pill-good" },
+    pass_defects: { label: "Đạt, có tồn tại cần khắc phục",         short: "Đạt có tồn tại", pill: "pill-warn" },
+    fail:         { label: "Chưa đạt, chưa nghiệm thu",             short: "Chưa đạt",       pill: "pill-late" }
+  };
+  var ACK_SIDES = ["Chủ đầu tư", "Indust Design", "Nhà thầu", "Tư vấn giám sát"];
+  var ACK_MAX_FILES = 6;
+
+  function ackAppliesWarranty(a) { return !!(a && !a.draft && (a.result === "pass" || a.result === "pass_defects") && isoParts(a.date)); }
+
+  function ackSuggestNo(dateIso) {
+    var y = (isoParts(dateIso) || isoParts(todayIso())).y, n = 1;
+    CONTRACTOR_JOBS.forEach(function (j) { if (j.acceptance && !j.acceptance.draft && String(j.acceptance.date || "").slice(0, 4) === String(y)) n++; });
+    return "BBNT-" + String(n).padStart(2, "0") + "/" + y;
+  }
+
+  function newAckDraft(job) {
+    var p = projectById(job.projectId), c = contractorById(job.contractorId);
+    return {
+      no: "", date: todayIso(), place: p ? (p.address || p.name || "") : "", result: "pass",
+      scopeText: job.scope || "", findings: "", fixDeadline: "", note: "",
+      participants: [
+        { id: uid("pt_"), side: "Chủ đầu tư", name: p ? (p.client || "") : "", title: "" },
+        { id: uid("pt_"), side: "Indust Design", name: "", title: "Đại diện" },
+        { id: uid("pt_"), side: "Nhà thầu", name: c ? (c.contact || "") : "", title: c ? "Đại diện " + c.name : "" }
+      ],
+      files: [], appliedHandover: false, draft: false
+    };
+  }
+
+  // Ghi (hoặc gỡ) ngày nghiệm thu của gói theo biên bản vừa lưu. prev = bản ghi biên bản trước khi sửa (nếu có).
+  function applyAcceptanceToJob(job, prev) {
+    var a = job.acceptance;
+    if (!a) return;
+    if (ackAppliesWarranty(a)) { job.handoverDate = a.date; a.appliedHandover = true; }
+    else {
+      if (prev && prev.appliedHandover && job.handoverDate === prev.date) job.handoverDate = "";
+      a.appliedHandover = false;
+    }
+  }
+
+  function ackLineHtml(j) {
+    var a = j.acceptance;
+    if (!a) return "";
+    if (a.draft) return '<div class="cell-muted contract-line">Biên bản nghiệm thu: bản nháp chưa lưu</div>';
+    var r = ACK_RESULTS[a.result] || ACK_RESULTS.pass;
+    return '<div class="cell-muted contract-line">BBNT ' + escapeHtml(a.no || "—") + ' · ' + r.short + '</div>';
+  }
+
+  /* ---------- Tab "Nghiệm thu" ---------- */
+  function contractorTabAcceptance() {
+    var jobs = CONTRACTOR_JOBS.filter(function (j) { return jobMatches(j) && (!view.cProject || j.projectId === view.cProject); });
+    var withA = jobs.filter(function (j) { return j.acceptance && !j.acceptance.draft; });
+    var nPass = withA.filter(function (j) { return j.acceptance.result === "pass"; }).length;
+    var nDef = withA.filter(function (j) { return j.acceptance.result === "pass_defects"; }).length;
+    var nWait = jobs.filter(function (j) { return !j.acceptance || j.acceptance.draft || j.acceptance.result === "fail"; }).length;
+    var nUnsigned = withA.filter(function (j) { return !(j.acceptance.files || []).length; }).length;
+
+    var strip =
+      '<div class="stats">' +
+        '<div class="stat-tile"><div class="stat-label">Đã nghiệm thu đạt</div><div class="stat-value">' + nPass + '</div><div class="stat-foot">gói việc, đang bảo hành</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đạt có tồn tại</div><div class="stat-value' + (nDef ? " accent" : "") + '">' + nDef + '</div><div class="stat-foot">còn tồn tại cần khắc phục</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nWait + '</div><div class="stat-foot">chưa lập hoặc chưa đạt</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Chưa có bản scan ký</div><div class="stat-value' + (nUnsigned ? " accent" : "") + '">' + nUnsigned + '</div><div class="stat-foot">biên bản đã lập, chưa tải file</div></div>' +
+      '</div>';
+
+    jobs.sort(function (x, y) {
+      var xa = x.acceptance && !x.acceptance.draft ? 1 : 0, ya = y.acceptance && !y.acceptance.draft ? 1 : 0;
+      if (xa !== ya) return xa - ya;                                   // chưa lập biên bản lên trước (việc cần làm)
+      var xd = xa ? x.acceptance.date : "", yd = ya ? y.acceptance.date : "";
+      if (xd !== yd) return xd < yd ? 1 : -1;                          // đã lập: mới nhất trước
+      return String((projectById(x.projectId) || {}).name || "").localeCompare(String((projectById(y.projectId) || {}).name || ""), "vi");
+    });
+
+    var rows;
+    if (!jobs.length) {
+      rows = '<tr class="empty-row"><td colspan="7">' + (CONTRACTOR_JOBS.length ? "Không có gói việc nào khớp bộ lọc." : "Chưa có gói việc nào. Thêm nhà thầu và gói việc trước, rồi lập biên bản nghiệm thu cho từng gói.") + '</td></tr>';
+    } else {
+      rows = jobs.map(function (j) {
+        var p = projectById(j.projectId), c = contractorById(j.contractorId), a = j.acceptance, w = warrantyInfo(j);
+        var head = '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div><div class="cell-muted">' + escapeHtml(j.scope || "—") + '</div></td>' +
+          '<td>' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</td>';
+        if (!a || a.draft) {
+          return '<tr class="row-click" data-open-ack="' + escapeHtml(j.id) + '">' + head +
+            '<td colspan="4"><span class="cell-muted">' + (a ? "Bản nháp chưa lưu (đã có " + (a.files || []).length + " file)" : "Chưa lập biên bản") + '</span>' +
+              (isoParts(j.handoverDate) ? '<div class="cell-muted">Ngày nghiệm thu nhập tay: ' + fmtDate(j.handoverDate) + '</div>' : "") + '</td>' +
+            '<td><div class="row-actions"><button class="btn btn-sm" data-open-ack="' + escapeHtml(j.id) + '">' + iconPlus() + ' Lập biên bản</button></div></td></tr>';
+        }
+        var r = ACK_RESULTS[a.result] || ACK_RESULTS.pass;
+        return '<tr class="row-click" data-open-ack="' + escapeHtml(j.id) + '">' + head +
+          '<td>' + escapeHtml(a.no || "—") + '<div class="cell-muted">' + (isoParts(a.date) ? fmtDate(a.date) : "—") + '</div>' +
+            ((a.files || []).length ? '<div class="cell-muted">' + a.files.length + ' file scan</div>' : '<div class="cell-muted late-text">chưa có bản scan ký</div>') + '</td>' +
+          '<td><span class="pill ' + r.pill + '">' + r.short + '</span></td>' +
+          '<td>' + (a.findings ? '<div class="issue-desc">' + escapeHtml(a.findings) + '</div>' + (isoParts(a.fixDeadline) ? '<div class="cell-muted">hạn khắc phục ' + fmtDate(a.fixDeadline) + '</div>' : "") : '<span class="cell-muted">—</span>') + '</td>' +
+          '<td>' + (w.endIso ? fmtDate(w.endIso) + '<div class="cell-muted">' + escapeHtml(warrantyRemainText(w)) + '</div>' : '<span class="cell-muted">chưa tính</span>') + '</td>' +
+          '<td><div class="row-actions">' +
+            '<button class="icon-btn" data-print-ack="' + escapeHtml(j.id) + '" title="In biên bản (PDF)">' + iconDownload() + '</button>' +
+            '<button class="icon-btn" data-open-ack="' + escapeHtml(j.id) + '" title="Sửa biên bản">' + iconEdit() + '</button>' +
+          '</div></td></tr>';
+      }).join("");
+    }
+    return strip + '<div class="table-wrap"><div class="table-scroll"><table>' +
+      '<thead><tr><th>Công trình / gói việc</th><th>Nhà thầu</th><th>Biên bản</th><th>Kết quả</th><th>Tồn tại</th><th>Bảo hành đến</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div></div>';
+  }
+
+  /* ---------- Hộp thoại biên bản ---------- */
+  var ackJobId = null, ackDraft = null;
+  function ackJob() { return CONTRACTOR_JOBS.filter(function (j) { return j.id === ackJobId; })[0]; }
+
+  function ensureAckModal() {
+    if (document.getElementById("ackModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "ackModalOverlay";
+    el.className = "modal-overlay";
+    el.style.zIndex = "68"; // trên hộp thoại hợp đồng
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:820px;">' +
+        '<div class="modal-head"><h3 id="ackModalTitle">Biên bản nghiệm thu</h3><button class="icon-btn" id="ackModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="ctr-jobline" id="ackJobLine"></div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Số biên bản</label><input id="ackNo" placeholder="BBNT-01/2026"></div>' +
+            '<div class="field"><label>Ngày nghiệm thu (ngày ký)</label><input id="ackDate" type="date"></div>' +
+            '<div class="field" style="grid-column: span 2;"><label>Địa điểm</label><input id="ackPlace"></div>' +
+          '</div>' +
+          '<div class="field" style="margin-bottom:14px;"><label>Nội dung / phạm vi nghiệm thu</label><textarea id="ackScope" rows="2"></textarea></div>' +
+          '<h4 class="ctr-sec">Kết quả nghiệm thu</h4>' +
+          '<div id="ackResults" class="ack-results"></div>' +
+          '<div id="ackDefectsWrap">' +
+            '<div class="field" style="margin:12px 0 10px;"><label>Tồn tại cần khắc phục</label><textarea id="ackFindings" rows="3" placeholder="Mỗi tồn tại một dòng, vd. Sơn trần phòng khách bị nứt chân tường…"></textarea></div>' +
+            '<div class="field" style="max-width:240px;"><label>Hạn khắc phục</label><input id="ackFix" type="date"></div>' +
+          '</div>' +
+          '<div class="job-preview" id="ackPreview" style="margin:14px 0;"></div>' +
+          '<div class="field" style="margin-bottom:6px;"><label>Ý kiến khác</label><textarea id="ackNote" rows="2"></textarea></div>' +
+          '<h4 class="ctr-sec">Thành phần tham gia <span class="ctr-sec-sub">(mỗi bên có 1 khối ký trên bản in)</span></h4>' +
+          '<div id="ackPeople"></div>' +
+          '<button class="btn btn-sm" id="ackAddPerson" type="button">' + iconPlus() + ' Thêm người tham gia</button>' +
+          '<h4 class="ctr-sec">Bản scan đã ký <span class="ctr-sec-sub">(PDF hoặc ảnh, tối đa ' + ACK_MAX_FILES + ' file)</span></h4>' +
+          '<div id="ackFiles"></div>' +
+          '<input type="file" id="ackFileInput" accept="application/pdf,image/*" multiple hidden>' +
+          '<button class="btn btn-sm" id="ackAddFile" type="button" style="margin-top:8px;">' + iconPlus() + ' Tải file lên</button>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="ackDelete" type="button" style="margin-right:auto;">Xoá biên bản</button>' +
+          '<button class="btn" id="ackCancel" type="button">Đóng</button>' +
+          '<button class="btn" id="ackSave" type="button">' + iconCheck() + ' Lưu</button>' +
+          '<button class="btn btn-primary" id="ackSavePrint" type="button">' + iconDownload() + ' Lưu và in</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("ackModalClose").addEventListener("click", closeAckEditor);
+    document.getElementById("ackCancel").addEventListener("click", closeAckEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closeAckEditor(); });
+  }
+  function closeAckEditor() {
+    var el = document.getElementById("ackModalOverlay");
+    if (el) el.hidden = true;
+    ackJobId = null; ackDraft = null;
+    if (ctEditingId) paintContractorJobs();
+    if (view.screen === "contractors") renderContractorsScreen();
+  }
+
+  function readAckForm() {
+    var d = ackDraft;
+    d.no = document.getElementById("ackNo").value.trim();
+    d.date = document.getElementById("ackDate").value;
+    d.place = document.getElementById("ackPlace").value.trim();
+    d.scopeText = document.getElementById("ackScope").value.trim();
+    d.findings = document.getElementById("ackFindings").value.trim();
+    d.fixDeadline = document.getElementById("ackFix").value;
+    d.note = document.getElementById("ackNote").value.trim();
+  }
+
+  function paintAckResults() {
+    var wrap = document.getElementById("ackResults");
+    wrap.innerHTML = Object.keys(ACK_RESULTS).map(function (k) {
+      return '<label class="ack-radio' + (ackDraft.result === k ? " on" : "") + '"><input type="radio" name="ackResult" value="' + k + '"' + (ackDraft.result === k ? " checked" : "") + '> ' + ACK_RESULTS[k].label + '</label>';
+    }).join("");
+    wrap.querySelectorAll("input").forEach(function (i) {
+      i.addEventListener("change", function () { readAckForm(); ackDraft.result = i.value; paintAckResults(); refreshAckComputed(); });
+    });
+    document.getElementById("ackDefectsWrap").style.display = ackDraft.result === "pass_defects" ? "" : "none";
+  }
+
+  function paintAckPeople() {
+    var wrap = document.getElementById("ackPeople");
+    wrap.innerHTML = ackDraft.participants.map(function (p, i) {
+      var sides = ACK_SIDES.map(function (s) { return '<option value="' + escapeHtml(s) + '"' + (p.side === s ? " selected" : "") + '>' + escapeHtml(s) + '</option>'; }).join("");
+      if (p.side && ACK_SIDES.indexOf(p.side) === -1) sides += '<option value="' + escapeHtml(p.side) + '" selected>' + escapeHtml(p.side) + '</option>';
+      return '<div class="ctr-row ack-row" data-i="' + i + '">' +
+        '<div class="field"><label>Bên</label><select data-f="side">' + sides + '</select></div>' +
+        '<div class="field"><label>Họ tên người đại diện</label><input data-f="name" value="' + escapeHtml(p.name || "") + '"></div>' +
+        '<div class="field"><label>Chức vụ</label><input data-f="title" value="' + escapeHtml(p.title || "") + '"></div>' +
+        '<button type="button" class="icon-btn danger" data-rm-person="' + i + '" title="Bỏ người này">' + iconTrash() + '</button>' +
+      '</div>';
+    }).join("") || '<div class="cell-muted" style="font-size:12px;margin-bottom:8px;">Chưa có ai.</div>';
+  }
+
+  function paintAckFiles() {
+    var wrap = document.getElementById("ackFiles"), files = ackDraft.files || [];
+    wrap.innerHTML = files.length ? files.map(function (f, i) {
+      return '<div class="ct-job-row"><a href="' + escapeHtml(f.url) + '" target="_blank" rel="noopener" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + iconExternal() + ' ' + escapeHtml(f.name || "File") + '</a>' +
+        '<button type="button" class="icon-btn danger" data-rm-ackfile="' + i + '" title="Bỏ file">' + iconTrash() + '</button></div>';
+    }).join("") : '<div class="cell-muted" style="font-size:12px;">Chưa có file. In biên bản, ký tay, scan rồi tải lên đây.</div>';
+    document.getElementById("ackAddFile").style.display = files.length >= ACK_MAX_FILES ? "none" : "";
+  }
+
+  // Khung xem trước tác động lên bảo hành của gói việc.
+  function refreshAckComputed() {
+    var job = ackJob(); if (!job) return;
+    var box = document.getElementById("ackPreview");
+    var months = Number(job.warrantyMonths) || WARRANTY_DEFAULT_MONTHS;
+    if (ackDraft.result === "fail") {
+      box.className = "job-preview soon";
+      box.textContent = "Chưa đạt: không đặt ngày nghiệm thu, chưa tính bảo hành." + (isoParts(job.handoverDate) && !(job.acceptance && job.acceptance.appliedHandover && job.acceptance.date === job.handoverDate) ? " (Ngày nghiệm thu nhập tay " + fmtDate(job.handoverDate) + " được giữ nguyên.)" : "");
+      if (job.acceptance && job.acceptance.appliedHandover && isoParts(job.handoverDate) && job.handoverDate === job.acceptance.date) box.textContent += " Ngày nghiệm thu " + fmtDate(job.handoverDate) + " do biên bản trước đặt sẽ được gỡ.";
+      return;
+    }
+    if (!isoParts(ackDraft.date)) { box.className = "job-preview"; box.textContent = "Nhập ngày nghiệm thu để tính bảo hành."; return; }
+    var end = addMonthsIso(ackDraft.date, months);
+    var w = warrantyInfo({ handoverDate: ackDraft.date, warrantyMonths: months });
+    box.className = "job-preview " + (w.key === "expired" ? "" : (w.key === "soon" ? "soon" : "active"));
+    box.textContent = "Bảo hành bắt đầu từ " + fmtDate(ackDraft.date) + ", " + months + " tháng, đến hết " + fmtDate(end) + " (" + warrantyRemainText(w) + ")." +
+      (ackDraft.result === "pass_defects" ? " Tồn tại vẫn phải khắc phục theo hạn ghi trong biên bản." : "");
+  }
+
+  function persistAckFiles() {
+    var job = ackJob(); if (!job) return;
+    if (!job.acceptance) { readAckForm(); job.acceptance = cloneJson(ackDraft); job.acceptance.draft = true; }
+    else job.acceptance.files = (ackDraft.files || []).slice();
+    saveState();
+  }
+
+  function saveAckFromForm() {
+    var job = ackJob(); if (!job) return false;
+    readAckForm();
+    if (!isoParts(ackDraft.date)) { toast("Cần nhập ngày nghiệm thu."); return false; }
+    var prev = job.acceptance ? cloneJson(job.acceptance) : null;
+    var rec = cloneJson(ackDraft);
+    rec.no = rec.no || ackSuggestNo(rec.date);
+    rec.draft = false;
+    rec.participants = (rec.participants || []).filter(function (p) { return p.name || p.title; });
+    job.acceptance = rec;
+    applyAcceptanceToJob(job, prev && !prev.draft ? prev : null);
+    saveState();
+    return true;
+  }
+
+  function openAckEditor(jobId) {
+    var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === jobId; })[0];
+    if (!job) { toast("Không tìm thấy gói việc."); return; }
+    ensureAckModal();
+    ackJobId = job.id;
+    ackDraft = job.acceptance ? cloneJson(job.acceptance) : newAckDraft(job);
+    ["participants", "files"].forEach(function (k) { if (!Array.isArray(ackDraft[k])) ackDraft[k] = []; });
+    if (!ackDraft.no) ackDraft.no = ackSuggestNo(ackDraft.date);
+    var isSaved = !!(job.acceptance && !job.acceptance.draft);
+
+    var p = projectById(job.projectId), c = contractorById(job.contractorId);
+    document.getElementById("ackModalTitle").textContent = isSaved ? "Sửa biên bản nghiệm thu" : "Lập biên bản nghiệm thu";
+    document.getElementById("ackJobLine").innerHTML = '<b>' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</b> · ' + escapeHtml(job.scope || "—") + ' · ' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + ' · bảo hành ' + (Number(job.warrantyMonths) || WARRANTY_DEFAULT_MONTHS) + ' tháng';
+    document.getElementById("ackNo").value = ackDraft.no;
+    document.getElementById("ackDate").value = ackDraft.date || "";
+    document.getElementById("ackPlace").value = ackDraft.place || "";
+    document.getElementById("ackScope").value = ackDraft.scopeText || "";
+    document.getElementById("ackFindings").value = ackDraft.findings || "";
+    document.getElementById("ackFix").value = ackDraft.fixDeadline || "";
+    document.getElementById("ackNote").value = ackDraft.note || "";
+    document.getElementById("ackDelete").style.display = job.acceptance ? "" : "none";
+    paintAckResults(); paintAckPeople(); paintAckFiles(); refreshAckComputed();
+
+    var modal = document.getElementById("ackModalOverlay");
+    document.getElementById("ackDate").onchange = document.getElementById("ackDate").oninput = function () { readAckForm(); refreshAckComputed(); };
+    modal.querySelector("#ackPeople").oninput = modal.querySelector("#ackPeople").onchange = function (e) {
+      var row = e.target.closest(".ack-row"); if (!row) return;
+      var pr = ackDraft.participants[Number(row.dataset.i)], f = e.target.dataset.f;
+      if (pr && f) pr[f] = e.target.value;
+    };
+    modal.querySelector("#ackPeople").onclick = function (e) {
+      var b = e.target.closest("[data-rm-person]"); if (!b) return;
+      ackDraft.participants.splice(Number(b.dataset.rmPerson), 1); paintAckPeople();
+    };
+    document.getElementById("ackAddPerson").onclick = function () {
+      ackDraft.participants.push({ id: uid("pt_"), side: "Chủ đầu tư", name: "", title: "" }); paintAckPeople();
+    };
+
+    document.getElementById("ackAddFile").onclick = function () { document.getElementById("ackFileInput").click(); };
+    modal.querySelector("#ackFiles").onclick = function (e) {
+      var b = e.target.closest("[data-rm-ackfile]"); if (!b) return;
+      if (!confirm("Bỏ file này khỏi biên bản?")) return;
+      ackDraft.files.splice(Number(b.dataset.rmAckfile), 1); persistAckFiles(); paintAckFiles();
+    };
+    var fin = document.getElementById("ackFileInput");
+    fin.value = "";
+    fin.onchange = function () {
+      var files = Array.prototype.slice.call(fin.files || []);
+      if (!files.length) return;
+      var jobRef = ackJob(); if (!jobRef) return;
+      var batch = files.slice(0, Math.max(0, ACK_MAX_FILES - ackDraft.files.length));
+      if (files.length > batch.length) toast("Chỉ nhận tối đa " + ACK_MAX_FILES + " file cho mỗi biên bản.");
+      toast("Đang tải " + batch.length + " file lên…");
+      batch.reduce(function (chain, f) {
+        return chain.then(function () {
+          if (f.size > CONTRACT_MAX_FILE_MB * 1024 * 1024) { toast('"' + f.name + '" lớn hơn ' + CONTRACT_MAX_FILE_MB + "MB — nén hoặc tách file rồi tải lại."); return; }
+          var isImg = /^image\//.test(f.type);
+          return (isImg ? resizeImageFile(f, 1800, 0.8) : Promise.resolve(f)).then(function (blob) {
+            var safe = slug(f.name.replace(/\.[^.]+$/, "")) + (isImg ? ".jpg" : ".pdf");
+            var path = "baogia/acceptance/" + slug(jobRef.id) + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + "_" + safe;
+            return uploadToStorage(path, blob, isImg ? "image/jpeg" : (f.type || "application/pdf")).then(function (url) {
+              if (ackJobId !== jobRef.id) return;
+              ackDraft.files.push({ url: url, name: f.name });
+              persistAckFiles(); paintAckFiles();
+            });
+          });
+        });
+      }, Promise.resolve()).catch(function (err) { toast("Không tải được file lên: " + err.message); });
+    };
+
+    document.getElementById("ackDelete").onclick = function () {
+      var jb = ackJob(); if (!jb || !jb.acceptance) return;
+      var a = jb.acceptance;
+      if (!confirm("Xoá biên bản nghiệm thu " + (a.no || "") + "?\n\nMất luôn nội dung và danh sách file đính kèm (file trên Storage không bị xoá).")) return;
+      if (a.appliedHandover && jb.handoverDate === a.date && confirm("Ngày nghiệm thu " + fmtDate(a.date) + " của gói này đang lấy từ biên bản.\n\nGỡ luôn ngày nghiệm thu (bảo hành sẽ về \"chưa nghiệm thu\")?\n\nOK = gỡ · Huỷ = giữ ngày.")) jb.handoverDate = "";
+      delete jb.acceptance;
+      saveState();
+      closeAckEditor();
+      toast("Đã xoá biên bản nghiệm thu.");
+    };
+    document.getElementById("ackSave").onclick = function () {
+      var jb = ackJob(); if (!jb) return;
+      if (!saveAckFromForm()) return;
+      var w = warrantyInfo(jb), isPass = ackAppliesWarranty(jb.acceptance);
+      closeAckEditor();
+      toast(isPass ? "Đã lưu biên bản. Ngày nghiệm thu " + fmtDate(jb.handoverDate) + " · bảo hành đến " + fmtDate(w.endIso) + "." : "Đã lưu biên bản (chưa đạt, chưa tính bảo hành).");
+    };
+    document.getElementById("ackSavePrint").onclick = function () {
+      var jb = ackJob(); if (!jb) return;
+      if (!saveAckFromForm()) return;
+      var id = jb.id;
+      closeAckEditor();
+      printAcceptance(id);
+    };
+
+    modal.hidden = false;
+  }
+
+  /* ---------- Bản in biên bản nghiệm thu ---------- */
+  function printAcceptance(jobId) {
+    view.screen = "print";
+    view.printKind = "acceptance";
+    view.printJobId = jobId;
+    renderPrintPreview();
+  }
+
+  function buildAcceptancePrintHtml(job) {
+    var a = job.acceptance, p = projectById(job.projectId), c = contractorById(job.contractorId);
+    var ci = contractInfo(job);
+    var months = Number(job.warrantyMonths) || WARRANTY_DEFAULT_MONTHS;
+    var ok = a.result === "pass" || a.result === "pass_defects";
+    var endIso = ok ? addMonthsIso(a.date, months) : "";
+    var head = { code: a.no, createdDate: a.date };
+
+    var info = [
+      ["Công trình", p ? p.name : "—"],
+      ["Địa chỉ", (p && p.address) || "—"],
+      ["Gói việc nghiệm thu", job.scope || "—"],
+      ["Nhà thầu thi công", c ? c.name + (c.taxCode ? " (MST " + c.taxCode + ")" : "") : "—"]
+    ];
+    if (job.contract) info.push(["Căn cứ hợp đồng", "Số " + (job.contract.no || "—") + (isoParts(job.contract.signedDate) ? ", ký ngày " + fmtDate(job.contract.signedDate) : "") + (ci ? ", giá trị hiện hành " + money(ci.current) : "")]);
+    info.push(["Thời gian nghiệm thu", fmtDate(a.date)], ["Địa điểm", a.place || "—"]);
+    var infoHtml = '<table class="print-ack-info">' + info.map(function (r) {
+      return '<tr><td class="lbl">' + escapeHtml(r[0]) + '</td><td>' + escapeHtml(r[1]) + '</td></tr>';
+    }).join("") + '</table>';
+
+    var people = a.participants || [];
+    var peopleHtml = people.length
+      ? '<table class="print-summary-table"><thead><tr><th class="center" style="width:7%;">STT</th><th style="width:26%;">Bên</th><th>Đại diện</th><th style="width:30%;">Chức vụ</th></tr></thead><tbody>' +
+        people.map(function (pr, i) { return '<tr><td class="center">' + (i + 1) + '</td><td>' + escapeHtml(pr.side || "") + '</td><td>' + escapeHtml(pr.name || "") + '</td><td>' + escapeHtml(pr.title || "") + '</td></tr>'; }).join("") + '</tbody></table>'
+      : '<div class="print-ack-text">—</div>';
+
+    var results = Object.keys(ACK_RESULTS).map(function (k) {
+      return '<div class="ack-line"><span class="ack-box' + (a.result === k ? " on" : "") + '"></span><span>' + escapeHtml(ACK_RESULTS[k].label) + '</span></div>';
+    }).join("");
+
+    var defects = "";
+    if (a.result === "pass_defects" || (a.findings && a.result !== "pass")) {
+      defects = '<div class="print-ack-h">Tồn tại cần khắc phục</div><div class="print-ack-text">' + escapeHtml(a.findings || "—") + '</div>' +
+        (isoParts(a.fixDeadline) ? '<div class="print-ack-text" style="margin-top:6px;">Hạn khắc phục: <b>' + fmtDate(a.fixDeadline) + '</b></div>' : "");
+    }
+
+    var warranty;
+    if (ok) {
+      warranty = 'Nhà thầu bảo hành <b>' + months + ' tháng</b> kể từ ngày nghiệm thu <b>' + fmtDate(a.date) + '</b>, đến hết ngày <b>' + fmtDate(endIso) + '</b>.' +
+        (ci && ci.retention.status !== "none" ? ' Chủ đầu tư giữ lại <b>' + money(ci.retention.amount) + '</b> (' + String(ci.pct).replace(".", ",") + '% giá trị hợp đồng), hoàn trả khi hết thời hạn bảo hành và nhà thầu đã khắc phục xong các tồn tại.' : "");
+    } else {
+      warranty = 'Nhà thầu khắc phục theo yêu cầu và đề nghị nghiệm thu lại. Thời hạn bảo hành chưa được tính.';
+    }
+
+    var signs = people.length ? '<div class="print-ack-signs">' + people.map(function (pr) {
+      return '<div class="sg"><div class="sg-side">' + escapeHtml(pr.side || "") + '</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div><div class="sg-name">' + escapeHtml(pr.name || "") + '</div><div class="sg-title">' + escapeHtml(pr.title || "") + '</div></div>';
+    }).join("") + '</div>' : "";
+
+    var page =
+      printRunHeadHtml(head, "Ngày nghiệm thu") +
+      '<div class="print-title">Biên bản nghiệm thu</div>' +
+      '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + (job.scope ? " · " + escapeHtml(job.scope) : "") + '</div>' +
+      infoHtml +
+      '<div class="print-ack-h">Thành phần tham gia</div>' + peopleHtml +
+      '<div class="print-ack-h">Nội dung nghiệm thu</div><div class="print-ack-text">' + escapeHtml(a.scopeText || job.scope || "—") + '</div>' +
+      '<div class="print-ack-h">Kết luận</div>' + results +
+      defects +
+      (a.note ? '<div class="print-ack-h">Ý kiến khác</div><div class="print-ack-text">' + escapeHtml(a.note) + '</div>' : "") +
+      '<div class="print-ack-h">Thời hạn bảo hành</div><div class="print-ack-text">' + warranty + '</div>' +
+      signs;
+
+    return '<div class="print-doc"><table class="print-sheet">' +
+      '<thead><tr><td>' + printRunHeadHtml(head, "Ngày nghiệm thu") + '</td></tr></thead>' +
+      '<tbody><tr><td><section class="print-page">' + page + '</section></td></tr></tbody>' +
+    '</table></div>';
   }
 
   /* ===================== BÁO CÓ BẢN MỚI ===================== */
@@ -5787,7 +6272,7 @@
   // Header của bản in — dùng ở 2 chỗ:
   //   · trong <thead> của bảng bọc ngoài → khi IN, trình duyệt tự lặp nó ở đầu mọi trang giấy;
   //   · đầu mỗi .print-page → chỉ để XEM TRƯỚC trên màn hình (khi in thì ẩn đi).
-  function printRunHeadHtml(q) {
+  function printRunHeadHtml(q, dateLabel) {
     return '<div class="print-runhead">' +
       '<div class="print-brand">' +
         '<img class="print-logo" src="' + LOGO_MARK_DARK + '" alt="measure &amp; make">' +
@@ -5795,7 +6280,7 @@
       '</div>' +
       '<div class="print-doc-meta">' +
         '<div>Số: ' + escapeHtml(q.code || "—") + '</div>' +
-        '<div>Ngày lập: ' + fmtDate(q.createdDate) + '</div>' +
+        '<div>' + (dateLabel || "Ngày lập") + ': ' + fmtDate(q.createdDate) + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -5930,13 +6415,16 @@
   // Ctrl+P / Cmd+P — đây là phím tắt gốc của trình duyệt nên không bị sandbox chặn.
   function printQuote(q) {
     view.screen = "print";
+    view.printKind = "quote";
     view.printId = q.id;
     renderPrintPreview();
   }
 
   function renderPrintPreview() {
-    var q = state.quotes.filter(function (x) { return x.id === view.printId; })[0];
-    if (!q) { view.screen = "list"; renderList(); return; }
+    var ackJobPrint = view.printKind === "acceptance" ? CONTRACTOR_JOBS.filter(function (x) { return x.id === view.printJobId; })[0] : null;
+    if (view.printKind === "acceptance" && (!ackJobPrint || !ackJobPrint.acceptance)) { view.screen = "contractors"; view.ctab = "acceptance"; renderContractorsScreen(); renderNav(); return; }
+    var q = ackJobPrint ? null : state.quotes.filter(function (x) { return x.id === view.printId; })[0];
+    if (!ackJobPrint && !q) { view.screen = "list"; renderList(); return; }
 
     var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
     var shortcut = isMac ? "Cmd + P" : "Ctrl + P";
@@ -5946,11 +6434,12 @@
         '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
         '<div class="print-hint">Bấm <b>' + shortcut + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
       '</div>' +
-      buildPrintHtml(q);
+      (ackJobPrint ? buildAcceptancePrintHtml(ackJobPrint) : buildPrintHtml(q));
 
     document.getElementById("content").innerHTML = html;
-    document.getElementById("crumbCurrent").textContent = "Xem trước bản in";
+    document.getElementById("crumbCurrent").textContent = ackJobPrint ? "Xem trước biên bản nghiệm thu" : "Xem trước bản in";
     document.getElementById("btnBackFromPrint").addEventListener("click", function () {
+      if (ackJobPrint) { view.screen = "contractors"; view.ctab = "acceptance"; renderContractorsScreen(); renderNav(); return; }
       view.screen = "detail";
       renderDetail();
     });
@@ -5973,6 +6462,7 @@
   function iconAlert() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".2" fill="currentColor"/></svg>'; }
   function iconCalendar() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'; }
   function iconDoc() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>'; }
+  function iconAck() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 13l2 2 4-4"/></svg>'; }
   function iconClose() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'; }
 
   /* ===================== INIT ===================== */
