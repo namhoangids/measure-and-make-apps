@@ -520,6 +520,8 @@
   .cov-none { color: var(--ink-mute); font-weight: 500; }
   .cal-help summary { cursor: pointer; font-weight: 600; font-size: 12.8px; color: var(--accent); margin-bottom: 8px; }
   .cal-help code { font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .visit-line { font-size: 11.5px; margin-top: 4px; color: var(--ink-soft); }
+  .visit-line.late { color: var(--accent); font-weight: 600; }
   .toolbar-right { flex-wrap: wrap; }
   .head-actions { flex-wrap: wrap; flex-shrink: 1; } /* 3 nút ở màn nhà thầu: xuống dòng thay vì làm rộng cả trang trên điện thoại */
   @media (max-width: 640px) {
@@ -2932,7 +2934,8 @@
 
   /* ===================== NHẬT KÝ SỰ CỐ BẢO HÀNH ===================== */
   // Mỗi sự cố thuộc 1 GÓI VIỆC (WARRANTY_ISSUES[i].jobId) — nhà thầu xử lý = nhà thầu của gói đó.
-  //   WARRANTY_ISSUES = [{ id, jobId, reportedDate, description, photos:[url], status, resolvedDate, resolution }]
+  //   WARRANTY_ISSUES = [{ id, jobId, reportedDate, description, photos:[url], status, resolvedDate, resolution, visitAt }]
+  //   visitAt = "YYYY-MM-DDTHH:mm" — giờ nhà thầu HẸN qua xử lý; app đặt nhắc trên Google Calendar (trước 1 ngày, 12 giờ, 1 giờ).
   //   status: "open" (mới báo) → "fixing" (đang xử lý) → "done" (đã xử lý)
   // "Trong / ngoài bảo hành" được TÍNH RA từ ngày báo so với hạn bảo hành của gói (warrantyInfo) — không lưu.
   // Ảnh đi thẳng lên Firebase Storage, Firestore chỉ giữ URL (giống ảnh vật tư).
@@ -2971,6 +2974,22 @@
     if (cov === "in") return '<span class="cov cov-in">Trong bảo hành</span>';
     if (cov === "out") return '<span class="cov cov-out">Ngoài bảo hành</span>';
     return '<span class="cov cov-none">Chưa tính bảo hành</span>';
+  }
+  // "Hẹn qua xử lý: 14:00 26/09/2026" — đỏ nếu đã quá giờ hẹn mà sự cố vẫn chưa xong.
+  function fmtVisit(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(v || ""));
+    return m ? m[4] + ":" + m[5] + " " + m[3] + "/" + m[2] + "/" + m[1] : "";
+  }
+  function visitDateTime(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(v || ""));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+  }
+  function issueVisitHtml(i) {
+    if (!i.visitAt) return "";
+    var d = visitDateTime(i.visitAt);
+    if (!d) return "";
+    var late = i.status !== "done" && d.getTime() < Date.now();
+    return '<div class="visit-line' + (late ? " late" : "") + '">Hẹn: ' + escapeHtml(fmtVisit(i.visitAt)) + (late ? " · đã quá hẹn" : "") + '</div>';
   }
   function issueAgeText(i, info) {
     if (info.age == null) return "";
@@ -3033,7 +3052,8 @@
             (info.contractor && info.contractor.phone ? '<div class="cell-muted">' + contractorPhoneHtml(info.contractor.phone) + '</div>' : "") + '</td>' +
           '<td><div class="issue-desc">' + escapeHtml(i.description || "(chưa mô tả)") + '</div>' +
             ((i.photos || []).length ? '<div class="issue-thumbs">' + thumbs + ((i.photos || []).length > 3 ? '<span class="cell-muted">+' + ((i.photos || []).length - 3) + '</span>' : "") + '</div>' : "") + '</td>' +
-          '<td><span class="pill ' + st.pill + '">' + st.label + '</span><div class="cell-muted" style="margin-top:4px;">' + escapeHtml(issueAgeText(i, info)) + '</div></td>' +
+          '<td><span class="pill ' + st.pill + '">' + st.label + '</span><div class="cell-muted" style="margin-top:4px;">' + escapeHtml(issueAgeText(i, info)) + '</div>' +
+            issueVisitHtml(i) + '</td>' +
           '<td>' + issueCoverageHtml(info.coverage) + '</td>' +
           '<td><div class="row-actions">' +
             '<button class="icon-btn" data-edit-issue="' + escapeHtml(i.id) + '" title="Sửa">' + iconEdit() + '</button>' +
@@ -3080,6 +3100,8 @@
             '<div class="field"><label>Trạng thái</label><select id="issueStatus"></select></div>' +
             '<div class="field" id="issueResolvedWrap"><label>Ngày xử lý xong</label><input id="issueResolved" type="date"></div>' +
           '</div>' +
+          '<div class="field" style="margin-bottom:6px;"><label>Nhà thầu hẹn qua xử lý lúc</label><input id="issueVisit" type="datetime-local"></div>' +
+          '<div class="form-hint" id="issueVisitHint" style="margin:0 0 14px;"></div>' +
           '<div class="job-preview" id="issuePreview" style="margin-bottom:14px;"></div>' +
           '<div class="field" style="margin-bottom:14px;"><label>Mô tả sự cố</label><textarea id="issueDesc" rows="3" placeholder="vd. Nứt sơn trần phòng khách, thấm nước chân tường phòng ngủ 2…"></textarea></div>' +
           '<div class="field" style="margin-bottom:14px;"><label>Ảnh hiện trạng (tối đa ' + ISSUE_MAX_PHOTOS + ')</label>' +
@@ -3156,12 +3178,23 @@
     }
   }
 
+  // Dòng chú thích dưới ô "hẹn xử lý lúc": nói rõ nhắc lịch có chạy hay không.
+  function paintIssueVisitHint() {
+    var hint = document.getElementById("issueVisitHint");
+    var v = document.getElementById("issueVisit").value;
+    var connected = !!(CALENDAR_CFG.url && CALENDAR_CFG.token && CALENDAR_CFG.auto);
+    if (!v) { hint.textContent = "Nhà thầu hẹn ngày giờ nào thì nhập vào đây, app sẽ nhắc a trước để nhắc lại nhà thầu."; hint.style.color = ""; return; }
+    if (connected) { hint.textContent = "App sẽ đặt lịch trên Google Calendar và nhắc a: trước 1 ngày, trước 12 giờ, trước 1 giờ."; hint.style.color = "var(--good)"; }
+    else { hint.textContent = "Chưa kết nối Google Calendar nên chưa có nhắc — bấm \"Gửi lịch Google\" ở đầu trang để cài (1 lần)."; hint.style.color = "var(--warn)"; }
+  }
+
   function readIssueForm() {
     return {
       jobId: document.getElementById("issueJob").value,
       reportedDate: document.getElementById("issueDate").value,
       status: document.getElementById("issueStatus").value,
       resolvedDate: document.getElementById("issueStatus").value === "done" ? document.getElementById("issueResolved").value : "",
+      visitAt: document.getElementById("issueVisit").value,
       description: document.getElementById("issueDesc").value.trim(),
       resolution: document.getElementById("issueResolution").value.trim()
     };
@@ -3171,7 +3204,7 @@
     if (issueEditingId) return issueById(issueEditingId);
     var f = readIssueForm();
     var rec = { id: uid("is_"), jobId: f.jobId, reportedDate: f.reportedDate || todayIso(), description: f.description,
-      photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution };
+      photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution, visitAt: f.visitAt };
     WARRANTY_ISSUES.push(rec);
     issueEditingId = rec.id;
     saveState();
@@ -3204,11 +3237,13 @@
     document.getElementById("issueModalTitle").textContent = rec ? "Sửa sự cố bảo hành" : "Ghi sự cố bảo hành";
     document.getElementById("issueDate").value = rec ? (rec.reportedDate || "") : todayIso();
     document.getElementById("issueResolved").value = rec ? (rec.resolvedDate || "") : "";
+    document.getElementById("issueVisit").value = rec ? (rec.visitAt || "") : "";
     document.getElementById("issueDesc").value = rec ? (rec.description || "") : "";
     document.getElementById("issueResolution").value = rec ? (rec.resolution || "") : "";
     document.getElementById("issueDelete").style.display = rec ? "" : "none";
     paintIssuePhotos();
     paintIssuePreview();
+    paintIssueVisitHint();
 
     ["issueJob", "issueDate", "issueStatus"].forEach(function (fid) {
       document.getElementById(fid).onchange = function () {
@@ -3219,6 +3254,8 @@
       };
     });
     document.getElementById("issueDate").oninput = paintIssuePreview;
+    document.getElementById("issueVisit").oninput = paintIssueVisitHint;
+    document.getElementById("issueVisit").onchange = paintIssueVisitHint;
 
     var fileInput = document.getElementById("issueFile");
     fileInput.value = "";
@@ -3260,10 +3297,10 @@
       var cur = issueEditingId ? issueById(issueEditingId) : null;
       if (cur) {
         cur.jobId = f.jobId; cur.reportedDate = f.reportedDate; cur.status = f.status; cur.resolvedDate = f.resolvedDate;
-        cur.description = f.description; cur.resolution = f.resolution;
+        cur.description = f.description; cur.resolution = f.resolution; cur.visitAt = f.visitAt;
       } else {
         WARRANTY_ISSUES.push({ id: uid("is_"), jobId: f.jobId, reportedDate: f.reportedDate, description: f.description,
-          photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution });
+          photos: [], status: f.status, resolvedDate: f.resolvedDate, resolution: f.resolution, visitAt: f.visitAt });
       }
       saveState();
       closeIssueEditor();
@@ -3274,7 +3311,7 @@
   }
 
   // Bản sao của file warranty-calendar.gs (để chép thẳng từ hộp thoại). Sửa file .gs thì sửa cả chỗ này.
-  var CALENDAR_SCRIPT_CODE = "/**\n * measure&make — gửi HẠN BẢO HÀNH từ app Báo giá vào Google Calendar.\n *\n * CÁCH CÀI (làm 1 lần, ~3 phút):\n *  1. Vào script.google.com → \"Dự án mới\" → xoá code mẫu → dán toàn bộ file này vào → Ctrl+S.\n *  2. Đổi dòng TOKEN bên dưới thành 1 mã bí mật bất kỳ (vd. 12 ký tự chữ + số). Nhớ mã này.\n *  3. Bấm \"Triển khai\" → \"Tùy chọn triển khai mới\" → loại \"Ứng dụng web\":\n *       Thực thi với tư cách: Tôi   ·   Ai có quyền truy cập: Bất kỳ ai\n *     → Triển khai → cấp quyền cho Google Calendar\n *     (Google báo \"ứng dụng chưa được xác minh\": bấm Nâng cao → Tiếp tục — đây là script của chính a).\n *  4. Copy \"URL ứng dụng web\" (đuôi /exec), dán vào app: Danh sách nhà thầu → nút \"Gửi lịch Google\"\n *     cùng mã bí mật ở bước 2 → \"Lưu cài đặt\" → \"Gửi ngay\".\n *\n * Script chỉ tạo / sửa / xoá đúng những sự kiện do chính nó tạo (tự ghi nhớ trong Script Properties),\n * không đụng vào sự kiện khác trong lịch của a. Mỗi gói việc có ngày nghiệm thu → 1 sự kiện cả ngày\n * vào NGÀY HẾT BẢO HÀNH, màu cam, nhắc email trước 4 tuần và nhắc thông báo trước 1 tuần.\n * Sửa ngày nghiệm thu / số tháng bảo hành trong app → sự kiện tự dời theo. Xoá gói việc → sự kiện tự mất.\n */\n\nvar TOKEN = 'ĐỔI-THÀNH-MÃ-BÍ-MẬT';   // <-- phải TRÙNG với ô \"Mã bí mật\" trong app\nvar USE_SEPARATE_CALENDAR = false;    // false: ghi vào lịch chính của a (hiện trên mọi thiết bị).\n                                      // true : tạo riêng lịch \"Bảo hành công trình – measure&make\".\nvar SEPARATE_CALENDAR_NAME = 'Bảo hành công trình – measure&make';\n\nfunction doGet() {\n  return out_({ ok: true, service: 'warranty-calendar' });\n}\n\nfunction doPost(e) {\n  try {\n    var req = JSON.parse(e.postData.contents);\n    if (req.token !== TOKEN) return out_({ ok: false, error: 'Sai mã bí mật (TOKEN) — kiểm tra lại cho khớp giữa app và Apps Script.' });\n    if (req.action !== 'syncWarrantyCalendar') return out_({ ok: false, error: 'Yêu cầu không hợp lệ.' });\n    return out_(sync_(req.events || []));\n  } catch (err) {\n    return out_({ ok: false, error: String(err) });\n  }\n}\n\nfunction out_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction calendar_() {\n  if (!USE_SEPARATE_CALENDAR) return CalendarApp.getDefaultCalendar();\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('calId');\n  var cal = id ? CalendarApp.getCalendarById(id) : null;\n  if (!cal) {\n    cal = CalendarApp.createCalendar(SEPARATE_CALENDAR_NAME);\n    props.setProperty('calId', cal.getId());\n  }\n  return cal;\n}\n\nfunction sync_(events) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);                       // 2 thiết bị cùng gửi 1 lúc thì xếp hàng, không tạo trùng\n  try {\n    var props = PropertiesService.getScriptProperties();\n    var map = JSON.parse(props.getProperty('map') || '{}');   // key gói việc -> { id sự kiện, sig }\n    var cal = calendar_();\n    var seen = {}, created = 0, updated = 0, removed = 0, same = 0;\n\n    events.forEach(function (ev) {\n      seen[ev.key] = true;\n      var sig = ev.date + '|' + ev.title + '|' + ev.description;\n      var m = map[ev.key];\n      var event = null;\n      if (m) { try { event = cal.getEventById(m.id); } catch (x) { event = null; } }\n      if (event && m.sig === sig) { same++; return; }\n\n      var p = String(ev.date).split('-');\n      var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n      if (event) {\n        event.setTitle(ev.title);\n        event.setDescription(ev.description);\n        event.setAllDayDate(day);\n        updated++;\n      } else {\n        event = cal.createAllDayEvent(ev.title, day, { description: ev.description });\n        event.setColor(CalendarApp.EventColor.ORANGE);\n        event.removeAllReminders();\n        event.addEmailReminder(28 * 24 * 60);   // 4 tuần trước (tối đa Google cho phép)\n        event.addPopupReminder(7 * 24 * 60);    // 1 tuần trước\n        created++;\n      }\n      map[ev.key] = { id: event.getId(), sig: sig };\n    });\n\n    // Gói việc đã xoá / hết hạn quá lâu khỏi app -> gỡ sự kiện tương ứng (chỉ sự kiện do script này tạo)\n    Object.keys(map).forEach(function (k) {\n      if (seen[k]) return;\n      try { var old = cal.getEventById(map[k].id); if (old) old.deleteEvent(); } catch (x) {}\n      delete map[k];\n      removed++;\n    });\n\n    props.setProperty('map', JSON.stringify(map));\n    return { ok: true, created: created, updated: updated, removed: removed, same: same, calendar: cal.getName() };\n  } finally {\n    lock.releaseLock();\n  }\n}\n";
+  var CALENDAR_SCRIPT_CODE = "/**\n * measure&make — gửi HẠN BẢO HÀNH từ app Báo giá vào Google Calendar.\n *\n * CÁCH CÀI (làm 1 lần, ~3 phút):\n *  1. Vào script.google.com → \"Dự án mới\" → xoá code mẫu → dán toàn bộ file này vào → Ctrl+S.\n *  2. Đổi dòng TOKEN bên dưới thành 1 mã bí mật bất kỳ (vd. 12 ký tự chữ + số). Nhớ mã này.\n *  3. Bấm \"Triển khai\" → \"Tùy chọn triển khai mới\" → loại \"Ứng dụng web\":\n *       Thực thi với tư cách: Tôi   ·   Ai có quyền truy cập: Bất kỳ ai\n *     → Triển khai → cấp quyền cho Google Calendar\n *     (Google báo \"ứng dụng chưa được xác minh\": bấm Nâng cao → Tiếp tục — đây là script của chính a).\n *  4. Copy \"URL ứng dụng web\" (đuôi /exec), dán vào app: Danh sách nhà thầu → nút \"Gửi lịch Google\"\n *     cùng mã bí mật ở bước 2 → \"Lưu cài đặt\" → \"Gửi ngay\".\n *\n * Script chỉ tạo / sửa / xoá đúng những sự kiện do chính nó tạo (tự ghi nhớ trong Script Properties),\n * không đụng vào sự kiện khác trong lịch của a. Có 2 loại sự kiện:\n *   1. HẾT BẢO HÀNH — mỗi gói việc có ngày nghiệm thu → 1 sự kiện cả ngày vào ngày hết bảo hành, màu cam,\n *      nhắc email trước 4 tuần và thông báo trước 1 tuần.\n *   2. LỊCH HẸN XỬ LÝ SỰ CỐ — khi a ghi \"nhà thầu hẹn qua xử lý lúc …\" cho 1 sự cố → sự kiện có giờ (mặc định 1 tiếng),\n *      màu đỏ, thông báo nhắc TRƯỚC 1 NGÀY, TRƯỚC 12 TIẾNG và TRƯỚC 1 TIẾNG để a nhắc lại nhà thầu.\n * Sửa trong app → sự kiện tự dời theo. Xoá / đánh dấu \"Đã xử lý\" → sự kiện tự mất.\n *\n * NÂNG CẤP từ bản cũ: dán đè code mới → Triển khai → Quản lý triển khai → biểu tượng bút chì →\n * Phiên bản: \"Phiên bản mới\" → Triển khai (giữ nguyên URL, không phải nhập lại gì trong app).\n */\n\nvar TOKEN = 'ĐỔI-THÀNH-MÃ-BÍ-MẬT';   // <-- phải TRÙNG với ô \"Mã bí mật\" trong app\nvar USE_SEPARATE_CALENDAR = false;    // false: ghi vào lịch chính của a (hiện trên mọi thiết bị).\n                                      // true : tạo riêng lịch \"Bảo hành công trình – measure&make\".\nvar SEPARATE_CALENDAR_NAME = 'Bảo hành công trình – measure&make';\nvar TZ = 'Asia/Ho_Chi_Minh';           // múi giờ để đọc giờ hẹn gửi từ app\n\nfunction doGet() {\n  return out_({ ok: true, service: 'warranty-calendar' });\n}\n\nfunction doPost(e) {\n  try {\n    var req = JSON.parse(e.postData.contents);\n    if (req.token !== TOKEN) return out_({ ok: false, error: 'Sai mã bí mật (TOKEN) — kiểm tra lại cho khớp giữa app và Apps Script.' });\n    if (req.action !== 'syncWarrantyCalendar') return out_({ ok: false, error: 'Yêu cầu không hợp lệ.' });\n    return out_(sync_(req.events || []));\n  } catch (err) {\n    return out_({ ok: false, error: String(err) });\n  }\n}\n\nfunction out_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction calendar_() {\n  if (!USE_SEPARATE_CALENDAR) return CalendarApp.getDefaultCalendar();\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('calId');\n  var cal = id ? CalendarApp.getCalendarById(id) : null;\n  if (!cal) {\n    cal = CalendarApp.createCalendar(SEPARATE_CALENDAR_NAME);\n    props.setProperty('calId', cal.getId());\n  }\n  return cal;\n}\n\nfunction sync_(events) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);                       // 2 thiết bị cùng gửi 1 lúc thì xếp hàng, không tạo trùng\n  try {\n    var props = PropertiesService.getScriptProperties();\n    var map = JSON.parse(props.getProperty('map') || '{}');   // key gói việc -> { id sự kiện, sig }\n    var cal = calendar_();\n    var seen = {}, created = 0, updated = 0, removed = 0, same = 0;\n\n    events.forEach(function (ev) {\n      seen[ev.key] = true;\n      var sig = (ev.start || ev.date) + '|' + ev.title + '|' + ev.description;\n      var m = map[ev.key];\n      var event = null;\n      if (m) { try { event = cal.getEventById(m.id); } catch (x) { event = null; } }\n      if (event && m.sig === sig) { same++; return; }\n\n      if (ev.start) {\n        // Lịch hẹn có giờ (nhà thầu hẹn qua xử lý sự cố)\n        var start = Utilities.parseDate(ev.start, TZ, \"yyyy-MM-dd'T'HH:mm\");\n        var end = new Date(start.getTime() + (Number(ev.minutes) || 60) * 60000);\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setTime(start, end);\n          updated++;\n        } else {\n          event = cal.createEvent(ev.title, start, end, { description: ev.description });\n          event.setColor(CalendarApp.EventColor.RED);\n          event.removeAllReminders();\n          event.addPopupReminder(24 * 60);      // trước 1 ngày\n          event.addPopupReminder(12 * 60);      // trước 12 tiếng\n          event.addPopupReminder(60);           // trước 1 tiếng\n          created++;\n        }\n      } else {\n        // Hết bảo hành: sự kiện cả ngày\n        var p = String(ev.date).split('-');\n        var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setAllDayDate(day);\n          updated++;\n        } else {\n          event = cal.createAllDayEvent(ev.title, day, { description: ev.description });\n          event.setColor(CalendarApp.EventColor.ORANGE);\n          event.removeAllReminders();\n          event.addEmailReminder(28 * 24 * 60);   // 4 tuần trước (tối đa Google cho phép)\n          event.addPopupReminder(7 * 24 * 60);    // 1 tuần trước\n          created++;\n        }\n      }\n      map[ev.key] = { id: event.getId(), sig: sig };\n    });\n\n    // Gói việc đã xoá / hết hạn quá lâu khỏi app -> gỡ sự kiện tương ứng (chỉ sự kiện do script này tạo)\n    Object.keys(map).forEach(function (k) {\n      if (seen[k]) return;\n      try { var old = cal.getEventById(map[k].id); if (old) old.deleteEvent(); } catch (x) {}\n      delete map[k];\n      removed++;\n    });\n\n    props.setProperty('map', JSON.stringify(map));\n    return { ok: true, created: created, updated: updated, removed: removed, same: same, calendar: cal.getName() };\n  } finally {\n    lock.releaseLock();\n  }\n}\n";
 
   /* ===================== GỬI HẠN BẢO HÀNH VÀO GOOGLE CALENDAR ===================== */
   // Mỗi gói việc đã có ngày nghiệm thu → 1 sự kiện cả ngày vào NGÀY HẾT BẢO HÀNH. App gọi 1 Google Apps Script
@@ -3308,8 +3345,37 @@
       lines.push("", "Mở app: " + app);
       events.push({
         key: j.id,
+        type: "expiry",
         date: w.endIso,
         title: "Hết bảo hành: " + (p ? p.name : "?") + " – " + (j.scope || "gói việc") + " (" + (c ? c.name : "?") + ")",
+        description: lines.join("\n")
+      });
+    });
+    // Lịch hẹn xử lý sự cố (chưa xong, có giờ hẹn): sự kiện có giờ, script đặt nhắc trước 1 ngày / 12 giờ / 1 giờ.
+    // Giữ sự kiện thêm 1 ngày sau giờ hẹn rồi gỡ.
+    var floor = Date.now() - 86400000;
+    WARRANTY_ISSUES.forEach(function (i) {
+      if (i.status === "done" || !i.visitAt) return;
+      var d = visitDateTime(i.visitAt);
+      if (!d || d.getTime() < floor) return;
+      var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === i.jobId; })[0];
+      if (!job) return;
+      var c = contractorById(job.contractorId), p = projectById(job.projectId);
+      var lines = [
+        "NHẮC NHÀ THẦU QUA XỬ LÝ SỰ CỐ BẢO HÀNH",
+        "Công trình: " + (p ? p.name : "?"),
+        "Gói việc: " + (job.scope || "—"),
+        "Nhà thầu: " + (c ? c.name : "?") + (c && c.phone ? " · " + c.phone : ""),
+        "Sự cố (báo " + fmtDate(i.reportedDate) + "): " + (i.description || "(chưa mô tả)"),
+        "",
+        "Mở app: " + app
+      ];
+      events.push({
+        key: "visit:" + i.id,
+        type: "visit",
+        start: String(i.visitAt).slice(0, 16),
+        minutes: 60,
+        title: "Nhà thầu hẹn xử lý: " + (p ? p.name : "?") + " – " + (job.scope || "sự cố") + " (" + (c ? c.name : "?") + ")",
         description: lines.join("\n")
       });
     });
@@ -3426,14 +3492,16 @@
 
   function paintCalendarState() {
     var st = document.getElementById("calState");
-    var n = warrantyCalendarEvents().length;
+    var evs = warrantyCalendarEvents(), n = evs.length;
+    var nVisit = evs.filter(function (e) { return e.type === "visit"; }).length;
+    var detail = (n - nVisit) + " mốc hết bảo hành" + (nVisit ? " + " + nVisit + " lịch hẹn xử lý sự cố" : "");
     if (!CALENDAR_CFG.url) {
       st.className = "job-preview";
-      st.textContent = "Chưa kết nối. Có " + n + " mốc hết bảo hành sẽ được gửi khi a cài xong (xem \"Cách cài\" bên dưới).";
+      st.textContent = "Chưa kết nối. Có " + detail + " sẽ được gửi khi a cài xong (xem \"Cách cài\" bên dưới).";
     } else {
       var same = calendarSig(warrantyCalendarEvents()) === CALENDAR_CFG.lastSig;
       st.className = "job-preview " + (same ? "active" : "soon");
-      st.textContent = (same ? "Lịch đang khớp với app" : "Có thay đổi chưa gửi") + " · " + n + " mốc hết bảo hành" +
+      st.textContent = (same ? "Lịch đang khớp với app" : "Có thay đổi chưa gửi") + " · " + detail +
         (CALENDAR_CFG.lastAt ? " · gửi lần cuối " + fmtDateTime(new Date(CALENDAR_CFG.lastAt).toISOString()) : "") + ".";
     }
     var res = document.getElementById("calResult");
