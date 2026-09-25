@@ -564,6 +564,12 @@
   .print-ack-signs .sg-sub { color: #8C8178; font-size: 11px; margin-bottom: 62px; }
   .print-ack-signs .sg-name { font-weight: 600; }
   .print-ack-signs .sg-title { color: #62707A; font-size: 11.5px; }
+  .print-prq-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .print-prq-tbl td { padding: 5px 8px; border: none; border-bottom: 1px solid var(--print-dash); vertical-align: top; }
+  .print-prq-tbl td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 34%; }
+  .print-prq-tbl tr.b td { font-weight: 700; }
+  .print-prq-tbl tr.hi td { font-weight: 700; background: #FDEEE6; border-bottom: 1.5px solid var(--print-orange); }
+  .print-prq-amount { font-size: 22px; font-weight: 700; color: var(--print-orange); margin: 4px 0 4px; font-variant-numeric: tabular-nums; }
   .toolbar-right { flex-wrap: wrap; }
   @media (max-width: 640px) {
     .toolbar .tabs { flex-wrap: wrap; width: 100%; }
@@ -889,7 +895,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-09-25-bb2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-09-25-pq1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1752,7 +1758,7 @@
     }));
     add("Nha thau", CONTRACTORS.map(function (c) {
       return { "Mã": c.id || "", "Tên": c.name || "", "Nhóm nghề": (c.trades || []).join(", "), "Người liên hệ": c.contact || "",
-        "Điện thoại": c.phone || "", "Email": c.email || "", "Địa chỉ": c.address || "", "Mã số thuế": c.taxCode || "", "Ghi chú": c.note || "" };
+        "Điện thoại": c.phone || "", "Email": c.email || "", "Địa chỉ": c.address || "", "Mã số thuế": c.taxCode || "", "Ngân hàng": (c.bank && c.bank.bankName) || "", "Số tài khoản": (c.bank && c.bank.accountNo) || "", "Chủ tài khoản": (c.bank && c.bank.accountName) || "", "Ghi chú": c.note || "" };
     }));
     add("Phan cong nha thau", CONTRACTOR_JOBS.map(function (j) {
       var c = contractorById(j.contractorId), p = projectById(j.projectId), w = warrantyInfo(j);
@@ -1782,7 +1788,7 @@
     }));
     add("Dot thanh toan", ctrJobs.reduce(function (acc, j) {
       contractInfo(j).pays.forEach(function (x) {
-        acc.push(Object.assign(jobLabel(j), { "Đợt": x.pay.label || "", "Loại": PAY_KINDS[x.pay.kind] || "", "Số tiền": x.amount, "Hạn": x.pay.dueDate || "", "Ngày trả": x.pay.paidDate || "", "Trạng thái": PAY_STATUS[x.status].label }));
+        acc.push(Object.assign(jobLabel(j), { "Đợt": x.pay.label || "", "Loại": PAY_KINDS[x.pay.kind] || "", "Số tiền": x.amount, "Hạn": x.pay.dueDate || "", "Ngày trả": x.pay.paidDate || "", "Trạng thái": PAY_STATUS[x.status].label, "Số phiếu đề nghị": x.pay.request ? (x.pay.request.no || "") : "", "Ngày lập phiếu": x.pay.request ? (x.pay.request.date || "") : "", "Trạng thái phiếu": x.pay.request ? (PRQ_STATUS[x.pay.request.status] || PRQ_STATUS.draft).label : "" }));
       });
       return acc;
     }, []));
@@ -1845,7 +1851,7 @@
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
       PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
-      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng, " + CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).length + " biên bản nghiệm thu).";
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng, " + CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).length + " biên bản nghiệm thu, " + CONTRACTOR_JOBS.reduce(function (n, j) { return n + (j.contract ? (j.contract.payments || []).filter(function (p) { return p.request; }).length : 0); }, 0) + " phiếu đề nghị thanh toán).";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -2016,7 +2022,8 @@
       { label: "Bảng giá công cụ xây dựng", soon: true },
       { label: "Đơn giá chung xây dựng", soon: true },
       { label: "Hợp đồng nhà thầu", screen: "contracts" },
-      { label: "Biên bản nghiệm thu", screen: "acceptance" }
+      { label: "Biên bản nghiệm thu", screen: "acceptance" },
+      { label: "Đề nghị thanh toán", screen: "payreq" }
     ]},
     { group: "Công trình", items: [
       { label: "Danh sách công trình", screen: "projects" },
@@ -2036,7 +2043,8 @@
     if (screen === "quotes") return view.screen === "list" || view.screen === "detail" || view.screen === "print";
     if (screen === "contracts") return view.screen === "contractors" && view.ctab === "contracts";
     if (screen === "acceptance") return view.screen === "contractors" && view.ctab === "acceptance";
-    if (screen === "contractors") return view.screen === "contractors" && view.ctab !== "contracts" && view.ctab !== "acceptance";
+    if (screen === "payreq") return view.screen === "contractors" && view.ctab === "payreq";
+    if (screen === "contractors") return view.screen === "contractors" && view.ctab !== "contracts" && view.ctab !== "acceptance" && view.ctab !== "payreq";
     return view.screen === screen;
   }
 
@@ -2066,10 +2074,13 @@
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
         else if (screen === "catalog" && view.screen !== "catalog") { view.screen = "catalog"; renderCatalogScreen(); renderNav(); }
         else if (screen === "contractors" && !isNavScreenActive("contractors")) {
-          view.screen = "contractors"; if (view.ctab === "contracts" || view.ctab === "acceptance") view.ctab = "list"; view.cJob = ""; renderContractorsScreen(); renderNav();
+          view.screen = "contractors"; if (view.ctab === "contracts" || view.ctab === "acceptance" || view.ctab === "payreq") view.ctab = "list"; view.cJob = ""; renderContractorsScreen(); renderNav();
         }
         else if (screen === "acceptance" && !isNavScreenActive("acceptance")) {
           view.screen = "contractors"; view.ctab = "acceptance"; view.cJob = ""; renderContractorsScreen(); renderNav();
+        }
+        else if (screen === "payreq" && !isNavScreenActive("payreq")) {
+          view.screen = "contractors"; view.ctab = "payreq"; view.cJob = ""; renderContractorsScreen(); renderNav();
         }
         else if (screen === "contracts" && !isNavScreenActive("contracts")) {
           view.screen = "contractors"; view.ctab = "contracts"; view.cJob = ""; renderContractorsScreen(); renderNav();
@@ -2320,7 +2331,7 @@
   /* ===================== NHÀ THẦU ===================== */
   // Nhà thầu THI CÔNG (khác "Nhà cung cấp" vật tư bên FF&E). Nhập tay ngay trong app, KHÔNG qua Google Sheet,
   // nên đồng bộ Sheet (applyMasterDataFromSheet) không bao giờ đụng tới 2 mảng này.
-  //   CONTRACTORS     = [{ id, name, trades:[], contact, phone, email, address, taxCode, note }]
+  //   CONTRACTORS     = [{ id, name, trades:[], contact, phone, email, address, taxCode, note, bank:{bankName,accountNo,accountName} }]
   //   CONTRACTOR_JOBS = [{ id, contractorId, projectId, scope, startDate, handoverDate, warrantyMonths, note }]
   // Mỗi dòng CONTRACTOR_JOBS là 1 GÓI VIỆC (nhà thầu × công trình × phạm vi) có ngày nghiệm thu và số tháng bảo
   // hành riêng. Hạn bảo hành + trạng thái được TÍNH RA lúc vẽ (warrantyInfo), không lưu — để không bao giờ lệch
@@ -2573,6 +2584,7 @@
     else if (view.ctab === "issues") body = contractorTabIssues();
     else if (view.ctab === "contracts") body = contractorTabContracts();
     else if (view.ctab === "acceptance") body = contractorTabAcceptance();
+    else if (view.ctab === "payreq") body = contractorTabPayReq();
     else {
       body = '<div class="table-wrap"><div class="table-scroll"><table>' +
         '<thead><tr><th>Nhà thầu</th><th>Liên hệ</th><th>Công trình</th><th>Bảo hành gần nhất</th><th></th></tr></thead>' +
@@ -2596,7 +2608,7 @@
           '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
         '</div>' +
       '</div>' +
-      (view.ctab === "contracts" || view.ctab === "acceptance" ? "" : '<div class="stats stats-5">' +
+      (view.ctab === "contracts" || view.ctab === "acceptance" || view.ctab === "payreq" ? "" : '<div class="stats stats-5">' +
         '<div class="stat-tile"><div class="stat-label">Nhà thầu</div><div class="stat-value">' + CONTRACTORS.length + '</div><div class="stat-foot">' + CONTRACTOR_JOBS.length + ' gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nBuilding + '</div><div class="stat-foot">gói việc đang làm</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Đang bảo hành</div><div class="stat-value">' + nActive + '</div><div class="stat-foot">gói việc</div></div>' +
@@ -2612,6 +2624,7 @@
           '<button class="tab' + (view.ctab === "issues" ? " active" : "") + '" data-ctab="issues">Sự cố' + (nIssueOpen ? " (" + nIssueOpen + " mở)" : "") + '</button>' +
           '<button class="tab' + (view.ctab === "contracts" ? " active" : "") + '" data-ctab="contracts">Hợp đồng (' + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + ')</button>' +
           '<button class="tab' + (view.ctab === "acceptance" ? " active" : "") + '" data-ctab="acceptance">Nghiệm thu</button>' +
+          '<button class="tab' + (view.ctab === "payreq" ? " active" : "") + '" data-ctab="payreq">Đề nghị TT</button>' +
         '</div>' +
         '<div class="toolbar-right">' +
           '<select id="cTradeSel" class="ctr-select">' + tradeOpts + '</select>' +
@@ -2663,6 +2676,13 @@
     });
     document.querySelectorAll("[data-print-ack]").forEach(function (b) {
       b.addEventListener("click", function (e) { e.stopPropagation(); printAcceptance(b.dataset.printAck); });
+    });
+    // Phiếu đề nghị thanh toán
+    document.querySelectorAll("[data-open-prq]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openPrqEditor(b.dataset.openPrq, b.dataset.prqPay); });
+    });
+    document.querySelectorAll("[data-print-prq]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); printPayReq(b.dataset.printPrq, b.dataset.prqPay); });
     });
     // Hợp đồng
     document.querySelectorAll("[data-open-contract]").forEach(function (b) {
@@ -2724,7 +2744,8 @@
     if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?" +
       (nIss ? "\n\nXoá luôn " + nIss + " sự cố bảo hành đã ghi của gói này." : "") +
       (j.contract ? "\n\nGói này đang có HỢP ĐỒNG " + (j.contract.no || "") + " (" + money(contractInfo(j).current) + ", " + (j.contract.payments || []).length + " đợt thanh toán) — xoá gói là mất luôn hợp đồng." : "") +
-      (j.acceptance ? "\n\nGói này có biên bản nghiệm thu số " + (j.acceptance.no || "—") + " — xoá gói là mất luôn biên bản." : ""))) return;
+      (j.acceptance ? "\n\nGói này có biên bản nghiệm thu số " + (j.acceptance.no || "—") + " — xoá gói là mất luôn biên bản." : "") +
+      (j.contract && (j.contract.payments || []).some(function (p) { return p.request; }) ? "\n\nCác phiếu đề nghị thanh toán của hợp đồng cũng mất theo." : ""))) return;
     WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return i.jobId !== id; });
     if (view.cJob === id) view.cJob = "";
     CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (x) { return x.id !== id; });
@@ -2764,6 +2785,11 @@
           '<div class="form-row">' +
             '<div class="field" style="grid-column: span 2;"><label>Địa chỉ</label><input id="ctAddress"></div>' +
             '<div class="field"><label>Mã số thuế</label><input id="ctTax"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Ngân hàng</label><input id="ctBank" placeholder="vd. Vietcombank – CN Hà Nội"></div>' +
+            '<div class="field"><label>Số tài khoản</label><input id="ctAcct" inputmode="numeric"></div>' +
+            '<div class="field"><label>Chủ tài khoản</label><input id="ctAcctName"></div>' +
           '</div>' +
           '<div class="field" style="margin-bottom:14px;"><label>Ghi chú</label><textarea id="ctNote" rows="2"></textarea></div>' +
           '<div class="field"><label>Gói việc đã / đang làm</label>' +
@@ -2858,6 +2884,8 @@
       taxCode: document.getElementById("ctTax").value.trim(),
       note: document.getElementById("ctNote").value.trim()
     };
+    var bk = { bankName: document.getElementById("ctBank").value.trim(), accountNo: document.getElementById("ctAcct").value.trim(), accountName: document.getElementById("ctAcctName").value.trim() };
+    if (bk.bankName || bk.accountNo || bk.accountName) rec.bank = bk;
     var idx = -1;
     CONTRACTORS.forEach(function (c, i) { if (c.id === rec.id) idx = i; });
     if (idx > -1) CONTRACTORS[idx] = rec; else CONTRACTORS.push(rec);
@@ -2879,6 +2907,9 @@
     document.getElementById("ctAddress").value = c ? (c.address || "") : "";
     document.getElementById("ctTax").value = c ? (c.taxCode || "") : "";
     document.getElementById("ctNote").value = c ? (c.note || "") : "";
+    document.getElementById("ctBank").value = c && c.bank ? (c.bank.bankName || "") : "";
+    document.getElementById("ctAcct").value = c && c.bank ? (c.bank.accountNo || "") : "";
+    document.getElementById("ctAcctName").value = c && c.bank ? (c.bank.accountName || "") : "";
     document.getElementById("ctTradeNew").value = "";
     document.getElementById("ctDelete").style.display = c ? "" : "none";
     paintContractorTrades();
@@ -4699,6 +4730,327 @@
     '</table></div>';
   }
 
+  /* ===================== ĐỀ NGHỊ THANH TOÁN ===================== */
+  // Phiếu đề nghị thanh toán gắn với MỘT ĐỢT trong lịch thanh toán của hợp đồng: job.contract.payments[i].request
+  //   request = { no, date, to, status:"draft"|"sent"|"approved", sentDate, approvedDate, note }
+  // Đợt có paidDate thì hiện "Đã chi" (không lưu lặp). Mọi số (lũy kế, còn phải trả) TÍNH từ contractInfo(), không lưu.
+  // Tài khoản nhận tiền nằm ở hồ sơ nhà thầu: contractor.bank = { bankName, accountNo, accountName }.
+  var PRQ_STATUS = {
+    draft:    { label: "Nháp",     pill: "pill-neutral" },
+    sent:     { label: "Đã gửi",   pill: "pill-warn" },
+    approved: { label: "Đã duyệt", pill: "pill-good" },
+    paid:     { label: "Đã chi",   pill: "pill-good" }
+  };
+  var PRQ_TO_DEFAULT = "Kế toán / Chủ đầu tư";
+
+  function prqStatusKey(pay) {
+    if (isoParts(pay.paidDate)) return "paid";
+    return pay.request ? (PRQ_STATUS[pay.request.status] ? pay.request.status : "draft") : "";
+  }
+  function prqFind(job, payId) {
+    if (!job || !job.contract) return null;
+    var pays = job.contract.payments || [];
+    for (var i = 0; i < pays.length; i++) if (pays[i].id === payId) return pays[i];
+    return null;
+  }
+  function prqSuggestNo(dateIso) {
+    var y = (isoParts(dateIso) || isoParts(todayIso())).y, n = 1;
+    CONTRACTOR_JOBS.forEach(function (j) {
+      if (!j.contract) return;
+      (j.contract.payments || []).forEach(function (p) { if (p.request && String(p.request.date || "").slice(0, 4) === String(y)) n++; });
+    });
+    return "DNTT-" + String(n).padStart(2, "0") + "/" + y;
+  }
+
+  // Số liệu của phiếu cho đợt payId: đã trả trước đó = mọi đợt khác đã có ngày trả.
+  function prqInfo(job, payId) {
+    var ci = contractInfo(job);
+    if (!ci) return null;
+    var me = null, prev = 0;
+    ci.pays.forEach(function (x) {
+      if (x.pay.id === payId) me = x;
+      else if (x.status === "paid") prev += x.amount;
+    });
+    if (!me) return null;
+    var cum = prev + me.amount;
+    return { ci: ci, x: me, amount: me.amount, prev: prev, cum: cum, remaining: ci.payable - cum, over: cum > ci.payable };
+  }
+
+  function prqPayLabel(p) { return (p.label || "Đợt thanh toán") + (PAY_KINDS[p.kind] && PAY_KINDS[p.kind] !== p.label ? " · " + PAY_KINDS[p.kind] : ""); }
+
+  /* ---------- Tab "Đề nghị TT" ---------- */
+  function contractorTabPayReq() {
+    var jobs = CONTRACTOR_JOBS.filter(function (j) { return j.contract && jobMatches(j) && (!view.cProject || j.projectId === view.cProject); });
+    var rows = [];
+    jobs.forEach(function (j) {
+      contractInfo(j).pays.forEach(function (x) { rows.push({ job: j, x: x, key: prqStatusKey(x.pay) }); });
+    });
+
+    var tot = { need: 0, sent: 0, approved: 0, wait: 0 };
+    rows.forEach(function (r) {
+      if (r.key === "paid") return;
+      if (!r.key && (r.x.status === "overdue" || r.x.status === "soon")) tot.need++;
+      if (r.key === "sent") { tot.sent++; tot.wait += r.x.amount; }
+      if (r.key === "approved") { tot.approved++; tot.wait += r.x.amount; }
+    });
+    var strip =
+      '<div class="stats">' +
+        '<div class="stat-tile"><div class="stat-label">Cần lập phiếu</div><div class="stat-value' + (tot.need ? " accent" : "") + '">' + tot.need + '</div><div class="stat-foot">đợt đến hạn / quá hạn chưa có phiếu</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đã gửi, chờ duyệt</div><div class="stat-value">' + tot.sent + '</div><div class="stat-foot">phiếu</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đã duyệt, chờ chi</div><div class="stat-value">' + tot.approved + '</div><div class="stat-foot">phiếu</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Tiền chờ chi</div><div class="stat-value sm accent">' + money(tot.wait) + '</div><div class="stat-foot">phiếu đã gửi và đã duyệt</div></div>' +
+      '</div>';
+
+    // Việc cần làm lên trước: chưa trả, theo hạn tăng dần; đã chi xuống cuối
+    rows.sort(function (a, b) {
+      var ap = a.key === "paid" ? 1 : 0, bp = b.key === "paid" ? 1 : 0;
+      if (ap !== bp) return ap - bp;
+      var ad = a.x.pay.dueDate || "9999-99-99", bd = b.x.pay.dueDate || "9999-99-99";
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      return String((projectById(a.job.projectId) || {}).name || "").localeCompare(String((projectById(b.job.projectId) || {}).name || ""), "vi");
+    });
+
+    var html;
+    if (!rows.length) {
+      html = '<tr class="empty-row"><td colspan="7">' + (CONTRACTOR_JOBS.some(function (j) { return j.contract; })
+        ? "Không có đợt thanh toán nào khớp bộ lọc."
+        : 'Chưa có hợp đồng nào. Lập hợp đồng và các đợt thanh toán ở tab "Hợp đồng", rồi quay lại đây lập phiếu đề nghị.') + '</td></tr>';
+    } else {
+      html = rows.map(function (r) {
+        var j = r.job, x = r.x, p = projectById(j.projectId), c = contractorById(j.contractorId), req = x.pay.request, st = PAY_STATUS[x.status];
+        var attr = 'data-open-prq="' + escapeHtml(j.id) + '" data-prq-pay="' + escapeHtml(x.pay.id) + '"';
+        var reqCell = req
+          ? '<span class="pill ' + PRQ_STATUS[r.key].pill + '">' + PRQ_STATUS[r.key].label + '</span><div class="cell-muted" style="margin-top:4px;">' + escapeHtml(req.no || "—") + (isoParts(req.date) ? " · " + fmtDate(req.date) : "") + '</div>'
+          : (r.key === "paid" ? '<span class="pill pill-good">Đã chi</span><div class="cell-muted">không có phiếu</div>' : '<span class="cell-muted">Chưa lập phiếu</span>');
+        var acts = req
+          ? '<button class="icon-btn" data-print-prq="' + escapeHtml(j.id) + '" data-prq-pay="' + escapeHtml(x.pay.id) + '" title="In phiếu (PDF)">' + iconDownload() + '</button>' +
+            '<button class="icon-btn" ' + attr + ' title="Sửa phiếu">' + iconEdit() + '</button>'
+          : '<button class="btn btn-sm" ' + attr + '>' + iconPlus() + ' Lập phiếu</button>';
+        return '<tr class="row-click" ' + attr + '>' +
+          '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div><div class="cell-muted">' + escapeHtml(j.scope || "—") + '</div></td>' +
+          '<td>' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</td>' +
+          '<td>' + escapeHtml(prqPayLabel(x.pay)) + '<div class="cell-muted">HĐ ' + escapeHtml(j.contract.no || "—") + '</div></td>' +
+          '<td class="cell-money"><b>' + money(x.amount) + '</b></td>' +
+          '<td>' + (isoParts(x.pay.dueDate) ? fmtDate(x.pay.dueDate) : '<span class="cell-muted">—</span>') +
+            '<div style="margin-top:4px;"><span class="pill ' + st.pill + '">' + st.label + '</span></div></td>' +
+          '<td>' + reqCell + '</td>' +
+          '<td><div class="row-actions">' + acts + '</div></td></tr>';
+      }).join("");
+    }
+    return strip + '<div class="table-wrap"><div class="table-scroll"><table>' +
+      '<thead><tr><th>Công trình / gói việc</th><th>Nhà thầu</th><th>Đợt thanh toán</th><th>Số tiền</th><th>Hạn thanh toán</th><th>Phiếu đề nghị</th><th></th></tr></thead>' +
+      '<tbody>' + html + '</tbody></table></div></div>';
+  }
+
+  /* ---------- Hộp thoại phiếu ---------- */
+  var prqJobId = null, prqPayId = null;
+  function prqJob() { return CONTRACTOR_JOBS.filter(function (j) { return j.id === prqJobId; })[0]; }
+
+  function ensurePrqModal() {
+    if (document.getElementById("prqModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "prqModalOverlay";
+    el.className = "modal-overlay";
+    el.style.zIndex = "68";
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:720px;">' +
+        '<div class="modal-head"><h3 id="prqModalTitle">Phiếu đề nghị thanh toán</h3><button class="icon-btn" id="prqModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="ctr-jobline" id="prqJobLine"></div>' +
+          '<div class="job-preview" id="prqSummary" style="margin-bottom:14px;"></div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Số phiếu</label><input id="prqNo" placeholder="DNTT-01/2026"></div>' +
+            '<div class="field"><label>Ngày lập</label><input id="prqDate" type="date"></div>' +
+            '<div class="field" style="grid-column: span 2;"><label>Kính gửi</label><input id="prqTo"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Trạng thái</label><select id="prqStatus"></select></div>' +
+            '<div class="field"><label>Ngày gửi</label><input id="prqSent" type="date"></div>' +
+            '<div class="field"><label>Ngày duyệt</label><input id="prqApproved" type="date"></div>' +
+          '</div>' +
+          '<div class="field" style="margin-bottom:6px;"><label>Ghi chú trên phiếu</label><textarea id="prqNote" rows="2" placeholder="vd. Đã nghiệm thu hạng mục sơn, đề nghị thanh toán theo hợp đồng"></textarea></div>' +
+          '<h4 class="ctr-sec">Thông tin nhận tiền <span class="ctr-sec-sub">(lưu vào hồ sơ nhà thầu)</span></h4>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Ngân hàng</label><input id="prqBank" placeholder="vd. Vietcombank – CN Hà Nội"></div>' +
+            '<div class="field"><label>Số tài khoản</label><input id="prqAcct" inputmode="numeric"></div>' +
+            '<div class="field"><label>Chủ tài khoản</label><input id="prqAcctName"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="prqDelete" type="button" style="margin-right:auto;">Xoá phiếu</button>' +
+          '<button class="btn" id="prqCancel" type="button">Đóng</button>' +
+          '<button class="btn" id="prqSave" type="button">' + iconCheck() + ' Lưu</button>' +
+          '<button class="btn btn-primary" id="prqSavePrint" type="button">' + iconDownload() + ' Lưu và in</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("prqModalClose").addEventListener("click", closePrqEditor);
+    document.getElementById("prqCancel").addEventListener("click", closePrqEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closePrqEditor(); });
+  }
+  function closePrqEditor() {
+    var el = document.getElementById("prqModalOverlay");
+    if (el) el.hidden = true;
+    prqJobId = null; prqPayId = null;
+    if (view.screen === "contractors") renderContractorsScreen();
+  }
+
+  function refreshPrqSummary() {
+    var job = prqJob(); if (!job) return;
+    var f = prqInfo(job, prqPayId), box = document.getElementById("prqSummary");
+    if (!f) { box.className = "job-preview soon"; box.textContent = "Không tìm thấy đợt thanh toán (có thể đã bị xoá khỏi hợp đồng)."; return; }
+    box.className = "job-preview" + (f.over ? " soon" : " active");
+    box.innerHTML = '<b>Đề nghị đợt này: ' + money(f.amount) + '</b> · đã trả trước đó ' + money(f.prev) + ' · lũy kế ' + money(f.cum) +
+      ' · phần trả theo đợt ' + money(f.ci.payable) + ' → <b>còn phải trả ' + money(f.remaining) + '</b>' +
+      (f.over ? ' <b class="late-text">· Lũy kế đang vượt phần trả theo đợt ' + money(-f.remaining) + ' — kiểm tra lại các đợt.</b>' : "");
+  }
+
+  function readPrqStatusDates() {
+    var st = document.getElementById("prqStatus").value, today = todayIso();
+    var sent = document.getElementById("prqSent"), appr = document.getElementById("prqApproved");
+    if (st === "sent" && !sent.value) sent.value = today;
+    if (st === "approved") { if (!sent.value) sent.value = today; if (!appr.value) appr.value = today; }
+  }
+
+  function openPrqEditor(jobId, payId) {
+    var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === jobId; })[0];
+    var pay = prqFind(job, payId);
+    if (!pay) { toast("Không tìm thấy đợt thanh toán."); return; }
+    ensurePrqModal();
+    prqJobId = jobId; prqPayId = payId;
+    var p = projectById(job.projectId), c = contractorById(job.contractorId), req = pay.request;
+    var bank = (c && c.bank) || {};
+    document.getElementById("prqModalTitle").textContent = req ? "Sửa phiếu đề nghị thanh toán" : "Lập phiếu đề nghị thanh toán";
+    document.getElementById("prqJobLine").innerHTML = '<b>' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</b> · ' + escapeHtml(job.scope || "—") + ' · ' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + ' · ' + escapeHtml(prqPayLabel(pay));
+    var date = req && req.date ? req.date : todayIso();
+    document.getElementById("prqNo").value = req && req.no ? req.no : prqSuggestNo(date);
+    document.getElementById("prqDate").value = date;
+    document.getElementById("prqTo").value = req && req.to != null ? req.to : PRQ_TO_DEFAULT;
+    document.getElementById("prqStatus").innerHTML = ["draft", "sent", "approved"].map(function (k) {
+      return '<option value="' + k + '"' + ((req ? req.status : "draft") === k ? " selected" : "") + '>' + PRQ_STATUS[k].label + '</option>';
+    }).join("");
+    document.getElementById("prqSent").value = (req && req.sentDate) || "";
+    document.getElementById("prqApproved").value = (req && req.approvedDate) || "";
+    document.getElementById("prqNote").value = (req && req.note) || "";
+    document.getElementById("prqBank").value = bank.bankName || "";
+    document.getElementById("prqAcct").value = bank.accountNo || "";
+    document.getElementById("prqAcctName").value = bank.accountName || (c ? c.name : "");
+    document.getElementById("prqDelete").style.display = req ? "" : "none";
+    refreshPrqSummary();
+
+    document.getElementById("prqStatus").onchange = readPrqStatusDates;
+    var save = function (thenPrint) {
+      var jb = prqJob(); if (!jb) return;
+      var pay2 = prqFind(jb, prqPayId);
+      if (!pay2) { toast("Đợt thanh toán không còn trong hợp đồng."); return; }
+      var d = document.getElementById("prqDate").value;
+      if (!isoParts(d)) { toast("Cần nhập ngày lập phiếu."); return; }
+      readPrqStatusDates();
+      pay2.request = {
+        no: document.getElementById("prqNo").value.trim() || prqSuggestNo(d),
+        date: d,
+        to: document.getElementById("prqTo").value.trim(),
+        status: document.getElementById("prqStatus").value,
+        sentDate: document.getElementById("prqSent").value,
+        approvedDate: document.getElementById("prqApproved").value,
+        note: document.getElementById("prqNote").value.trim()
+      };
+      var ct = contractorById(jb.contractorId);
+      if (ct) {
+        var b = { bankName: document.getElementById("prqBank").value.trim(), accountNo: document.getElementById("prqAcct").value.trim(), accountName: document.getElementById("prqAcctName").value.trim() };
+        if (b.bankName || b.accountNo || b.accountName) ct.bank = b;
+      }
+      saveState();
+      var jid = jb.id, pid = prqPayId;
+      closePrqEditor();
+      if (thenPrint) printPayReq(jid, pid); else toast("Đã lưu phiếu đề nghị thanh toán.");
+    };
+    document.getElementById("prqSave").onclick = function () { save(false); };
+    document.getElementById("prqSavePrint").onclick = function () { save(true); };
+    document.getElementById("prqDelete").onclick = function () {
+      var jb = prqJob(), pay2 = jb && prqFind(jb, prqPayId); if (!pay2 || !pay2.request) return;
+      if (!confirm("Xoá phiếu đề nghị thanh toán " + (pay2.request.no || "") + "?\n\nĐợt thanh toán trong hợp đồng vẫn giữ nguyên.")) return;
+      delete pay2.request;
+      saveState();
+      closePrqEditor();
+      toast("Đã xoá phiếu đề nghị thanh toán.");
+    };
+    document.getElementById("prqModalOverlay").hidden = false;
+  }
+
+  /* ---------- Bản in phiếu đề nghị thanh toán ---------- */
+  function printPayReq(jobId, payId) {
+    view.screen = "print";
+    view.printKind = "payreq";
+    view.printJobId = jobId;
+    view.printPayId = payId;
+    renderPrintPreview();
+  }
+
+  function buildPayReqPrintHtml(job, pay) {
+    var r = pay.request, p = projectById(job.projectId), c = contractorById(job.contractorId), f = prqInfo(job, pay.id), ci = f.ci, bank = (c && c.bank) || {};
+    var head = { code: r.no, createdDate: r.date };
+    var pctTxt = String(ci.pct).replace(".", ",") + "%";
+
+    var info = [
+      ["Công trình", p ? p.name : "—"],
+      ["Gói việc", job.scope || "—"],
+      ["Nhà thầu", c ? c.name + (c.taxCode ? " (MST " + c.taxCode + ")" : "") : "—"],
+      ["Hợp đồng", "Số " + (job.contract.no || "—") + (isoParts(job.contract.signedDate) ? ", ký ngày " + fmtDate(job.contract.signedDate) : "")],
+      ["Nội dung đề nghị", prqPayLabel(pay)]
+    ];
+    if (isoParts(pay.dueDate)) info.push(["Hạn thanh toán", fmtDate(pay.dueDate)]);
+    var infoHtml = '<table class="print-ack-info">' + info.map(function (x) {
+      return '<tr><td class="lbl">' + escapeHtml(x[0]) + '</td><td>' + escapeHtml(x[1]) + '</td></tr>';
+    }).join("") + '</table>';
+
+    var lines = [["Giá trị hợp đồng gốc", money(ci.value), ""]];
+    if (ci.addSum) lines.push(["Phụ lục / phát sinh", moneySigned(ci.addSum), ""]);
+    lines.push(["Giá trị hợp đồng hiện hành", money(ci.current), "b"]);
+    if (ci.retention.status !== "none") lines.push(["Tiền giữ lại bảo hành (" + pctTxt + ")", "− " + money(ci.retention.amount), ""]);
+    lines.push(["Phần thanh toán theo các đợt", money(ci.payable), "b"]);
+    lines.push(["Đã thanh toán trước đó", money(f.prev), ""]);
+    lines.push(["Đề nghị thanh toán đợt này", money(f.amount), "hi"]);
+    lines.push(["Lũy kế sau đợt này", money(f.cum), ""]);
+    lines.push(["Còn phải thanh toán sau đợt này", money(f.remaining), "b"]);
+    var tbl = '<table class="print-prq-tbl">' + lines.map(function (l) {
+      return '<tr' + (l[2] ? ' class="' + l[2] + '"' : "") + '><td>' + escapeHtml(l[0]) + '</td><td class="num">' + escapeHtml(l[1]) + '</td></tr>';
+    }).join("") + '</table>';
+
+    var payee = [
+      ["Đơn vị thụ hưởng", bank.accountName || (c ? c.name : "—")],
+      ["Ngân hàng", bank.bankName || "—"],
+      ["Số tài khoản", bank.accountNo || "—"]
+    ];
+    var payeeHtml = '<table class="print-ack-info">' + payee.map(function (x) {
+      return '<tr><td class="lbl">' + escapeHtml(x[0]) + '</td><td>' + escapeHtml(x[1]) + '</td></tr>';
+    }).join("") + '</table>';
+
+    var signs = ["Người lập", "Quản lý", "Duyệt chi"].map(function (s) {
+      return '<div class="sg"><div class="sg-side">' + s + '</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div>';
+    }).join("");
+
+    var page =
+      printRunHeadHtml(head, "Ngày lập") +
+      '<div class="print-title">Phiếu đề nghị thanh toán</div>' +
+      '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + (job.scope ? " · " + escapeHtml(job.scope) : "") + '</div>' +
+      (r.to ? '<div class="print-ack-text" style="margin-top:10px;">Kính gửi: <b>' + escapeHtml(r.to) + '</b></div>' : "") +
+      infoHtml +
+      '<div class="print-ack-h">Tóm tắt hợp đồng và lũy kế thanh toán</div>' + tbl +
+      '<div class="print-ack-h">Số tiền đề nghị thanh toán</div>' +
+      '<div class="print-prq-amount">' + escapeHtml(money(f.amount)) + '</div>' +
+      '<div class="print-ack-text">Bằng chữ: ' + escapeHtml(soThanhChu(f.amount)) + '.</div>' +
+      '<div class="print-ack-h">Thông tin nhận tiền</div>' + payeeHtml +
+      (r.note ? '<div class="print-ack-h">Ghi chú</div><div class="print-ack-text">' + escapeHtml(r.note) + '</div>' : "") +
+      '<div class="print-ack-signs">' + signs + '</div>';
+
+    return '<div class="print-doc"><table class="print-sheet">' +
+      '<thead><tr><td>' + printRunHeadHtml(head, "Ngày lập") + '</td></tr></thead>' +
+      '<tbody><tr><td><section class="print-page">' + page + '</section></td></tr></tbody>' +
+    '</table></div>';
+  }
+
   /* ===================== BÁO CÓ BẢN MỚI ===================== */
   // Trình duyệt (nhất là Safari iPhone) hay giữ bản app cũ nên tính năng mới "không thấy đâu" cho tới khi F5.
   // Vài phút một lần và mỗi lần quay lại tab, app tải lại CHÍNH file của nó (bỏ qua bộ nhớ đệm) và so APP_BUILD.
@@ -6422,10 +6774,13 @@
   }
 
   function renderPrintPreview() {
-    var ackJobPrint = view.printKind === "acceptance" ? CONTRACTOR_JOBS.filter(function (x) { return x.id === view.printJobId; })[0] : null;
-    if (view.printKind === "acceptance" && (!ackJobPrint || !ackJobPrint.acceptance)) { view.screen = "contractors"; view.ctab = "acceptance"; renderContractorsScreen(); renderNav(); return; }
-    var q = ackJobPrint ? null : state.quotes.filter(function (x) { return x.id === view.printId; })[0];
-    if (!ackJobPrint && !q) { view.screen = "list"; renderList(); return; }
+    var isAck = view.printKind === "acceptance", isPrq = view.printKind === "payreq";
+    var jobPrint = (isAck || isPrq) ? CONTRACTOR_JOBS.filter(function (x) { return x.id === view.printJobId; })[0] : null;
+    var prqPay = isPrq ? prqFind(jobPrint, view.printPayId) : null;
+    if (isAck && (!jobPrint || !jobPrint.acceptance)) { view.screen = "contractors"; view.ctab = "acceptance"; renderContractorsScreen(); renderNav(); return; }
+    if (isPrq && (!prqPay || !prqPay.request)) { view.screen = "contractors"; view.ctab = "payreq"; renderContractorsScreen(); renderNav(); return; }
+    var q = jobPrint ? null : state.quotes.filter(function (x) { return x.id === view.printId; })[0];
+    if (!jobPrint && !q) { view.screen = "list"; renderList(); return; }
 
     var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
     var shortcut = isMac ? "Cmd + P" : "Ctrl + P";
@@ -6435,12 +6790,12 @@
         '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
         '<div class="print-hint">Bấm <b>' + shortcut + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
       '</div>' +
-      (ackJobPrint ? buildAcceptancePrintHtml(ackJobPrint) : buildPrintHtml(q));
+      (isAck ? buildAcceptancePrintHtml(jobPrint) : isPrq ? buildPayReqPrintHtml(jobPrint, prqPay) : buildPrintHtml(q));
 
     document.getElementById("content").innerHTML = html;
-    document.getElementById("crumbCurrent").textContent = ackJobPrint ? "Xem trước biên bản nghiệm thu" : "Xem trước bản in";
+    document.getElementById("crumbCurrent").textContent = isAck ? "Xem trước biên bản nghiệm thu" : isPrq ? "Xem trước phiếu đề nghị thanh toán" : "Xem trước bản in";
     document.getElementById("btnBackFromPrint").addEventListener("click", function () {
-      if (ackJobPrint) { view.screen = "contractors"; view.ctab = "acceptance"; renderContractorsScreen(); renderNav(); return; }
+      if (isAck || isPrq) { view.screen = "contractors"; view.ctab = isAck ? "acceptance" : "payreq"; renderContractorsScreen(); renderNav(); return; }
       view.screen = "detail";
       renderDetail();
     });
