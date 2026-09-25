@@ -522,6 +522,28 @@
   .cal-help code { font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
   .visit-line { font-size: 11.5px; margin-top: 4px; color: var(--ink-soft); }
   .visit-line.late { color: var(--accent); font-weight: 600; }
+  .pill-late { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .late-text { color: var(--accent); }
+  .contract-line { font-size: 11.5px; margin-top: 3px; }
+  .paybar { height: 4px; border-radius: 4px; background: var(--surface-2); margin-top: 6px; min-width: 70px; overflow: hidden; }
+  .paybar i { display: block; height: 100%; background: var(--good); }
+  .cmp { font-size: 12px; font-weight: 600; }
+  .cmp-over { color: var(--warn); }
+  .cmp-under { color: var(--good); }
+  .cmp-muted { color: var(--ink-mute); font-weight: 500; }
+  .ctr-jobline { font-size: 13px; margin-bottom: 10px; color: var(--ink-soft); }
+  .ctr-sec { margin: 18px 0 8px; font-size: 13px; font-weight: 700; color: var(--ink); padding-left: 10px; border-left: 3px solid var(--accent); }
+  .ctr-sec-sub { font-weight: 400; font-size: 11.5px; color: var(--ink-mute); }
+  .ctr-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 10px; align-items: end; padding: 10px; border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 8px; position: relative; padding-right: 44px; }
+  .ctr-row .ctr-wide { grid-column: span 2; }
+  .ctr-row .icon-btn { position: absolute; top: 8px; right: 8px; }
+  .ctr-amt { grid-column: 1 / -1; font-size: 12.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ctr-retention { font-size: 13px; }
+  .update-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 95; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; padding: 9px 16px; text-align: center; }
+  .update-banner button { margin-left: 10px; font-family: inherit; font-weight: 700; font-size: 12.5px; border: 1.5px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+  .stat-tile { min-width: 0; }
+  .stat-value.sm { font-size: 20px; }
+  @media (max-width: 640px) { .stat-value.sm { font-size: 15px; } }
   .toolbar-right { flex-wrap: wrap; }
   .head-actions { flex-wrap: wrap; flex-shrink: 1; } /* 3 nút ở màn nhà thầu: xuống dòng thay vì làm rộng cả trang trên điện thoại */
   @media (max-width: 640px) {
@@ -841,6 +863,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
+  var APP_BUILD = "2026-09-25-hd1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1717,6 +1740,24 @@
         "Ngày xử lý xong": i.resolvedDate || "", "Cách xử lý": i.resolution || "", "Số ảnh": (i.photos || []).length,
         "Trong bảo hành": inf.coverage === "in" ? "Trong" : (inf.coverage === "out" ? "Ngoài" : "Chưa tính") };
     }));
+    var ctrJobs = CONTRACTOR_JOBS.filter(function (j) { return j.contract; });
+    var jobLabel = function (j) { var c = contractorById(j.contractorId), p = projectById(j.projectId); return { "Nhà thầu": c ? c.name : "", "Công trình": p ? p.name : "", "Gói việc": j.scope || "" }; };
+    add("Hop dong nha thau", ctrJobs.map(function (j) {
+      var ci = contractInfo(j), cm = contractCmpText(ci.cmp);
+      return Object.assign(jobLabel(j), { "Số HĐ": j.contract.no || "", "Ngày ký": j.contract.signedDate || "", "Giá trị gốc": ci.value, "Phụ lục (tổng)": ci.addSum,
+        "Giá trị hiện hành": ci.current, "% giữ lại": ci.pct, "Tiền giữ lại": ci.retention.amount, "Đã thanh toán": ci.paid, "Còn phải trả": ci.remaining,
+        "Dự toán đối chiếu": ci.cmp && !ci.cmp.missing ? ci.cmp.est : "", "So với dự toán": cm.text, "Số file": (j.contract.files || []).length });
+    }));
+    add("Dot thanh toan", ctrJobs.reduce(function (acc, j) {
+      contractInfo(j).pays.forEach(function (x) {
+        acc.push(Object.assign(jobLabel(j), { "Đợt": x.pay.label || "", "Loại": PAY_KINDS[x.pay.kind] || "", "Số tiền": x.amount, "Hạn": x.pay.dueDate || "", "Ngày trả": x.pay.paidDate || "", "Trạng thái": PAY_STATUS[x.status].label }));
+      });
+      return acc;
+    }, []));
+    add("Phu luc hop dong", ctrJobs.reduce(function (acc, j) {
+      (j.contract.addenda || []).forEach(function (a) { acc.push(Object.assign(jobLabel(j), { "Số phụ lục": a.no || "", "Ngày": a.date || "", "Số tiền": Number(a.amount) || 0, "Nội dung": a.reason || "" })); });
+      return acc;
+    }, []));
     try {
       XLSX.writeFile(wb, "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".xlsx");
       toast("Đã tải file Excel sao lưu.");
@@ -1750,7 +1791,7 @@
         '<div class="modal-body">' +
           '<div class="sync-status" id="backupSummary"></div>' +
           '<ol class="modal-steps">' +
-            '<li><b>File Excel (.xlsx)</b> — 9 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu, sự cố bảo hành. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
+            '<li><b>File Excel (.xlsx)</b> — 12 trang tính: tổng hợp báo giá, chi tiết từng dòng, diễn giải khối lượng, thư viện vật tư, công trình, khách hàng, nhà thầu, gói việc nhà thầu, sự cố bảo hành, hợp đồng nhà thầu, đợt thanh toán, phụ lục. Để mở ra đọc, đối chiếu, gửi cho người khác.</li>' +
             '<li><b>File sao lưu đầy đủ (.json)</b> — bản sao y nguyên toàn bộ dữ liệu. Nếu app mất dữ liệu, đưa file này cho Claude là khôi phục lại được đúng từng dòng. Excel không làm được việc đó vì đã làm phẳng bảng.</li>' +
           '</ol>' +
           '<div class="sync-status">Nên tải cả 2 file và cất vào Dropbox mỗi khi có thay đổi lớn.</div>' +
@@ -1772,7 +1813,7 @@
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
       PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
-      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành).";
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng).";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -1942,7 +1983,8 @@
       { label: "Thư viện vật tư", screen: "catalog" },
       { label: "Bảng giá công cụ xây dựng", soon: true },
       { label: "Đơn giá chung xây dựng", soon: true },
-      { label: "Hợp đồng – Biên bản", soon: true }
+      { label: "Hợp đồng nhà thầu", screen: "contracts" },
+      { label: "Biên bản nghiệm thu", soon: true }
     ]},
     { group: "Công trình", items: [
       { label: "Danh sách công trình", screen: "projects" },
@@ -1960,6 +2002,8 @@
 
   function isNavScreenActive(screen) {
     if (screen === "quotes") return view.screen === "list" || view.screen === "detail" || view.screen === "print";
+    if (screen === "contracts") return view.screen === "contractors" && view.ctab === "contracts";
+    if (screen === "contractors") return view.screen === "contractors" && view.ctab !== "contracts";
     return view.screen === screen;
   }
 
@@ -1988,7 +2032,12 @@
         else if (screen === "projects" && view.screen !== "projects") { view.screen = "projects"; renderProjectsScreen(); renderNav(); }
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
         else if (screen === "catalog" && view.screen !== "catalog") { view.screen = "catalog"; renderCatalogScreen(); renderNav(); }
-        else if (screen === "contractors" && view.screen !== "contractors") { view.screen = "contractors"; renderContractorsScreen(); renderNav(); }
+        else if (screen === "contractors" && !isNavScreenActive("contractors")) {
+          view.screen = "contractors"; if (view.ctab === "contracts") view.ctab = "list"; view.cJob = ""; renderContractorsScreen(); renderNav();
+        }
+        else if (screen === "contracts" && !isNavScreenActive("contracts")) {
+          view.screen = "contractors"; view.ctab = "contracts"; view.cJob = ""; renderContractorsScreen(); renderNav();
+        }
       });
     });
   }
@@ -2088,7 +2137,9 @@
       b.addEventListener("click", function (e) {
         e.stopPropagation();
         var q = state.quotes.filter(function (x) { return x.id === b.dataset.del; })[0];
-        if (q && confirm('Xoá báo giá "' + q.name + '"?')) {
+        var linked = q ? CONTRACTOR_JOBS.filter(function (j) { return j.contract && j.contract.quoteId === q.id; }) : [];
+        if (q && confirm('Xoá báo giá "' + q.name + '"?' + (linked.length ? "\n\n" + linked.length + " hợp đồng nhà thầu đang đối chiếu với báo giá này sẽ mất liên kết đối chiếu (hợp đồng vẫn giữ nguyên)." : ""))) {
+          linked.forEach(function (j) { j.contract.quoteId = ""; j.contract.sectionId = ""; });
           state.quotes = state.quotes.filter(function (x) { return x.id !== b.dataset.del; });
           saveState();
           renderList();
@@ -2398,7 +2449,7 @@
       (withProject ? '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div></td>' : "") +
       '<td><div class="cell-title">' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</div>' +
         (c && c.phone ? '<div class="cell-muted">' + contractorPhoneHtml(c.phone) + '</div>' : "") + '</td>' +
-      '<td>' + escapeHtml(j.scope || "—") + '</td>' +
+      '<td>' + escapeHtml(j.scope || "—") + contractLineHtml(j) + '</td>' +
       '<td class="cell-muted">' + (isoParts(j.handoverDate) ? fmtDate(j.handoverDate) : "—") + '</td>' +
       '<td>' + (w.endIso ? fmtDate(w.endIso) + '<div class="cell-muted">' + w.months + ' tháng</div>' : '<span class="cell-muted">' + w.months + ' tháng</span>') + '</td>' +
       '<td><span class="pill ' + w.pill + '">' + w.label + '</span>' +
@@ -2406,6 +2457,7 @@
         (nIssues ? '<div style="margin-top:4px;"><button type="button" class="issue-flag' + (nOpenIssues ? " has-open" : "") + '" data-goto-issues="' + escapeHtml(j.id) + '">' +
           (nOpenIssues ? nOpenIssues + " sự cố chưa xong" : nIssues + " sự cố (đã xong)") + '</button></div>' : "") + '</td>' +
       '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-open-contract="' + escapeHtml(j.id) + '" title="Hợp đồng">' + iconDoc() + '</button>' +
         '<button class="icon-btn" data-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button class="icon-btn" data-edit-job="' + escapeHtml(j.id) + '" title="Sửa gói việc">' + iconEdit() + '</button>' +
         '<button class="icon-btn danger" data-del-job="' + escapeHtml(j.id) + '" title="Xoá gói việc">' + iconTrash() + '</button>' +
@@ -2482,6 +2534,7 @@
     if (view.ctab === "projects") body = contractorTabProjects();
     else if (view.ctab === "warranty") body = contractorTabWarranty();
     else if (view.ctab === "issues") body = contractorTabIssues();
+    else if (view.ctab === "contracts") body = contractorTabContracts();
     else {
       body = '<div class="table-wrap"><div class="table-scroll"><table>' +
         '<thead><tr><th>Nhà thầu</th><th>Liên hệ</th><th>Công trình</th><th>Bảo hành gần nhất</th><th></th></tr></thead>' +
@@ -2505,13 +2558,13 @@
           '<button class="btn btn-primary" id="btnAddContractor">' + iconPlus() + ' Thêm nhà thầu</button>' +
         '</div>' +
       '</div>' +
-      '<div class="stats stats-5">' +
+      (view.ctab === "contracts" ? "" : '<div class="stats stats-5">' +
         '<div class="stat-tile"><div class="stat-label">Nhà thầu</div><div class="stat-value">' + CONTRACTORS.length + '</div><div class="stat-foot">' + CONTRACTOR_JOBS.length + ' gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Chưa nghiệm thu</div><div class="stat-value">' + nBuilding + '</div><div class="stat-foot">gói việc đang làm</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Đang bảo hành</div><div class="stat-value">' + nActive + '</div><div class="stat-foot">gói việc</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Sắp hết hạn</div><div class="stat-value' + (nSoon ? " accent" : "") + '">' + nSoon + '</div><div class="stat-foot">trong ' + WARRANTY_SOON_DAYS + ' ngày tới</div></div>' +
         '<div class="stat-tile"><div class="stat-label">Sự cố đang mở</div><div class="stat-value' + (nIssueOpen ? " accent" : "") + '">' + nIssueOpen + '</div><div class="stat-foot">' + (WARRANTY_ISSUES.length - nIssueOpen) + ' đã xử lý</div></div>' +
-      '</div>' +
+      '</div>') +
       prjFilterChip +
       '<div class="toolbar">' +
         '<div class="tabs">' +
@@ -2519,6 +2572,7 @@
           '<button class="tab' + (view.ctab === "projects" ? " active" : "") + '" data-ctab="projects">Theo công trình</button>' +
           '<button class="tab' + (view.ctab === "warranty" ? " active" : "") + '" data-ctab="warranty">Bảo hành (' + CONTRACTOR_JOBS.length + ')</button>' +
           '<button class="tab' + (view.ctab === "issues" ? " active" : "") + '" data-ctab="issues">Sự cố' + (nIssueOpen ? " (" + nIssueOpen + " mở)" : "") + '</button>' +
+          '<button class="tab' + (view.ctab === "contracts" ? " active" : "") + '" data-ctab="contracts">Hợp đồng (' + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + ')</button>' +
         '</div>' +
         '<div class="toolbar-right">' +
           '<select id="cTradeSel" class="ctr-select">' + tradeOpts + '</select>' +
@@ -2537,7 +2591,7 @@
     var clr = document.getElementById("btnClearCPrj");
     if (clr) clr.addEventListener("click", function () { view.cProject = ""; renderContractorsScreen(); });
     document.querySelectorAll("[data-ctab]").forEach(function (t) {
-      t.addEventListener("click", function () { view.ctab = t.dataset.ctab; view.cJob = ""; renderContractorsScreen(); });
+      t.addEventListener("click", function () { view.ctab = t.dataset.ctab; view.cJob = ""; renderContractorsScreen(); renderNav(); });
     });
     document.getElementById("cTradeSel").addEventListener("change", function (e) { view.cTrade = e.target.value; renderContractorsScreen(); });
     var search = document.getElementById("cSearchInput");
@@ -2563,6 +2617,10 @@
     });
     document.querySelectorAll("[data-add-job-prj]").forEach(function (b) {
       b.addEventListener("click", function () { openJobEditor(null, { projectId: b.dataset.addJobPrj }); });
+    });
+    // Hợp đồng
+    document.querySelectorAll("[data-open-contract]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openContractEditor(b.dataset.openContract); });
     });
     // Nhật ký sự cố
     document.querySelectorAll("[data-add-issue]").forEach(function (b) {
@@ -2600,7 +2658,8 @@
     if (!c) return;
     var jobs = jobsOfContractor(id);
     var nIss = issuesOfContractor(id).length;
-    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành)" + (nIss ? " cùng " + nIss + " sự cố trong nhật ký" : "") + " của nhà thầu này." : "");
+    var nCtr = jobs.filter(function (j) { return j.contract; }).length;
+    var msg = 'Xoá nhà thầu "' + c.name + '"?' + (jobs.length ? "\n\nXoá luôn " + jobs.length + " gói việc (và theo dõi bảo hành)" + (nIss ? ", " + nIss + " sự cố trong nhật ký" : "") + (nCtr ? ", " + nCtr + " HỢP ĐỒNG kèm các đợt thanh toán" : "") + " của nhà thầu này." : "");
     if (!confirm(msg)) return;
     var jobIds = jobs.map(function (j) { return j.id; });
     WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return jobIds.indexOf(i.jobId) === -1; });
@@ -2617,7 +2676,8 @@
     var c = contractorById(j.contractorId), p = projectById(j.projectId);
     var nIss = issuesOfJob(id).length;
     if (!confirm('Xoá gói việc "' + (j.scope || "—") + '" của ' + (c ? c.name : "nhà thầu") + " ở " + (p ? p.name : "công trình") + "?" +
-      (nIss ? "\n\nXoá luôn " + nIss + " sự cố bảo hành đã ghi của gói này." : ""))) return;
+      (nIss ? "\n\nXoá luôn " + nIss + " sự cố bảo hành đã ghi của gói này." : "") +
+      (j.contract ? "\n\nGói này đang có HỢP ĐỒNG " + (j.contract.no || "") + " (" + money(contractInfo(j).current) + ", " + (j.contract.payments || []).length + " đợt thanh toán) — xoá gói là mất luôn hợp đồng." : ""))) return;
     WARRANTY_ISSUES = WARRANTY_ISSUES.filter(function (i) { return i.jobId !== id; });
     if (view.cJob === id) view.cJob = "";
     CONTRACTOR_JOBS = CONTRACTOR_JOBS.filter(function (x) { return x.id !== id; });
@@ -2712,11 +2772,15 @@
           '<div class="cell-muted" style="font-size:11.8px;">' + (w.endIso ? "Bảo hành đến " + fmtDate(w.endIso) + " · " + escapeHtml(warrantyRemainText(w)) : "Chưa nghiệm thu") +
           (nOpen ? ' · <b style="color:var(--accent);">' + nOpen + ' sự cố chưa xong</b>' : "") + '</div></div>' +
         '<span class="pill ' + w.pill + '">' + w.label + '</span>' +
+        '<button type="button" class="icon-btn" data-ct-contract="' + escapeHtml(j.id) + '" title="Hợp đồng">' + iconDoc() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-add-issue="' + escapeHtml(j.id) + '" title="Ghi sự cố bảo hành">' + iconAlert() + '</button>' +
         '<button type="button" class="icon-btn" data-ct-edit-job="' + escapeHtml(j.id) + '" title="Sửa">' + iconEdit() + '</button>' +
         '<button type="button" class="icon-btn danger" data-ct-del-job="' + escapeHtml(j.id) + '" title="Xoá">' + iconTrash() + '</button>' +
       '</div>';
     }).join("");
+    wrap.querySelectorAll("[data-ct-contract]").forEach(function (b) {
+      b.addEventListener("click", function () { openContractEditor(b.dataset.ctContract); });
+    });
     wrap.querySelectorAll("[data-ct-add-issue]").forEach(function (b) {
       b.addEventListener("click", function () { openIssueEditor(null, { jobId: b.dataset.ctAddIssue }); });
     });
@@ -3311,7 +3375,7 @@
   }
 
   // Bản sao của file warranty-calendar.gs (để chép thẳng từ hộp thoại). Sửa file .gs thì sửa cả chỗ này.
-  var CALENDAR_SCRIPT_CODE = "/**\n * measure&make — gửi HẠN BẢO HÀNH từ app Báo giá vào Google Calendar.\n *\n * CÁCH CÀI (làm 1 lần, ~3 phút):\n *  1. Vào script.google.com → \"Dự án mới\" → xoá code mẫu → dán toàn bộ file này vào → Ctrl+S.\n *  2. Đổi dòng TOKEN bên dưới thành 1 mã bí mật bất kỳ (vd. 12 ký tự chữ + số). Nhớ mã này.\n *  3. Bấm \"Triển khai\" → \"Tùy chọn triển khai mới\" → loại \"Ứng dụng web\":\n *       Thực thi với tư cách: Tôi   ·   Ai có quyền truy cập: Bất kỳ ai\n *     → Triển khai → cấp quyền cho Google Calendar\n *     (Google báo \"ứng dụng chưa được xác minh\": bấm Nâng cao → Tiếp tục — đây là script của chính a).\n *  4. Copy \"URL ứng dụng web\" (đuôi /exec), dán vào app: Danh sách nhà thầu → nút \"Gửi lịch Google\"\n *     cùng mã bí mật ở bước 2 → \"Lưu cài đặt\" → \"Gửi ngay\".\n *\n * Script chỉ tạo / sửa / xoá đúng những sự kiện do chính nó tạo (tự ghi nhớ trong Script Properties),\n * không đụng vào sự kiện khác trong lịch của a. Có 2 loại sự kiện:\n *   1. HẾT BẢO HÀNH — mỗi gói việc có ngày nghiệm thu → 1 sự kiện cả ngày vào ngày hết bảo hành, màu cam,\n *      nhắc email trước 4 tuần và thông báo trước 1 tuần.\n *   2. LỊCH HẸN XỬ LÝ SỰ CỐ — khi a ghi \"nhà thầu hẹn qua xử lý lúc …\" cho 1 sự cố → sự kiện có giờ (mặc định 1 tiếng),\n *      màu đỏ, thông báo nhắc TRƯỚC 1 NGÀY, TRƯỚC 12 TIẾNG và TRƯỚC 1 TIẾNG để a nhắc lại nhà thầu.\n * Sửa trong app → sự kiện tự dời theo. Xoá / đánh dấu \"Đã xử lý\" → sự kiện tự mất.\n *\n * NÂNG CẤP từ bản cũ: dán đè code mới → Triển khai → Quản lý triển khai → biểu tượng bút chì →\n * Phiên bản: \"Phiên bản mới\" → Triển khai (giữ nguyên URL, không phải nhập lại gì trong app).\n */\n\nvar TOKEN = 'ĐỔI-THÀNH-MÃ-BÍ-MẬT';   // <-- phải TRÙNG với ô \"Mã bí mật\" trong app\nvar USE_SEPARATE_CALENDAR = false;    // false: ghi vào lịch chính của a (hiện trên mọi thiết bị).\n                                      // true : tạo riêng lịch \"Bảo hành công trình – measure&make\".\nvar SEPARATE_CALENDAR_NAME = 'Bảo hành công trình – measure&make';\nvar TZ = 'Asia/Ho_Chi_Minh';           // múi giờ để đọc giờ hẹn gửi từ app\n\nfunction doGet() {\n  return out_({ ok: true, service: 'warranty-calendar' });\n}\n\nfunction doPost(e) {\n  try {\n    var req = JSON.parse(e.postData.contents);\n    if (req.token !== TOKEN) return out_({ ok: false, error: 'Sai mã bí mật (TOKEN) — kiểm tra lại cho khớp giữa app và Apps Script.' });\n    if (req.action !== 'syncWarrantyCalendar') return out_({ ok: false, error: 'Yêu cầu không hợp lệ.' });\n    return out_(sync_(req.events || []));\n  } catch (err) {\n    return out_({ ok: false, error: String(err) });\n  }\n}\n\nfunction out_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction calendar_() {\n  if (!USE_SEPARATE_CALENDAR) return CalendarApp.getDefaultCalendar();\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('calId');\n  var cal = id ? CalendarApp.getCalendarById(id) : null;\n  if (!cal) {\n    cal = CalendarApp.createCalendar(SEPARATE_CALENDAR_NAME);\n    props.setProperty('calId', cal.getId());\n  }\n  return cal;\n}\n\nfunction sync_(events) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);                       // 2 thiết bị cùng gửi 1 lúc thì xếp hàng, không tạo trùng\n  try {\n    var props = PropertiesService.getScriptProperties();\n    var map = JSON.parse(props.getProperty('map') || '{}');   // key gói việc -> { id sự kiện, sig }\n    var cal = calendar_();\n    var seen = {}, created = 0, updated = 0, removed = 0, same = 0;\n\n    events.forEach(function (ev) {\n      seen[ev.key] = true;\n      var sig = (ev.start || ev.date) + '|' + ev.title + '|' + ev.description;\n      var m = map[ev.key];\n      var event = null;\n      if (m) { try { event = cal.getEventById(m.id); } catch (x) { event = null; } }\n      if (event && m.sig === sig) { same++; return; }\n\n      if (ev.start) {\n        // Lịch hẹn có giờ (nhà thầu hẹn qua xử lý sự cố)\n        var start = Utilities.parseDate(ev.start, TZ, \"yyyy-MM-dd'T'HH:mm\");\n        var end = new Date(start.getTime() + (Number(ev.minutes) || 60) * 60000);\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setTime(start, end);\n          updated++;\n        } else {\n          event = cal.createEvent(ev.title, start, end, { description: ev.description });\n          event.setColor(CalendarApp.EventColor.RED);\n          event.removeAllReminders();\n          event.addPopupReminder(24 * 60);      // trước 1 ngày\n          event.addPopupReminder(12 * 60);      // trước 12 tiếng\n          event.addPopupReminder(60);           // trước 1 tiếng\n          created++;\n        }\n      } else {\n        // Hết bảo hành: sự kiện cả ngày\n        var p = String(ev.date).split('-');\n        var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setAllDayDate(day);\n          updated++;\n        } else {\n          event = cal.createAllDayEvent(ev.title, day, { description: ev.description });\n          event.setColor(CalendarApp.EventColor.ORANGE);\n          event.removeAllReminders();\n          event.addEmailReminder(28 * 24 * 60);   // 4 tuần trước (tối đa Google cho phép)\n          event.addPopupReminder(7 * 24 * 60);    // 1 tuần trước\n          created++;\n        }\n      }\n      map[ev.key] = { id: event.getId(), sig: sig };\n    });\n\n    // Gói việc đã xoá / hết hạn quá lâu khỏi app -> gỡ sự kiện tương ứng (chỉ sự kiện do script này tạo)\n    Object.keys(map).forEach(function (k) {\n      if (seen[k]) return;\n      try { var old = cal.getEventById(map[k].id); if (old) old.deleteEvent(); } catch (x) {}\n      delete map[k];\n      removed++;\n    });\n\n    props.setProperty('map', JSON.stringify(map));\n    return { ok: true, created: created, updated: updated, removed: removed, same: same, calendar: cal.getName() };\n  } finally {\n    lock.releaseLock();\n  }\n}\n";
+  var CALENDAR_SCRIPT_CODE = "/**\n * measure&make — gửi HẠN BẢO HÀNH từ app Báo giá vào Google Calendar.\n *\n * CÁCH CÀI (làm 1 lần, ~3 phút):\n *  1. Vào script.google.com → \"Dự án mới\" → xoá code mẫu → dán toàn bộ file này vào → Ctrl+S.\n *  2. Đổi dòng TOKEN bên dưới thành 1 mã bí mật bất kỳ (vd. 12 ký tự chữ + số). Nhớ mã này.\n *  3. Bấm \"Triển khai\" → \"Tùy chọn triển khai mới\" → loại \"Ứng dụng web\":\n *       Thực thi với tư cách: Tôi   ·   Ai có quyền truy cập: Bất kỳ ai\n *     → Triển khai → cấp quyền cho Google Calendar\n *     (Google báo \"ứng dụng chưa được xác minh\": bấm Nâng cao → Tiếp tục — đây là script của chính a).\n *  4. Copy \"URL ứng dụng web\" (đuôi /exec), dán vào app: Danh sách nhà thầu → nút \"Gửi lịch Google\"\n *     cùng mã bí mật ở bước 2 → \"Lưu cài đặt\" → \"Gửi ngay\".\n *\n * Script chỉ tạo / sửa / xoá đúng những sự kiện do chính nó tạo (tự ghi nhớ trong Script Properties),\n * không đụng vào sự kiện khác trong lịch của a. Có 2 loại sự kiện:\n *   1. HẾT BẢO HÀNH — mỗi gói việc có ngày nghiệm thu → 1 sự kiện cả ngày vào ngày hết bảo hành, màu cam,\n *      nhắc email trước 4 tuần và thông báo trước 1 tuần.\n *   3. ĐẾN HẠN THANH TOÁN nhà thầu (từ mục Hợp đồng) — sự kiện cả ngày, màu xanh lá, nhắc trước 3 ngày và 1 ngày.\n *   2. LỊCH HẸN XỬ LÝ SỰ CỐ — khi a ghi \"nhà thầu hẹn qua xử lý lúc …\" cho 1 sự cố → sự kiện có giờ (mặc định 1 tiếng),\n *      màu đỏ, thông báo nhắc TRƯỚC 1 NGÀY, TRƯỚC 12 TIẾNG và TRƯỚC 1 TIẾNG để a nhắc lại nhà thầu.\n * Sửa trong app → sự kiện tự dời theo. Xoá / đánh dấu \"Đã xử lý\" → sự kiện tự mất.\n *\n * NÂNG CẤP từ bản cũ: dán đè code mới → Triển khai → Quản lý triển khai → biểu tượng bút chì →\n * Phiên bản: \"Phiên bản mới\" → Triển khai (giữ nguyên URL, không phải nhập lại gì trong app).\n */\n\nvar TOKEN = 'ĐỔI-THÀNH-MÃ-BÍ-MẬT';   // <-- phải TRÙNG với ô \"Mã bí mật\" trong app\nvar USE_SEPARATE_CALENDAR = false;    // false: ghi vào lịch chính của a (hiện trên mọi thiết bị).\n                                      // true : tạo riêng lịch \"Bảo hành công trình – measure&make\".\nvar SEPARATE_CALENDAR_NAME = 'Bảo hành công trình – measure&make';\nvar TZ = 'Asia/Ho_Chi_Minh';           // múi giờ để đọc giờ hẹn gửi từ app\n\nfunction doGet() {\n  return out_({ ok: true, service: 'warranty-calendar' });\n}\n\nfunction doPost(e) {\n  try {\n    var req = JSON.parse(e.postData.contents);\n    if (req.token !== TOKEN) return out_({ ok: false, error: 'Sai mã bí mật (TOKEN) — kiểm tra lại cho khớp giữa app và Apps Script.' });\n    if (req.action !== 'syncWarrantyCalendar') return out_({ ok: false, error: 'Yêu cầu không hợp lệ.' });\n    return out_(sync_(req.events || []));\n  } catch (err) {\n    return out_({ ok: false, error: String(err) });\n  }\n}\n\nfunction out_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction calendar_() {\n  if (!USE_SEPARATE_CALENDAR) return CalendarApp.getDefaultCalendar();\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('calId');\n  var cal = id ? CalendarApp.getCalendarById(id) : null;\n  if (!cal) {\n    cal = CalendarApp.createCalendar(SEPARATE_CALENDAR_NAME);\n    props.setProperty('calId', cal.getId());\n  }\n  return cal;\n}\n\nfunction sync_(events) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);                       // 2 thiết bị cùng gửi 1 lúc thì xếp hàng, không tạo trùng\n  try {\n    var props = PropertiesService.getScriptProperties();\n    var map = JSON.parse(props.getProperty('map') || '{}');   // key gói việc -> { id sự kiện, sig }\n    var cal = calendar_();\n    var seen = {}, created = 0, updated = 0, removed = 0, same = 0;\n\n    events.forEach(function (ev) {\n      seen[ev.key] = true;\n      var sig = (ev.start || ev.date) + '|' + ev.title + '|' + ev.description;\n      var m = map[ev.key];\n      var event = null;\n      if (m) { try { event = cal.getEventById(m.id); } catch (x) { event = null; } }\n      if (event && m.sig === sig) { same++; return; }\n\n      if (ev.start) {\n        // Lịch hẹn có giờ (nhà thầu hẹn qua xử lý sự cố)\n        var start = Utilities.parseDate(ev.start, TZ, \"yyyy-MM-dd'T'HH:mm\");\n        var end = new Date(start.getTime() + (Number(ev.minutes) || 60) * 60000);\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setTime(start, end);\n          updated++;\n        } else {\n          event = cal.createEvent(ev.title, start, end, { description: ev.description });\n          event.setColor(CalendarApp.EventColor.RED);\n          event.removeAllReminders();\n          event.addPopupReminder(24 * 60);      // trước 1 ngày\n          event.addPopupReminder(12 * 60);      // trước 12 tiếng\n          event.addPopupReminder(60);           // trước 1 tiếng\n          created++;\n        }\n      } else {\n        // Hết bảo hành: sự kiện cả ngày\n        var p = String(ev.date).split('-');\n        var day = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));\n        if (event) {\n          event.setTitle(ev.title);\n          event.setDescription(ev.description);\n          event.setAllDayDate(day);\n          updated++;\n        } else {\n          event = cal.createAllDayEvent(ev.title, day, { description: ev.description });\n          event.removeAllReminders();\n          if (ev.type === 'pay') {\n            // Đến hạn thanh toán cho nhà thầu: xanh lá, nhắc trước 3 ngày và 1 ngày\n            event.setColor(CalendarApp.EventColor.GREEN);\n            event.addPopupReminder(3 * 24 * 60);\n            event.addPopupReminder(24 * 60);\n          } else {\n            // Hết bảo hành: cam, email trước 4 tuần (tối đa Google cho phép) + thông báo trước 1 tuần\n            event.setColor(CalendarApp.EventColor.ORANGE);\n            event.addEmailReminder(28 * 24 * 60);\n            event.addPopupReminder(7 * 24 * 60);\n          }\n          created++;\n        }\n      }\n      map[ev.key] = { id: event.getId(), sig: sig };\n    });\n\n    // Gói việc đã xoá / hết hạn quá lâu khỏi app -> gỡ sự kiện tương ứng (chỉ sự kiện do script này tạo)\n    Object.keys(map).forEach(function (k) {\n      if (seen[k]) return;\n      try { var old = cal.getEventById(map[k].id); if (old) old.deleteEvent(); } catch (x) {}\n      delete map[k];\n      removed++;\n    });\n\n    props.setProperty('map', JSON.stringify(map));\n    return { ok: true, created: created, updated: updated, removed: removed, same: same, calendar: cal.getName() };\n  } finally {\n    lock.releaseLock();\n  }\n}\n";
 
   /* ===================== GỬI HẠN BẢO HÀNH VÀO GOOGLE CALENDAR ===================== */
   // Mỗi gói việc đã có ngày nghiệm thu → 1 sự kiện cả ngày vào NGÀY HẾT BẢO HÀNH. App gọi 1 Google Apps Script
@@ -3341,6 +3405,8 @@
         "Nhà thầu: " + (c ? c.name : "?") + (c && c.phone ? " · " + c.phone : ""),
         "Nghiệm thu: " + fmtDate(j.handoverDate) + " · bảo hành " + w.months + " tháng"
       ];
+      var cinf = contractInfo(j);
+      if (cinf && cinf.retention.status !== "none" && cinf.retention.status !== "paid") lines.push("Hoàn trả tiền giữ lại bảo hành: " + money(cinf.retention.amount) + (open ? " (còn sự cố chưa xong — cân nhắc)" : ""));
       if (open) lines.push("Sự cố chưa xong: " + open);
       lines.push("", "Mở app: " + app);
       events.push({
@@ -3377,6 +3443,30 @@
         minutes: 60,
         title: "Nhà thầu hẹn xử lý: " + (p ? p.name : "?") + " – " + (job.scope || "sự cố") + " (" + (c ? c.name : "?") + ")",
         description: lines.join("\n")
+      });
+    });
+    // Đợt thanh toán nhà thầu chưa trả có hạn: sự kiện cả ngày, script nhắc trước 3 ngày và 1 ngày.
+    CONTRACTOR_JOBS.forEach(function (j) {
+      if (!j.contract) return;
+      var ci = contractInfo(j);
+      var c = contractorById(j.contractorId), p = projectById(j.projectId);
+      ci.pays.forEach(function (x) {
+        if (x.status === "paid" || !x.pay.dueDate || x.days == null || x.days < 0) return;
+        events.push({
+          key: "pay:" + j.id + ":" + x.pay.id,
+          type: "pay",
+          date: x.pay.dueDate,
+          title: "Thanh toán " + (c ? c.name : "?") + ": " + (x.pay.label || "đợt") + " – " + money(x.amount) + " (" + (p ? p.name : "?") + ")",
+          description: [
+            "ĐẾN HẠN THANH TOÁN NHÀ THẦU",
+            "Nhà thầu: " + (c ? c.name : "?") + (c && c.phone ? " · " + c.phone : ""),
+            "Công trình: " + (p ? p.name : "?") + " · gói " + (j.scope || "—"),
+            "Hợp đồng: " + (j.contract.no || "—") + " · giá trị hiện hành " + money(ci.current),
+            "Đợt: " + (x.pay.label || "—") + " · " + money(x.amount),
+            "",
+            "Mở app: " + app
+          ].join("\n")
+        });
       });
     });
     events.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
@@ -3494,7 +3584,8 @@
     var st = document.getElementById("calState");
     var evs = warrantyCalendarEvents(), n = evs.length;
     var nVisit = evs.filter(function (e) { return e.type === "visit"; }).length;
-    var detail = (n - nVisit) + " mốc hết bảo hành" + (nVisit ? " + " + nVisit + " lịch hẹn xử lý sự cố" : "");
+    var nPay = evs.filter(function (e) { return e.type === "pay"; }).length;
+    var detail = (n - nVisit - nPay) + " mốc hết bảo hành" + (nVisit ? " + " + nVisit + " lịch hẹn xử lý sự cố" : "") + (nPay ? " + " + nPay + " đợt thanh toán" : "");
     if (!CALENDAR_CFG.url) {
       st.className = "job-preview";
       st.textContent = "Chưa kết nối. Có " + detail + " sẽ được gửi khi a cài xong (xem \"Cách cài\" bên dưới).";
@@ -3550,6 +3641,599 @@
     };
     document.getElementById("calendarModalOverlay").hidden = false;
   }
+
+  /* ===================== HỢP ĐỒNG VỚI NHÀ THẦU ===================== */
+  // Mỗi GÓI VIỆC có tối đa 1 hợp đồng: job.contract (nằm trong CONTRACTOR_JOBS nên dùng chung nhà thầu, công trình,
+  // ngày nghiệm thu, hạn bảo hành và bị xoá theo gói việc).
+  //   contract = { no, signedDate, value, retentionPct, retentionPaidDate, quoteId, sectionId,
+  //                files:[{url,name}], addenda:[{id,no,date,amount,reason}],
+  //                payments:[{id,label,kind,mode,value,dueDate,paidDate,note}] }
+  //   mode: "amount" (value = số tiền) | "percent" (value = % của giá trị hiện hành → tiền tự tính lại khi giá trị đổi)
+  // Mọi con số (giá trị hiện hành, tiền giữ lại, đã trả, còn phải trả, chênh lệch dự toán) được TÍNH RA trong
+  // contractInfo(), không lưu — sửa phụ lục / % / đợt là các số tự khớp. Tiền làm tròn THẬT về đồng nguyên ở từng
+  // dòng (Math.round) để cộng tay lại ra đúng số trên màn hình.
+  var PAY_KINDS = { advance: "Tạm ứng", progress: "Theo tiến độ", acceptance: "Nghiệm thu", other: "Khác" };
+  var PAY_STATUS = {
+    paid:    { label: "Đã trả",        pill: "pill-good" },
+    overdue: { label: "Quá hạn",       pill: "pill-late" },
+    soon:    { label: "Sắp đến hạn",   pill: "pill-warn" },
+    planned: { label: "Chưa đến hạn",  pill: "pill-neutral" }
+  };
+  var CONTRACT_SOON_DAYS = 7;
+  var CONTRACT_RETENTION_DEFAULT = 5;
+  var CONTRACT_MAX_FILES = 10;
+  var CONTRACT_MAX_FILE_MB = 15;
+
+  // Đọc số từ ô nhập: bỏ dấu chấm ngăn nghìn (VN), cho phép dấu âm, hoặc dấu phẩy/chấm thập phân khi cần.
+  function parseMoneyInput(v) {
+    var neg = /^\s*-/.test(String(v || ""));
+    var n = Number(String(v || "").replace(/[^0-9]/g, "")) || 0;
+    return neg ? -n : n;
+  }
+  function parsePctInput(v) {
+    var n = parseFloat(String(v == null ? "" : v).replace(",", "."));
+    return isFinite(n) ? n : 0;
+  }
+  function moneySigned(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + money(Math.abs(n)); }
+  function newContractDraft(job) {
+    var d = { no: "", signedDate: todayIso(), value: 0, retentionPct: CONTRACT_RETENTION_DEFAULT, retentionPaidDate: "",
+      quoteId: "", sectionId: "", files: [], addenda: [], payments: [] };
+    // Gợi ý đối chiếu: báo giá duy nhất của công trình, và hạng mục có tên trùng gói việc (nếu tìm được).
+    var qs = state.quotes.filter(function (q) { return q.projectId === job.projectId; });
+    if (qs.length === 1) {
+      d.quoteId = qs[0].id;
+      var scope = String(job.scope || "").trim().toLowerCase();
+      if (scope) qs[0].sections.forEach(function (s) {
+        var nm = String(s.name || "").toLowerCase();
+        if (!d.sectionId && (nm.indexOf(scope) !== -1 || scope.indexOf(nm) !== -1)) d.sectionId = s.id;
+      });
+    }
+    return d;
+  }
+
+  // Đối chiếu dự toán của hạng mục báo giá được gắn (chưa VAT). null nếu chưa gắn; {missing:true} nếu báo giá / hạng mục đã bị xoá.
+  function contractCompare(c, current) {
+    if (!c.quoteId || !c.sectionId) return null;
+    var q = state.quotes.filter(function (x) { return x.id === c.quoteId; })[0];
+    if (!q) return { missing: true };
+    var idx = -1;
+    q.sections.forEach(function (s, i) { if (s.id === c.sectionId) idx = i; });
+    if (idx < 0) return { missing: true };
+    var est = sectionTotal(q.sections[idx]);
+    var diff = current - est;
+    return { missing: false, quote: q, section: q.sections[idx], letter: toAlpha(idx + 1), est: est, diff: diff, pct: est ? diff / est * 100 : null };
+  }
+
+  function contractInfo(job, override) {
+    var c = override || job.contract;
+    if (!c) return null;
+    var value = Math.round(Number(c.value) || 0), addSum = 0;
+    (c.addenda || []).forEach(function (a) { addSum += Math.round(Number(a.amount) || 0); });
+    var current = value + addSum;
+    var pct = (c.retentionPct === "" || c.retentionPct == null) ? CONTRACT_RETENTION_DEFAULT : Number(c.retentionPct);
+    if (!isFinite(pct) || pct < 0) pct = 0;
+    var retentionAmt = Math.round(current * pct / 100);
+    var payable = current - retentionAmt;                 // phần trả dần theo các đợt (chưa gồm tiền giữ lại)
+    var today = todayIso(), scheduled = 0, paid = 0, nextDue = null, overdueAmt = 0, soonAmt = 0;
+    var pays = (c.payments || []).map(function (p) {
+      var amount = p.mode === "percent" ? Math.round(current * (Number(p.value) || 0) / 100) : Math.round(Number(p.value) || 0);
+      var st = "planned", days = null;
+      if (isoParts(p.paidDate)) st = "paid";
+      else if (isoParts(p.dueDate)) {
+        days = daysBetweenIso(today, p.dueDate);
+        st = days < 0 ? "overdue" : (days <= CONTRACT_SOON_DAYS ? "soon" : "planned");
+      }
+      scheduled += amount;
+      if (st === "paid") paid += amount;
+      else {
+        if (st === "overdue") overdueAmt += amount;
+        if (st === "soon") soonAmt += amount;
+        if (isoParts(p.dueDate) && (!nextDue || p.dueDate < nextDue.dueDate)) nextDue = { pay: p, amount: amount, dueDate: p.dueDate, days: days, status: st };
+      }
+      return { pay: p, amount: amount, status: st, days: days };
+    });
+    var w = warrantyInfo(job);
+    var retPaid = isoParts(c.retentionPaidDate);
+    var retStatus = retentionAmt <= 0 ? "none" : retPaid ? "paid" : (w.key === "expired" ? "due" : (w.key === "building" ? "waiting" : "held"));
+    var openIssues = openIssuesOfJob(job.id).length;
+    return {
+      value: value, addSum: addSum, current: current, pct: pct, payable: payable, scheduled: scheduled, paid: paid,
+      remaining: payable - paid, unscheduled: payable - scheduled, pays: pays, nextDue: nextDue,
+      overdueAmt: overdueAmt, soonAmt: soonAmt,
+      retention: { amount: retentionAmt, status: retStatus, dueIso: w.endIso, paidDate: c.retentionPaidDate || "" },
+      openIssues: openIssues,
+      cmp: contractCompare(c, current)
+    };
+  }
+
+  function contractCmpText(cmp) {
+    if (!cmp) return { text: "Chưa đối chiếu", cls: "muted" };
+    if (cmp.missing) return { text: "Báo giá / hạng mục đã bị xoá", cls: "muted" };
+    var p = cmp.pct == null ? "" : " (" + (cmp.diff > 0 ? "+" : cmp.diff < 0 ? "−" : "") + Math.abs(cmp.pct).toFixed(1).replace(".", ",") + "%)";
+    if (cmp.diff > 0) return { text: "Vượt dự toán " + moneySigned(cmp.diff) + p, cls: "over" };
+    if (cmp.diff < 0) return { text: "Thấp hơn dự toán " + money(-cmp.diff) + p, cls: "under" };
+    return { text: "Đúng bằng dự toán", cls: "under" };
+  }
+  function contractPayDueText(n) {
+    if (!n) return "";
+    if (n.days == null) return "";
+    if (n.days < 0) return "quá hạn " + (-n.days) + " ngày";
+    if (n.days === 0) return "đến hạn hôm nay";
+    return "còn " + n.days + " ngày";
+  }
+
+  // Dòng tóm tắt hợp đồng dưới tên gói việc (bảng "Theo công trình", "Bảo hành")
+  function contractLineHtml(j) {
+    var ci = contractInfo(j);
+    if (!ci) return '<div class="cell-muted contract-line"><button type="button" class="link-btn" data-open-contract="' + escapeHtml(j.id) + '">+ Lập hợp đồng</button></div>';
+    return '<div class="cell-muted contract-line">HĐ ' + escapeHtml(money(ci.current)) + ' · còn phải trả ' + escapeHtml(money(ci.remaining)) +
+      (ci.overdueAmt ? ' <b class="late-text">· có đợt quá hạn</b>' : "") + '</div>';
+  }
+
+  /* ---------- Tab "Hợp đồng" ---------- */
+  function contractorTabContracts() {
+    var jobs = CONTRACTOR_JOBS.filter(function (j) { return jobMatches(j) && (!view.cProject || j.projectId === view.cProject); });
+    var withC = jobs.filter(function (j) { return j.contract; }).map(function (j) { return { job: j, info: contractInfo(j) }; });
+    var noC = jobs.filter(function (j) { return !j.contract; });
+
+    var tot = { current: 0, paid: 0, remaining: 0, soon: 0, overdue: 0, retention: 0 };
+    withC.forEach(function (x) {
+      tot.current += x.info.current; tot.paid += x.info.paid; tot.remaining += x.info.remaining;
+      tot.soon += x.info.soonAmt; tot.overdue += x.info.overdueAmt;
+      if (x.info.retention.status !== "paid") tot.retention += x.info.retention.amount;
+    });
+    var paidPct = (tot.current - tot.retention) > 0 ? Math.round(tot.paid / (tot.current - tot.retention) * 100) : 0;
+
+    var strip =
+      '<div class="stats">' +
+        '<div class="stat-tile"><div class="stat-label">Tổng giá trị hợp đồng</div><div class="stat-value sm">' + money(tot.current) + '</div><div class="stat-foot">' + withC.length + ' hợp đồng</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đã thanh toán</div><div class="stat-value sm">' + money(tot.paid) + '</div><div class="stat-foot">' + paidPct + '% phần trả theo đợt</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Còn phải trả</div><div class="stat-value sm accent">' + money(tot.remaining) + '</div><div class="stat-foot">chưa gồm ' + money(tot.retention) + ' giữ lại bảo hành</div></div>' +
+        '<div class="stat-tile"><div class="stat-label">Đến hạn trong ' + CONTRACT_SOON_DAYS + ' ngày</div><div class="stat-value sm' + ((tot.soon + tot.overdue) ? " accent" : "") + '">' + money(tot.soon + tot.overdue) + '</div>' +
+          '<div class="stat-foot">' + (tot.overdue ? '<b class="late-text">quá hạn ' + money(tot.overdue) + '</b>' : "không có đợt quá hạn") + '</div></div>' +
+      '</div>';
+
+    withC.sort(function (a, b) {
+      var ao = a.info.overdueAmt > 0 ? 0 : 1, bo = b.info.overdueAmt > 0 ? 0 : 1;
+      if (ao !== bo) return ao - bo;
+      var ad = a.info.nextDue ? a.info.nextDue.dueDate : "9999", bd = b.info.nextDue ? b.info.nextDue.dueDate : "9999";
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      return String((projectById(a.job.projectId) || {}).name || "").localeCompare(String((projectById(b.job.projectId) || {}).name || ""), "vi");
+    });
+
+    var rows;
+    if (!withC.length) {
+      rows = '<tr class="empty-row"><td colspan="9">' + (CONTRACTOR_JOBS.length
+        ? (noC.length ? 'Chưa có hợp đồng nào. Bấm tên một gói việc bên dưới để lập hợp đồng.' : "Không có hợp đồng nào khớp bộ lọc.")
+        : 'Chưa có gói việc nào. Thêm nhà thầu và gói việc trước, rồi lập hợp đồng cho từng gói.') + '</td></tr>';
+    } else {
+      rows = withC.map(function (x) {
+        var j = x.job, ci = x.info, c = j.contract, p = projectById(j.projectId), ct = contractorById(j.contractorId);
+        var cmp = contractCmpText(ci.cmp);
+        var nd = ci.nextDue, ndSt = nd ? PAY_STATUS[nd.status] : null;
+        var ret = ci.retention;
+        var retTxt = ret.status === "none" ? "—"
+          : ret.status === "paid" ? '<span class="pill pill-good">Đã hoàn trả</span>'
+          : ret.status === "due" ? '<span class="pill pill-late">Đã đến hạn hoàn trả</span>'
+          : ret.status === "waiting" ? '<span class="cell-muted">chờ nghiệm thu</span>'
+          : '<span class="cell-muted">hoàn trả ' + (ret.dueIso ? fmtDate(ret.dueIso) : "—") + '</span>';
+        var barPct = ci.payable > 0 ? Math.max(0, Math.min(100, Math.round(ci.paid / ci.payable * 100))) : 0;
+        return '<tr class="row-click" data-open-contract="' + escapeHtml(j.id) + '">' +
+          '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div><div class="cell-muted">' + escapeHtml(j.scope || "—") + '</div></td>' +
+          '<td>' + escapeHtml(ct ? ct.name : "(nhà thầu đã xoá)") + '</td>' +
+          '<td>' + escapeHtml(c.no || "—") + (isoParts(c.signedDate) ? '<div class="cell-muted">ký ' + fmtDate(c.signedDate) + '</div>' : "") +
+            ((c.files || []).length ? '<div class="cell-muted">' + c.files.length + ' file</div>' : "") + '</td>' +
+          '<td class="cell-money"><b>' + money(ci.current) + '</b>' + (ci.addSum ? '<div class="cell-muted">gốc ' + money(ci.value) + ' · phụ lục ' + moneySigned(ci.addSum) + '</div>' : "") + '</td>' +
+          '<td class="cell-money">' + money(ci.paid) + '<div class="paybar"><i style="width:' + barPct + '%"></i></div></td>' +
+          '<td class="cell-money">' + money(ci.remaining) + '</td>' +
+          '<td class="cell-money">' + (ret.status === "none" ? "—" : money(ret.amount)) + '<div>' + retTxt + '</div></td>' +
+          '<td><span class="cmp cmp-' + cmp.cls + '">' + escapeHtml(cmp.text) + '</span>' +
+            (ci.cmp && !ci.cmp.missing ? '<div class="cell-muted">Hạng mục ' + ci.cmp.letter + ': ' + money(ci.cmp.est) + '</div>' : "") + '</td>' +
+          '<td>' + (nd ? '<span class="pill ' + ndSt.pill + '">' + ndSt.label + '</span><div class="cell-muted" style="margin-top:4px;">' + escapeHtml(nd.pay.label || "Đợt") + ' · ' + money(nd.amount) + '</div><div class="cell-muted">' + fmtDate(nd.dueDate) + ' · ' + escapeHtml(contractPayDueText(nd)) + '</div>'
+              : '<span class="cell-muted">' + (ci.pays.length ? "Đã trả đủ các đợt" : "Chưa có đợt nào") + '</span>') + '</td>' +
+          '<td><div class="row-actions"><button class="icon-btn" data-open-contract="' + escapeHtml(j.id) + '" title="Mở hợp đồng">' + iconEdit() + '</button></div></td>' +
+        '</tr>';
+      }).join("");
+    }
+
+    var noContract = "";
+    if (noC.length) {
+      noContract = '<div class="prj-empty-note"><span class="cell-muted">Gói việc chưa có hợp đồng (bấm để lập):</span> ' +
+        noC.map(function (j) {
+          var p = projectById(j.projectId), ct = contractorById(j.contractorId);
+          return '<button class="trade-chip" data-open-contract="' + escapeHtml(j.id) + '">' + escapeHtml((p ? p.name : "?") + " · " + (j.scope || "—") + " · " + (ct ? ct.name : "?")) + '</button>';
+        }).join(" ") + '</div>';
+    }
+
+    return strip + '<div class="table-wrap"><div class="table-scroll"><table>' +
+      '<thead><tr><th>Công trình / gói việc</th><th>Nhà thầu</th><th>Hợp đồng</th><th>Giá trị hiện hành</th><th>Đã thanh toán</th><th>Còn phải trả</th><th>Giữ lại bảo hành</th><th>So với dự toán</th><th>Đợt kế tiếp</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div></div>' + noContract;
+  }
+
+  /* ---------- Hộp thoại hợp đồng ---------- */
+  var ctrJobId = null;      // gói việc đang mở hợp đồng
+  var ctrDraft = null;      // bản nháp đang sửa (chỉ ghi vào job.contract khi bấm Lưu — trừ file, tự lưu ngay)
+
+  function ctrJob() { return CONTRACTOR_JOBS.filter(function (j) { return j.id === ctrJobId; })[0]; }
+  function cloneJson(o) { return JSON.parse(JSON.stringify(o)); }
+
+  function ensureContractModal() {
+    if (document.getElementById("contractModalOverlay")) return;
+    var el = document.createElement("div");
+    el.id = "contractModalOverlay";
+    el.className = "modal-overlay";
+    el.style.zIndex = "67"; // trên hộp thoại nhà thầu / gói việc / sự cố
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="modal-panel" style="max-width:880px;">' +
+        '<div class="modal-head"><h3 id="ctrModalTitle">Hợp đồng</h3><button class="icon-btn" id="ctrModalClose" type="button">' + iconClose() + '</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="ctr-jobline" id="ctrJobLine"></div>' +
+          '<div class="job-preview" id="ctrSummary" style="margin-bottom:16px;"></div>' +
+          '<h4 class="ctr-sec">Thông tin hợp đồng</h4>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Số hợp đồng</label><input id="ctrNo" placeholder="vd. 01/2026/HĐTC"></div>' +
+            '<div class="field"><label>Ngày ký</label><input id="ctrSigned" type="date"></div>' +
+            '<div class="field"><label>Giá trị hợp đồng (đ)</label><input id="ctrValue" inputmode="numeric" placeholder="0"></div>' +
+            '<div class="field"><label>Giữ lại bảo hành (%)</label><input id="ctrRetPct" inputmode="decimal" placeholder="5"></div>' +
+          '</div>' +
+          '<h4 class="ctr-sec">Đối chiếu với báo giá (dự toán)</h4>' +
+          '<div class="form-row">' +
+            '<div class="field"><label>Báo giá của công trình</label><select id="ctrQuote"></select></div>' +
+            '<div class="field"><label>Hạng mục</label><select id="ctrSection"></select></div>' +
+          '</div>' +
+          '<div class="job-preview" id="ctrCompare" style="margin-bottom:6px;"></div>' +
+          '<h4 class="ctr-sec">Phụ lục / phát sinh <span class="ctr-sec-sub">(số tiền âm = giảm trừ)</span></h4>' +
+          '<div id="ctrAddenda"></div>' +
+          '<button class="btn btn-sm" id="ctrAddAdd" type="button">' + iconPlus() + ' Thêm phụ lục</button>' +
+          '<h4 class="ctr-sec">Các đợt thanh toán</h4>' +
+          '<div class="trade-chips" style="margin-bottom:10px;"><span class="cell-muted" style="font-size:12px;align-self:center;">Chia nhanh:</span>' +
+            '<button type="button" class="trade-chip" data-pay-tpl="a">Tạm ứng 30% + nghiệm thu</button>' +
+            '<button type="button" class="trade-chip" data-pay-tpl="b">Tạm ứng 30% + tiến độ 40% + nghiệm thu</button></div>' +
+          '<div id="ctrPayments"></div>' +
+          '<button class="btn btn-sm" id="ctrAddPay" type="button">' + iconPlus() + ' Thêm đợt thanh toán</button>' +
+          '<div class="job-preview" id="ctrPayCheck" style="margin-top:10px;"></div>' +
+          '<h4 class="ctr-sec">Tiền giữ lại bảo hành</h4>' +
+          '<div class="ctr-retention" id="ctrRetention"></div>' +
+          '<h4 class="ctr-sec">File hợp đồng <span class="ctr-sec-sub">(PDF hoặc ảnh scan, tối đa ' + CONTRACT_MAX_FILES + ' file)</span></h4>' +
+          '<div id="ctrFiles"></div>' +
+          '<input type="file" id="ctrFileInput" accept="application/pdf,image/*" multiple hidden>' +
+          '<button class="btn btn-sm" id="ctrAddFile" type="button" style="margin-top:8px;">' + iconPlus() + ' Tải file lên</button>' +
+        '</div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-danger-ghost" id="ctrDelete" type="button" style="margin-right:auto;">Xoá hợp đồng</button>' +
+          '<button class="btn" id="ctrCancel" type="button">Đóng</button>' +
+          '<button class="btn btn-primary" id="ctrSave" type="button">' + iconCheck() + ' Lưu</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    document.getElementById("ctrModalClose").addEventListener("click", closeContractEditor);
+    document.getElementById("ctrCancel").addEventListener("click", closeContractEditor);
+    el.addEventListener("click", function (e) { if (e.target === el) closeContractEditor(); });
+  }
+  function closeContractEditor() {
+    var el = document.getElementById("contractModalOverlay");
+    if (el) el.hidden = true;
+    ctrJobId = null; ctrDraft = null;
+    if (ctEditingId) paintContractorJobs();
+    if (view.screen === "contractors") renderContractorsScreen();
+  }
+
+  // Đọc các ô thông tin (không phải danh sách) vào bản nháp.
+  function readContractHeader() {
+    var d = ctrDraft;
+    d.no = document.getElementById("ctrNo").value.trim();
+    d.signedDate = document.getElementById("ctrSigned").value;
+    d.value = parseMoneyInput(document.getElementById("ctrValue").value);
+    var rp = document.getElementById("ctrRetPct").value;
+    d.retentionPct = rp === "" ? "" : parsePctInput(rp);
+    d.quoteId = document.getElementById("ctrQuote").value;
+    d.sectionId = document.getElementById("ctrSection").value;
+  }
+
+  function ctrQuoteOptions(job) {
+    var qs = state.quotes.filter(function (q) { return q.projectId === job.projectId; });
+    var html = '<option value="">— Không đối chiếu —</option>' + qs.map(function (q) {
+      return '<option value="' + escapeHtml(q.id) + '"' + (q.id === ctrDraft.quoteId ? " selected" : "") + '>' + escapeHtml(q.name) + '</option>';
+    }).join("");
+    // Báo giá đang gắn nhưng thuộc công trình khác / đã xoá: vẫn hiện để không mất liên kết âm thầm.
+    if (ctrDraft.quoteId && !qs.some(function (q) { return q.id === ctrDraft.quoteId; })) {
+      var q0 = state.quotes.filter(function (q) { return q.id === ctrDraft.quoteId; })[0];
+      html += '<option value="' + escapeHtml(ctrDraft.quoteId) + '" selected>' + escapeHtml(q0 ? q0.name + " (công trình khác)" : "(báo giá đã bị xoá)") + '</option>';
+    }
+    return html;
+  }
+  function ctrSectionOptions() {
+    var q = state.quotes.filter(function (x) { return x.id === ctrDraft.quoteId; })[0];
+    if (!q) return '<option value="">—</option>';
+    return '<option value="">— Chọn hạng mục —</option>' + q.sections.map(function (s, i) {
+      return '<option value="' + escapeHtml(s.id) + '"' + (s.id === ctrDraft.sectionId ? " selected" : "") + '>' + toAlpha(i + 1) + '. ' + escapeHtml(s.name) + ' — ' + money(sectionTotal(s)) + '</option>';
+    }).join("");
+  }
+
+  function paintContractAddenda() {
+    var wrap = document.getElementById("ctrAddenda");
+    if (!ctrDraft.addenda.length) { wrap.innerHTML = '<div class="cell-muted" style="font-size:12px;margin-bottom:8px;">Chưa có phụ lục.</div>'; return; }
+    wrap.innerHTML = ctrDraft.addenda.map(function (a, i) {
+      return '<div class="ctr-row ctr-row-add" data-i="' + i + '">' +
+        '<div class="field"><label>Số phụ lục</label><input data-f="no" value="' + escapeHtml(a.no || "") + '"></div>' +
+        '<div class="field"><label>Ngày</label><input data-f="date" type="date" value="' + escapeHtml(a.date || "") + '"></div>' +
+        '<div class="field"><label>Số tiền (đ)</label><input data-f="amount" inputmode="numeric" value="' + (a.amount ? escapeHtml(moneySignedPlain(a.amount)) : "") + '" placeholder="vd. 25.000.000 hoặc -10.000.000"></div>' +
+        '<div class="field ctr-wide"><label>Lý do / nội dung</label><input data-f="reason" value="' + escapeHtml(a.reason || "") + '"></div>' +
+        '<button type="button" class="icon-btn danger" data-rm-add="' + i + '" title="Xoá phụ lục">' + iconTrash() + '</button>' +
+      '</div>';
+    }).join("");
+  }
+  function moneySignedPlain(n) { return (n < 0 ? "-" : "") + moneyPlain(Math.abs(n)); }
+
+  function paintContractPayments() {
+    var wrap = document.getElementById("ctrPayments");
+    if (!ctrDraft.payments.length) { wrap.innerHTML = '<div class="cell-muted" style="font-size:12px;margin-bottom:8px;">Chưa có đợt thanh toán. Bấm "Chia nhanh" hoặc thêm từng đợt.</div>'; return; }
+    wrap.innerHTML = ctrDraft.payments.map(function (p, i) {
+      var kinds = Object.keys(PAY_KINDS).map(function (k) { return '<option value="' + k + '"' + (p.kind === k ? " selected" : "") + '>' + PAY_KINDS[k] + '</option>'; }).join("");
+      var valTxt = p.mode === "percent" ? String(p.value == null ? "" : p.value).replace(".", ",") : (p.value ? moneyPlain(p.value) : "");
+      return '<div class="ctr-row ctr-row-pay" data-i="' + i + '">' +
+        '<div class="field ctr-wide"><label>Đợt</label><input data-f="label" value="' + escapeHtml(p.label || "") + '" placeholder="vd. Tạm ứng đợt 1"></div>' +
+        '<div class="field"><label>Loại</label><select data-f="kind">' + kinds + '</select></div>' +
+        '<div class="field"><label>Tính theo</label><select data-f="mode"><option value="amount"' + (p.mode !== "percent" ? " selected" : "") + '>Số tiền (đ)</option><option value="percent"' + (p.mode === "percent" ? " selected" : "") + '>% giá trị HĐ</option></select></div>' +
+        '<div class="field"><label>' + (p.mode === "percent" ? "Tỉ lệ (%)" : "Số tiền (đ)") + '</label><input data-f="value" inputmode="decimal" value="' + escapeHtml(valTxt) + '"></div>' +
+        '<div class="field"><label>Hạn thanh toán</label><input data-f="dueDate" type="date" value="' + escapeHtml(p.dueDate || "") + '"></div>' +
+        '<div class="field"><label>Ngày đã trả</label><input data-f="paidDate" type="date" value="' + escapeHtml(p.paidDate || "") + '"></div>' +
+        '<div class="ctr-amt" data-amt="' + i + '"></div>' +
+        '<button type="button" class="icon-btn danger" data-rm-pay="' + i + '" title="Xoá đợt">' + iconTrash() + '</button>' +
+      '</div>';
+    }).join("");
+  }
+
+  function paintContractFiles() {
+    var wrap = document.getElementById("ctrFiles");
+    var files = ctrDraft.files || [];
+    if (!files.length) { wrap.innerHTML = '<div class="cell-muted" style="font-size:12px;">Chưa có file.</div>'; }
+    else {
+      wrap.innerHTML = files.map(function (f, i) {
+        var isImg = /\.(jpe?g|png|webp|gif)(\?|$)/i.test(f.url || "") || /\.(jpe?g|png|webp|gif)$/i.test(f.name || "");
+        return '<div class="ct-job-row"><a href="' + escapeHtml(f.url) + '" target="_blank" rel="noopener" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+          iconExternal() + ' ' + escapeHtml(f.name || (isImg ? "Ảnh" : "File")) + '</a>' +
+          '<button type="button" class="icon-btn danger" data-rm-file="' + i + '" title="Xoá file khỏi hợp đồng">' + iconTrash() + '</button></div>';
+      }).join("");
+    }
+    document.getElementById("ctrAddFile").style.display = files.length >= CONTRACT_MAX_FILES ? "none" : "";
+  }
+
+  // Cập nhật mọi con số suy ra từ bản nháp (tóm tắt, chênh lệch dự toán, số tiền từng đợt, kiểm tra tổng, tiền giữ lại).
+  function refreshContractComputed() {
+    var job = ctrJob(); if (!job) return;
+    var ci = contractInfo(job, ctrDraft);
+    var sum = document.getElementById("ctrSummary");
+    sum.className = "job-preview" + (ci.overdueAmt ? " soon" : "");
+    sum.innerHTML = '<b>Giá trị hiện hành: ' + money(ci.current) + '</b>' + (ci.addSum ? ' (gốc ' + money(ci.value) + ', phụ lục ' + moneySigned(ci.addSum) + ')' : "") +
+      ' · giữ lại ' + ci.pct.toString().replace(".", ",") + '% = ' + money(ci.retention.amount) +
+      ' · đã trả ' + money(ci.paid) + ' · <b>còn phải trả ' + money(ci.remaining) + '</b>' + (ci.overdueAmt ? ' · <b class="late-text">có đợt quá hạn ' + money(ci.overdueAmt) + '</b>' : "");
+
+    var cmpBox = document.getElementById("ctrCompare"), cmp = contractCmpText(ci.cmp);
+    if (!ci.cmp) { cmpBox.className = "job-preview"; cmpBox.textContent = "Chưa gắn hạng mục báo giá — chọn để so giá hợp đồng với dự toán."; }
+    else if (ci.cmp.missing) { cmpBox.className = "job-preview soon"; cmpBox.textContent = "Báo giá hoặc hạng mục đã gắn không còn tồn tại — chọn lại."; }
+    else {
+      cmpBox.className = "job-preview " + (ci.cmp.diff > 0 ? "soon" : "active");
+      cmpBox.textContent = "Dự toán hạng mục " + ci.cmp.letter + " (chưa VAT): " + money(ci.cmp.est) + " · giá trị hiện hành " + money(ci.current) + " → " + cmp.text + ".";
+    }
+
+    ci.pays.forEach(function (x, i) {
+      var box = document.querySelector('#ctrPayments [data-amt="' + i + '"]');
+      if (!box) return;
+      var st = PAY_STATUS[x.status];
+      box.innerHTML = '<span class="pill ' + st.pill + '">' + st.label + '</span> <b>' + money(x.amount) + '</b>' +
+        (x.status !== "paid" && x.days != null ? ' <span class="cell-muted">' + escapeHtml(contractPayDueText(x)) + '</span>' : "");
+    });
+
+    var chk = document.getElementById("ctrPayCheck");
+    if (!ctrDraft.payments.length) { chk.className = "job-preview"; chk.textContent = "Phần trả theo đợt = giá trị hiện hành − tiền giữ lại = " + money(ci.payable) + "."; }
+    else if (ci.unscheduled === 0) { chk.className = "job-preview active"; chk.textContent = "Các đợt cộng lại = " + money(ci.scheduled) + ", khớp đúng phần trả theo đợt (" + money(ci.payable) + ")."; }
+    else {
+      chk.className = "job-preview soon";
+      chk.textContent = "Các đợt cộng lại = " + money(ci.scheduled) + ", phần trả theo đợt = " + money(ci.payable) + " → " +
+        (ci.unscheduled > 0 ? "còn thiếu " + money(ci.unscheduled) + " chưa chia đợt." : "đang vượt " + money(-ci.unscheduled) + ".") +
+        (Math.abs(ci.unscheduled) <= ci.pays.length ? " (Chênh vài đồng là do làm tròn từng đợt.)" : "");
+    }
+
+    var ret = ci.retention, box2 = document.getElementById("ctrRetention");
+    if (ret.status === "none") box2.innerHTML = '<span class="cell-muted">Không giữ lại (0%).</span>';
+    else {
+      var w = warrantyInfo(job);
+      var when = ret.dueIso ? "hoàn trả khi hết bảo hành " + fmtDate(ret.dueIso) : "chưa có ngày nghiệm thu nên chưa tính được hạn hoàn trả";
+      var issueNote = ci.openIssues ? ' <b class="late-text">Còn ' + ci.openIssues + ' sự cố bảo hành chưa xử lý xong — nên giữ lại đến khi xong.</b>' : "";
+      box2.innerHTML = '<div><b>' + money(ret.amount) + '</b> (' + ci.pct.toString().replace(".", ",") + '% × ' + money(ci.current) + ') — ' + escapeHtml(when) + '.' + issueNote + '</div>' +
+        '<div class="field" style="max-width:220px;margin-top:8px;"><label>Ngày đã hoàn trả</label><input id="ctrRetPaid" type="date" value="' + escapeHtml(ctrDraft.retentionPaidDate || "") + '"></div>';
+      document.getElementById("ctrRetPaid").onchange = function () { ctrDraft.retentionPaidDate = this.value; refreshContractComputed(); };
+    }
+  }
+
+  function applyPayTemplate(kind) {
+    readContractHeader();
+    var ret = ctrDraft.retentionPct === "" ? CONTRACT_RETENTION_DEFAULT : Number(ctrDraft.retentionPct) || 0;
+    var mk = function (label, k, pct) { return { id: uid("py_"), label: label, kind: k, mode: "percent", value: Math.round(pct * 100) / 100, dueDate: "", paidDate: "", note: "" }; };
+    if (kind === "a") ctrDraft.payments = [mk("Tạm ứng", "advance", 30), mk("Nghiệm thu", "acceptance", Math.max(0, 70 - ret))];
+    else ctrDraft.payments = [mk("Tạm ứng", "advance", 30), mk("Theo tiến độ", "progress", 40), mk("Nghiệm thu", "acceptance", Math.max(0, 30 - ret))];
+    paintContractPayments(); refreshContractComputed();
+  }
+
+  // File đã lên Storage thì phải ghi ngay vào hợp đồng đã lưu — quên bấm Lưu không được làm mồ côi file.
+  function persistContractFiles() {
+    var job = ctrJob(); if (!job) return;
+    if (!job.contract) { readContractHeader(); job.contract = cloneJson(ctrDraft); }
+    else job.contract.files = (ctrDraft.files || []).slice();
+    saveState();
+  }
+
+  function normalizeContractForSave(d) {
+    var out = cloneJson(d);
+    out.value = Math.round(Number(out.value) || 0);
+    out.retentionPct = (out.retentionPct === "" || out.retentionPct == null) ? CONTRACT_RETENTION_DEFAULT : Math.max(0, Number(out.retentionPct) || 0);
+    out.addenda = (out.addenda || []).filter(function (a) { return a.no || a.amount || a.reason; }).map(function (a) { a.amount = Math.round(Number(a.amount) || 0); return a; });
+    out.payments = (out.payments || []).filter(function (p) { return p.label || p.value || p.dueDate; }).map(function (p) {
+      p.value = p.mode === "percent" ? (Number(p.value) || 0) : Math.round(Number(p.value) || 0);
+      return p;
+    });
+    return out;
+  }
+
+  function openContractEditor(jobId) {
+    var job = CONTRACTOR_JOBS.filter(function (j) { return j.id === jobId; })[0];
+    if (!job) { toast("Không tìm thấy gói việc."); return; }
+    ensureContractModal();
+    ctrJobId = job.id;
+    ctrDraft = job.contract ? cloneJson(job.contract) : newContractDraft(job);
+    ["addenda", "payments", "files"].forEach(function (k) { if (!Array.isArray(ctrDraft[k])) ctrDraft[k] = []; });
+
+    var p = projectById(job.projectId), c = contractorById(job.contractorId);
+    document.getElementById("ctrModalTitle").textContent = job.contract ? "Sửa hợp đồng" : "Lập hợp đồng";
+    document.getElementById("ctrJobLine").innerHTML = '<b>' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</b> · ' + escapeHtml(job.scope || "—") + ' · ' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") +
+      (isoParts(job.handoverDate) ? ' · nghiệm thu ' + fmtDate(job.handoverDate) : "");
+    document.getElementById("ctrNo").value = ctrDraft.no || "";
+    document.getElementById("ctrSigned").value = ctrDraft.signedDate || "";
+    document.getElementById("ctrValue").value = ctrDraft.value ? moneyPlain(ctrDraft.value) : "";
+    document.getElementById("ctrRetPct").value = ctrDraft.retentionPct === "" ? "" : String(ctrDraft.retentionPct).replace(".", ",");
+    document.getElementById("ctrQuote").innerHTML = ctrQuoteOptions(job);
+    document.getElementById("ctrSection").innerHTML = ctrSectionOptions();
+    document.getElementById("ctrDelete").style.display = job.contract ? "" : "none";
+    paintContractAddenda(); paintContractPayments(); paintContractFiles(); refreshContractComputed();
+
+    var modal = document.getElementById("contractModalOverlay");
+    // Ô thông tin: đổi là tính lại ngay (không vẽ lại cả hộp thoại để không mất con trỏ)
+    ["ctrValue", "ctrRetPct"].forEach(function (id) {
+      document.getElementById(id).oninput = function () { readContractHeader(); refreshContractComputed(); };
+    });
+    document.getElementById("ctrValue").onchange = function () { readContractHeader(); this.value = ctrDraft.value ? moneyPlain(ctrDraft.value) : ""; };
+    document.getElementById("ctrNo").oninput = readContractHeader;
+    document.getElementById("ctrSigned").onchange = readContractHeader;
+    document.getElementById("ctrQuote").onchange = function () {
+      readContractHeader(); ctrDraft.sectionId = "";
+      document.getElementById("ctrSection").innerHTML = ctrSectionOptions(); refreshContractComputed();
+    };
+    document.getElementById("ctrSection").onchange = function () { readContractHeader(); refreshContractComputed(); };
+
+    // Danh sách phụ lục / đợt thanh toán: bắt sự kiện ở khung cha
+    modal.querySelector("#ctrAddenda").oninput = modal.querySelector("#ctrAddenda").onchange = function (e) {
+      var row = e.target.closest(".ctr-row"); if (!row) return;
+      var a = ctrDraft.addenda[Number(row.dataset.i)], f = e.target.dataset.f; if (!a || !f) return;
+      a[f] = f === "amount" ? parseMoneyInput(e.target.value) : e.target.value;
+      if (f === "amount" && e.type === "change") e.target.value = a.amount ? moneySignedPlain(a.amount) : "";
+      refreshContractComputed();
+    };
+    modal.querySelector("#ctrPayments").oninput = modal.querySelector("#ctrPayments").onchange = function (e) {
+      var row = e.target.closest(".ctr-row"); if (!row) return;
+      var i = Number(row.dataset.i), p2 = ctrDraft.payments[i], f = e.target.dataset.f; if (!p2 || !f) return;
+      if (f === "value") p2.value = p2.mode === "percent" ? parsePctInput(e.target.value) : parseMoneyInput(e.target.value);
+      else p2[f] = e.target.value;
+      if (e.type === "change" && (f === "mode" || f === "paidDate")) {
+        if (f === "mode") { p2.value = 0; }
+        readContractHeader(); paintContractPayments();
+      } else if (e.type === "change" && f === "value" && p2.mode !== "percent") e.target.value = p2.value ? moneyPlain(p2.value) : "";
+      refreshContractComputed();
+    };
+    modal.querySelector("#ctrAddenda").onclick = function (e) {
+      var b = e.target.closest("[data-rm-add]"); if (!b) return;
+      ctrDraft.addenda.splice(Number(b.dataset.rmAdd), 1); paintContractAddenda(); refreshContractComputed();
+    };
+    modal.querySelector("#ctrPayments").onclick = function (e) {
+      var b = e.target.closest("[data-rm-pay]"); if (!b) return;
+      ctrDraft.payments.splice(Number(b.dataset.rmPay), 1); paintContractPayments(); refreshContractComputed();
+    };
+    document.getElementById("ctrAddAdd").onclick = function () {
+      ctrDraft.addenda.push({ id: uid("ad_"), no: "", date: todayIso(), amount: 0, reason: "" });
+      paintContractAddenda(); refreshContractComputed();
+    };
+    document.getElementById("ctrAddPay").onclick = function () {
+      ctrDraft.payments.push({ id: uid("py_"), label: "Đợt " + (ctrDraft.payments.length + 1), kind: "progress", mode: "percent", value: 0, dueDate: "", paidDate: "", note: "" });
+      paintContractPayments(); refreshContractComputed();
+    };
+    modal.querySelectorAll("[data-pay-tpl]").forEach(function (b) {
+      b.onclick = function () {
+        if (ctrDraft.payments.length && !confirm("Thay các đợt thanh toán đang có bằng mẫu này?")) return;
+        applyPayTemplate(b.dataset.payTpl);
+      };
+    });
+
+    // File
+    document.getElementById("ctrAddFile").onclick = function () { document.getElementById("ctrFileInput").click(); };
+    modal.querySelector("#ctrFiles").onclick = function (e) {
+      var b = e.target.closest("[data-rm-file]"); if (!b) return;
+      if (!confirm("Bỏ file này khỏi hợp đồng?")) return;
+      ctrDraft.files.splice(Number(b.dataset.rmFile), 1);
+      persistContractFiles(); paintContractFiles();
+    };
+    var fin = document.getElementById("ctrFileInput");
+    fin.value = "";
+    fin.onchange = function () {
+      var files = Array.prototype.slice.call(fin.files || []);
+      if (!files.length) return;
+      var jobRef = ctrJob(); if (!jobRef) return;
+      var room = CONTRACT_MAX_FILES - ctrDraft.files.length;
+      var batch = files.slice(0, Math.max(0, room));
+      if (files.length > batch.length) toast("Chỉ nhận tối đa " + CONTRACT_MAX_FILES + " file cho mỗi hợp đồng.");
+      toast("Đang tải " + batch.length + " file lên…");
+      batch.reduce(function (chain, f) {
+        return chain.then(function () {
+          if (f.size > CONTRACT_MAX_FILE_MB * 1024 * 1024) { toast('"' + f.name + '" lớn hơn ' + CONTRACT_MAX_FILE_MB + "MB — nén hoặc tách file rồi tải lại."); return; }
+          var isImg = /^image\//.test(f.type);
+          var blobP = isImg ? resizeImageFile(f, 1800, 0.8) : Promise.resolve(f);
+          return blobP.then(function (blob) {
+            var safe = slug(f.name.replace(/\.[^.]+$/, "")) + (isImg ? ".jpg" : ".pdf");
+            var path = "baogia/contracts/" + slug(jobRef.id) + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + "_" + safe;
+            return uploadToStorage(path, blob, isImg ? "image/jpeg" : (f.type || "application/pdf")).then(function (url) {
+              if (ctrJobId !== jobRef.id) return;
+              ctrDraft.files.push({ url: url, name: f.name });
+              persistContractFiles(); paintContractFiles();
+            });
+          });
+        });
+      }, Promise.resolve()).catch(function (err) { toast("Không tải được file lên: " + err.message); });
+    };
+
+    document.getElementById("ctrDelete").onclick = function () {
+      var jb = ctrJob(); if (!jb || !jb.contract) return;
+      var ci = contractInfo(jb);
+      if (!confirm("Xoá hợp đồng " + (jb.contract.no || "") + " của gói này?\n\nMất luôn " + ci.pays.length + " đợt thanh toán, " + (jb.contract.addenda || []).length + " phụ lục và danh sách file đính kèm (file trên Storage không bị xoá). Gói việc và bảo hành vẫn giữ nguyên.")) return;
+      delete jb.contract;
+      saveState();
+      closeContractEditor();
+      toast("Đã xoá hợp đồng.");
+    };
+    document.getElementById("ctrSave").onclick = function () {
+      var jb = ctrJob(); if (!jb) return;
+      readContractHeader();
+      if (!ctrDraft.value || ctrDraft.value <= 0) { toast("Cần nhập giá trị hợp đồng."); return; }
+      var isNew = !jb.contract;
+      jb.contract = normalizeContractForSave(ctrDraft);
+      saveState();
+      closeContractEditor();
+      toast(isNew ? "Đã lập hợp đồng." : "Đã lưu hợp đồng.");
+    };
+
+    modal.hidden = false;
+  }
+
+  /* ===================== BÁO CÓ BẢN MỚI ===================== */
+  // Trình duyệt (nhất là Safari iPhone) hay giữ bản app cũ nên tính năng mới "không thấy đâu" cho tới khi F5.
+  // Vài phút một lần và mỗi lần quay lại tab, app tải lại CHÍNH file của nó (bỏ qua bộ nhớ đệm) và so APP_BUILD.
+  function checkForNewBuild() {
+    if (!/^https?:$/.test(location.protocol) || document.getElementById("updateBanner")) return;
+    fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (txt) {
+      var m = /var APP_BUILD = "([^"]+)"/.exec(txt);
+      if (!m || m[1] === APP_BUILD || document.getElementById("updateBanner")) return;
+      var b = document.createElement("div");
+      b.id = "updateBanner";
+      b.className = "update-banner no-print";
+      b.innerHTML = '<span>Có bản cập nhật mới của app.</span> <button type="button" id="updateReload">Tải lại ngay</button>';
+      document.body.appendChild(b);
+      document.getElementById("updateReload").addEventListener("click", function () {
+        location.replace(location.pathname + "?v=" + Date.now() + location.hash);
+      });
+    }).catch(function () {});
+  }
+  setTimeout(checkForNewBuild, 6000);
+  setInterval(checkForNewBuild, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkForNewBuild(); });
 
   /* ===================== THƯ VIỆN VẬT TƯ ===================== */
   // Mỗi mã (PRICE_CATALOG) giờ có thể mang thêm ảnh + liên kết sản phẩm, ngoài tên/nội dung/ĐVT/đơn giá
@@ -5288,6 +5972,7 @@
   function iconSync() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 006.5 6.5L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0013.5 4.5L20 15"/><path d="M20 20v-5h-5"/></svg>'; }
   function iconAlert() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".2" fill="currentColor"/></svg>'; }
   function iconCalendar() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'; }
+  function iconDoc() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>'; }
   function iconClose() { return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'; }
 
   /* ===================== INIT ===================== */
