@@ -889,7 +889,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-09-25-bb1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-09-25-bb2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -4280,7 +4280,7 @@
     pass_defects: { label: "Đạt, có tồn tại cần khắc phục",         short: "Đạt có tồn tại", pill: "pill-warn" },
     fail:         { label: "Chưa đạt, chưa nghiệm thu",             short: "Chưa đạt",       pill: "pill-late" }
   };
-  var ACK_SIDES = ["Chủ đầu tư", "Indust Design", "Nhà thầu", "Tư vấn giám sát"];
+  var ACK_SIDES = ["Bên A (bên giao thầu)", "Bên B (bên nhận thầu)"];
   var ACK_MAX_FILES = 6;
 
   function ackAppliesWarranty(a) { return !!(a && !a.draft && (a.result === "pass" || a.result === "pass_defects") && isoParts(a.date)); }
@@ -4297,9 +4297,8 @@
       no: "", date: todayIso(), place: p ? (p.address || p.name || "") : "", result: "pass",
       scopeText: job.scope || "", findings: "", fixDeadline: "", note: "",
       participants: [
-        { id: uid("pt_"), side: "Chủ đầu tư", name: p ? (p.client || "") : "", title: "" },
-        { id: uid("pt_"), side: "Indust Design", name: "", title: "Đại diện" },
-        { id: uid("pt_"), side: "Nhà thầu", name: c ? (c.contact || "") : "", title: c ? "Đại diện " + c.name : "" }
+        { id: uid("pt_"), side: "Bên A (bên giao thầu)", name: "", title: "Indust Design" },
+        { id: uid("pt_"), side: "Bên B (bên nhận thầu)", name: c ? (c.contact || "") : "", title: c ? c.name : "" }
       ],
       files: [], appliedHandover: false, draft: false
     };
@@ -4411,7 +4410,7 @@
           '</div>' +
           '<div class="job-preview" id="ackPreview" style="margin:14px 0;"></div>' +
           '<div class="field" style="margin-bottom:6px;"><label>Ý kiến khác</label><textarea id="ackNote" rows="2"></textarea></div>' +
-          '<h4 class="ctr-sec">Thành phần tham gia <span class="ctr-sec-sub">(mỗi bên có 1 khối ký trên bản in)</span></h4>' +
+          '<h4 class="ctr-sec">Thành phần nghiệm thu <span class="ctr-sec-sub">(Bên A và Bên B, mỗi bên có 1 khối ký trên bản in)</span></h4>' +
           '<div id="ackPeople"></div>' +
           '<button class="btn btn-sm" id="ackAddPerson" type="button">' + iconPlus() + ' Thêm người tham gia</button>' +
           '<h4 class="ctr-sec">Bản scan đã ký <span class="ctr-sec-sub">(PDF hoặc ảnh, tối đa ' + ACK_MAX_FILES + ' file)</span></h4>' +
@@ -4560,7 +4559,7 @@
       ackDraft.participants.splice(Number(b.dataset.rmPerson), 1); paintAckPeople();
     };
     document.getElementById("ackAddPerson").onclick = function () {
-      ackDraft.participants.push({ id: uid("pt_"), side: "Chủ đầu tư", name: "", title: "" }); paintAckPeople();
+      ackDraft.participants.push({ id: uid("pt_"), side: ACK_SIDES[0], name: "", title: "" }); paintAckPeople();
     };
 
     document.getElementById("ackAddFile").onclick = function () { document.getElementById("ackFileInput").click(); };
@@ -4653,8 +4652,10 @@
 
     var people = a.participants || [];
     var peopleHtml = people.length
-      ? '<table class="print-summary-table"><thead><tr><th class="center" style="width:7%;">STT</th><th style="width:26%;">Bên</th><th>Đại diện</th><th style="width:30%;">Chức vụ</th></tr></thead><tbody>' +
-        people.map(function (pr, i) { return '<tr><td class="center">' + (i + 1) + '</td><td>' + escapeHtml(pr.side || "") + '</td><td>' + escapeHtml(pr.name || "") + '</td><td>' + escapeHtml(pr.title || "") + '</td></tr>'; }).join("") + '</tbody></table>'
+      ? '<table class="print-ack-info">' + people.map(function (pr) {
+          var who = [pr.name ? "Đại diện: " + pr.name : "", pr.title ? pr.title : ""].filter(Boolean).join(" · ");
+          return '<tr><td class="lbl" style="color:var(--print-ink);font-weight:600;">' + escapeHtml(pr.side || "") + '</td><td>' + escapeHtml(who || "—") + '</td></tr>';
+        }).join("") + '</table>'
       : '<div class="print-ack-text">—</div>';
 
     var results = Object.keys(ACK_RESULTS).map(function (k) {
@@ -4670,7 +4671,7 @@
     var warranty;
     if (ok) {
       warranty = 'Nhà thầu bảo hành <b>' + months + ' tháng</b> kể từ ngày nghiệm thu <b>' + fmtDate(a.date) + '</b>, đến hết ngày <b>' + fmtDate(endIso) + '</b>.' +
-        (ci && ci.retention.status !== "none" ? ' Chủ đầu tư giữ lại <b>' + money(ci.retention.amount) + '</b> (' + String(ci.pct).replace(".", ",") + '% giá trị hợp đồng), hoàn trả khi hết thời hạn bảo hành và nhà thầu đã khắc phục xong các tồn tại.' : "");
+        (ci && ci.retention.status !== "none" ? ' Bên A giữ lại <b>' + money(ci.retention.amount) + '</b> (' + String(ci.pct).replace(".", ",") + '% giá trị hợp đồng), hoàn trả khi hết thời hạn bảo hành và nhà thầu đã khắc phục xong các tồn tại.' : "");
     } else {
       warranty = 'Nhà thầu khắc phục theo yêu cầu và đề nghị nghiệm thu lại. Thời hạn bảo hành chưa được tính.';
     }
@@ -4684,7 +4685,7 @@
       '<div class="print-title">Biên bản nghiệm thu</div>' +
       '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + (job.scope ? " · " + escapeHtml(job.scope) : "") + '</div>' +
       infoHtml +
-      '<div class="print-ack-h">Thành phần tham gia</div>' + peopleHtml +
+      '<div class="print-ack-h">Thành phần nghiệm thu</div>' + peopleHtml +
       '<div class="print-ack-h">Nội dung nghiệm thu</div><div class="print-ack-text">' + escapeHtml(a.scopeText || job.scope || "—") + '</div>' +
       '<div class="print-ack-h">Kết luận</div>' + results +
       defects +
