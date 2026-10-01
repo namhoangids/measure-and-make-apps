@@ -697,6 +697,11 @@
   /* Quy tắc chung `table { min-width: 880px }` (cho bảng danh sách cuộn ngang) KHÔNG được ăn vào bản in: trang A4 chỉ
      ~700px, Chrome tự thu nhỏ nên không thấy, nhưng Safari iPhone in ra bị cắt mất phần bên phải (lỗi 2026-10-01). */
   .print-doc table { min-width: 0; }
+  /* CỠ CHỮ BÁO GIÁ / BIÊN BẢN / PHIẾU = bản Nam đã duyệt 2026-09-24. Lúc duyệt, Chrome âm thầm thu cả bản in còn 80%
+     (do bảng bọc ngoài bị ép rộng 880px). Sau khi bỏ lỗi đó (để iPhone không bị cắt), chữ to hơn 25% và trang 1 báo giá
+     tràn sang trang 2 (Nam báo 2026-10-01). Nên giữ ĐÚNG tỉ lệ đã duyệt một cách chủ động: dàn chữ ở bề ngang 880px
+     rồi thu 80% (zoom) — ở màn xem trước, khi in (@media print) và khi xuất PDF trong app (makePdfFromPreview). */
+  .print-doc.s80 .print-page { zoom: .8; width: calc(210mm / .8); min-height: calc(297mm / .8); padding: calc(14mm / .8) calc(12mm / .8) calc(16mm / .8); }
   .print-doc.fit { overflow: visible; width: calc(210mm + 2px); max-width: none; }
   .print-doc.fit .print-page { max-width: none; }
   .print-toolbar { flex-wrap: wrap; }
@@ -910,11 +915,12 @@
     .main { display: block; }
     .content { max-width: 100%; padding: 0; margin: 0; }
     .print-doc, .print-doc.fit { max-width: 100%; width: auto !important; margin: 0; overflow: visible; zoom: 1 !important; }
+    .print-doc.s80, .print-doc.s80.fit { zoom: .8 !important; }
     /* Nền vằn, ô chữ cam, chữ cam… mặc định trình duyệt BỎ khi in — bắt buộc in đủ màu. */
     .print-doc, .print-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Khi in thì .print-page không còn là "tờ giấy giả" nữa — chính trang giấy thật đảm nhiệm
        khổ và lề, nên bỏ hết khung/bóng/kích thước mô phỏng đi. */
-    .print-page { width: auto; max-width: none; min-height: 0; margin: 0; padding: 0; border: none; border-radius: 0; box-shadow: none; }
+    .print-page, .print-doc.s80 .print-page { zoom: 1; width: auto; max-width: none; min-height: 0; margin: 0; padding: 0; border: none; border-radius: 0; box-shadow: none; }
     /* Header lặp ở đầu MỌI trang giấy = <thead> của bảng bọc ngoài; các bản in-flow trong từng
        .print-page (chỉ để xem trước trên màn hình) ẩn đi. Mỗi hạng mục là 1 <tr> → 1 trang mới;
        hạng mục dài hơn 1 trang vẫn tràn bình thường và thead vẫn lặp ở trang tràn. */
@@ -1035,7 +1041,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-pdf2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-pdf3"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -5188,7 +5194,7 @@
       '<div class="print-ack-h">Thời hạn bảo hành</div><div class="print-ack-text">' + warranty + '</div>' +
       signs;
 
-    return '<div class="print-doc"><table class="print-sheet">' +
+    return '<div class="print-doc s80"><table class="print-sheet">' +
       '<thead><tr><td>' + printRunHeadHtml(head, "Ngày nghiệm thu") + '</td></tr></thead>' +
       '<tbody><tr><td><section class="print-page">' + page + '</section></td></tr></tbody>' +
     '</table></div>';
@@ -5727,7 +5733,7 @@
       (r.note ? '<div class="print-ack-h">Ghi chú</div><div class="print-ack-text">' + escapeHtml(r.note) + '</div>' : "") +
       '<div class="print-ack-signs">' + signs + '</div>';
 
-    return '<div class="print-doc"><table class="print-sheet">' +
+    return '<div class="print-doc s80"><table class="print-sheet">' +
       '<thead><tr><td>' + printRunHeadHtml(head, "Ngày lập") + '</td></tr></thead>' +
       '<tbody><tr><td><section class="print-page">' + page + '</section></td></tr></tbody>' +
     '</table></div>';
@@ -6443,7 +6449,8 @@
   function makePdfFromPreview(onProgress) {
     var src = document.querySelector("#content .print-doc");
     if (!src) return Promise.reject(new Error("Không có bản xem trước để xuất."));
-    var PAGE_W = 794, PAGE_H = 1123, MARGIN_B = 60;          // A4 ở 96dpi; lề dưới 16mm như .print-page
+    var k80 = src.classList.contains("s80") ? 0.8 : 1;   // xem .print-doc.s80 trong CSS
+    var PAGE_W = Math.round(794 / k80), PAGE_H = Math.round(1123 / k80), MARGIN_B = Math.round(60 / k80);   // A4 ở 96dpi; lề dưới 16mm
     var holder = document.createElement("div");
     holder.className = "pdf-holder";
     holder.style.cssText = "position:fixed;left:0;top:0;width:" + PAGE_W + "px;z-index:-9999;pointer-events:none;background:#fff;";
@@ -6459,7 +6466,7 @@
       el.style.textTransform = "none";
     });
     var pages = Array.prototype.slice.call(clone.querySelectorAll(".print-page"));
-    pages.forEach(function (pg) { pg.style.cssText += ";width:" + PAGE_W + "px;max-width:none;margin:0;border:none;border-radius:0;box-shadow:none;"; });
+    pages.forEach(function (pg) { pg.style.cssText += ";zoom:1;width:" + PAGE_W + "px;min-height:" + PAGE_H + "px;max-width:none;margin:0;border:none;border-radius:0;box-shadow:none;"; });
     var badImgs = 0;
     var imgs = Array.prototype.slice.call(clone.querySelectorAll("img"));
     return loadPdfLibs().then(function () {
@@ -8284,7 +8291,7 @@
     }).join("");
 
     return (
-      '<div class="print-doc"><table class="print-sheet">' +
+      '<div class="print-doc s80"><table class="print-sheet">' +
         '<thead><tr><td>' + printRunHeadHtml(q) + '</td></tr></thead>' +
         '<tbody>' +
         '<tr><td><section class="print-page">' +
