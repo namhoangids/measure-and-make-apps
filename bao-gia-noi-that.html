@@ -592,10 +592,13 @@
   .prq-vol-detail { font-size: 11.5px; }
   @media (max-width: 640px) { .prq-vol-detail { display: none; } .prq-vol table { min-width: 760px; } }
   .print-prq-vol { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11.5px; margin-top: 6px; }
-  .print-prq-vol thead th { background: transparent; font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; text-align: center; vertical-align: bottom; padding: 5px 3px 7px; border: none; border-bottom: var(--print-hair) solid var(--print-orange); color: #62707A; white-space: normal; }
+  .print-prq-vol thead th { background: transparent; font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; text-align: left; vertical-align: bottom; padding: 5px 3px 7px; border: none; border-bottom: var(--print-hair) solid var(--print-orange); color: #62707A; white-space: normal; }
   .print-prq-vol td { padding: 4px 3px; border: none; border-bottom: 1px solid var(--print-dash); vertical-align: top; overflow-wrap: anywhere; }
   .print-prq-vol td.num { text-align: right; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; padding-left: 6px; }
   .print-prq-vol td.c { text-align: center; }
+  .print-prq-vol thead th.num { text-align: right; padding-left: 6px; }
+  .print-prq-vol thead th.c { text-align: center; }
+  .print-prq-vol thead th.note { padding-left: 12px; }
   .print-prq-vol tbody tr:nth-child(even) td { background: #FBF4EF; }
   .print-prq-vol tr { break-inside: avoid; }
   .print-prq-vol tfoot td { font-weight: 700; padding-top: 6px; border-bottom: none; }
@@ -674,7 +677,10 @@
   }
   .print-dv .print-ack-h { margin: 10px 0 4px; }
   .print-dv .print-subtitle { margin-bottom: 6px; }
-  .print-dv-weather { text-align: center; margin-bottom: 4px; }
+  .print-dv-wx { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; margin: 10px 0 2px; }
+  .print-dv-wx > div { background: #F7F6F3; border-radius: 4px; padding: 6px 10px 7px; }
+  .print-dv-wx span { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #62707A; margin-bottom: 2px; }
+  .print-dv-wx b { font-size: 13px; font-weight: 600; color: var(--print-ink); }
   .print-dv .print-ack-info td.lbl { width: 34%; }
   .print-dv .print-dv-photos { grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .print-dv .print-dv-photos img { height: 33mm; }
@@ -700,6 +706,7 @@
   .pdf-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
   .pdf-actions .btn { justify-content: center; padding: 11px 14px; font-size: 14px; }
   .pdf-warn { margin-top: 8px; color: #fff; background: #B5473F; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; }
+  .pdf-holder, .pdf-holder * { font-variant-numeric: normal !important; }
   .pdf-img-ph { display: flex; align-items: center; justify-content: center; background: #EEECE8; color: #8C8178; font-size: 11px; border-radius: 3px; }
   .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
   .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
@@ -1028,7 +1035,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-pdf1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-pdf2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -6249,7 +6256,11 @@
     return head + '<div class="print-dv">' +
       '<div class="print-title">Nhật ký thi công</div>' +
       '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + ' · ' + escapeHtml(diaryDayLabel(e.date)) + '</div>' +
-      '<div class="print-ack-text print-dv-weather"><b>Thời tiết</b> · ' + escapeHtml(wth) + '</div>' +
+      '<div class="print-dv-wx">' +
+        '<div><span>Thời tiết buổi sáng</span><b>' + escapeHtml((e.weather && e.weather.am) || "—") + '</b></div>' +
+        '<div><span>Thời tiết buổi chiều</span><b>' + escapeHtml((e.weather && e.weather.pm) || "—") + '</b></div>' +
+        '<div><span>Ghi chú thời tiết</span><b>' + escapeHtml((e.weather && e.weather.note) || "—") + '</b></div>' +
+      '</div>' +
       '<div class="print-ack-h">Nhân lực có mặt</div>' + crewTbl +
       '<div class="print-ack-h">Công việc thực hiện</div>' + workTbl +
       (mats.length ? '<div class="print-ack-h">Vật tư, thiết bị nhập về</div>' + matTbl : "") +
@@ -6440,6 +6451,13 @@
     clone.classList.remove("fit"); clone.style.zoom = ""; clone.style.width = PAGE_W + "px"; clone.style.margin = "0";
     holder.appendChild(clone);
     document.body.appendChild(holder);
+    // html2canvas vẽ chữ bằng canvas: canvas KHÔNG hiểu tabular-nums (số lệch, "35 %") và tự viết hoa lệch vị trí →
+    // trong bản dựng PDF: viết hoa thẳng vào chữ, bỏ tabular-nums (xem CSS .pdf-holder).
+    Array.prototype.forEach.call(clone.querySelectorAll("*"), function (el) {
+      if (getComputedStyle(el).textTransform !== "uppercase") return;
+      Array.prototype.forEach.call(el.childNodes, function (n) { if (n.nodeType === 3) n.nodeValue = n.nodeValue.toUpperCase(); });
+      el.style.textTransform = "none";
+    });
     var pages = Array.prototype.slice.call(clone.querySelectorAll(".print-page"));
     pages.forEach(function (pg) { pg.style.cssText += ";width:" + PAGE_W + "px;max-width:none;margin:0;border:none;border-radius:0;box-shadow:none;"; });
     var badImgs = 0;
@@ -8338,7 +8356,22 @@
       '<div class="print-hint">' + hint + '</div>' +
     '</div>';
   }
+  // Tiêu đề cột của mọi bảng in căn GIỐNG nội dung cột bên dưới (số → phải, STT/ĐVT → giữa, chữ → trái),
+  // lấy theo ô của dòng dữ liệu đầu tiên — khỏi phải khai báo tay ở từng bảng.
+  function alignPrintTables() {
+    document.querySelectorAll("#content .print-prq-vol").forEach(function (t) {
+      var ths = t.querySelectorAll(":scope > thead th"); if (!ths.length) return;
+      // ":scope >" bắt buộc: bảng nằm lồng trong <tbody> của khung trang, "tbody tr" sẽ bắt nhầm dòng tiêu đề.
+      var row = Array.prototype.slice.call(t.querySelectorAll(":scope > tbody > tr")).filter(function (r) { return r.children.length === ths.length; })[0];
+      if (!row) return;
+      Array.prototype.forEach.call(ths, function (th, i) {
+        var td = row.children[i];
+        ["num", "c", "note"].forEach(function (k) { th.classList.toggle(k, td.classList.contains(k)); });
+      });
+    });
+  }
   function wirePrintToolbar() {
+    alignPrintTables();
     var b = document.getElementById("btnDoPrint");
     if (b) b.onclick = function () { try { window.print(); } catch (e) { toast("Trình duyệt không mở được hộp thoại in — dùng Ctrl + P."); } };
     var mk = document.getElementById("btnMakePdf");
