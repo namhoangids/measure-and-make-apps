@@ -672,6 +672,14 @@
     .dv-day span { font-size: 10.5px; }
     .dv-day i { font-size: 9.5px; }
   }
+  .print-dv .print-ack-h { margin: 10px 0 4px; }
+  .print-dv .print-subtitle { margin-bottom: 6px; }
+  .print-dv-weather { text-align: center; margin-bottom: 4px; }
+  .print-dv .print-ack-info td.lbl { width: 34%; }
+  .print-dv .print-dv-photos { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .print-dv .print-dv-photos img { height: 33mm; }
+  .print-dv .print-ack-signs { margin-top: 14px; }
+  .print-dv .print-ack-signs .sg-sub { margin-bottom: 44px; }
   .print-dv-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
   .print-dv-photos figure { margin: 0; break-inside: avoid; }
   .print-dv-photos img { width: 100%; height: 46mm; object-fit: cover; border-radius: 3px; display: block; }
@@ -680,6 +688,14 @@
   .print-dv-jobname { font-weight: 700; font-size: 12.5px; }
   .print-dv-job ul, .print-dv-notes { margin: 3px 0 0 18px; padding: 0; font-size: 12.5px; }
   .print-dv-job .muted { color: #62707A; }
+  /* Quy tắc chung `table { min-width: 880px }` (cho bảng danh sách cuộn ngang) KHÔNG được ăn vào bản in: trang A4 chỉ
+     ~700px, Chrome tự thu nhỏ nên không thấy, nhưng Safari iPhone in ra bị cắt mất phần bên phải (lỗi 2026-10-01). */
+  .print-doc table { min-width: 0; }
+  .print-doc.fit { overflow: visible; width: calc(210mm + 2px); max-width: none; }
+  .print-doc.fit .print-page { max-width: none; }
+  .print-toolbar { flex-wrap: wrap; }
+  .dv-photo-msg { font-size: 12.5px; margin: 0 0 8px; color: var(--ink-mute); }
+  .dv-photo-msg.err { color: #fff; background: #B5473F; padding: 8px 10px; border-radius: 8px; }
   .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
   .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
   .toolbar-right { flex-wrap: wrap; }
@@ -881,7 +897,7 @@
     .app { display: block; }
     .main { display: block; }
     .content { max-width: 100%; padding: 0; margin: 0; }
-    .print-doc { max-width: 100%; margin: 0; overflow: visible; }
+    .print-doc, .print-doc.fit { max-width: 100%; width: auto !important; margin: 0; overflow: visible; zoom: 1 !important; }
     /* Nền vằn, ô chữ cam, chữ cam… mặc định trình duyệt BỎ khi in — bắt buộc in đủ màu. */
     .print-doc, .print-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     /* Khi in thì .print-page không còn là "tờ giấy giả" nữa — chính trang giấy thật đảm nhiệm
@@ -1007,7 +1023,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-nk1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-nk2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -5966,9 +5982,10 @@
 
       '<h4 class="ctr-sec">Ảnh hiện trường <span class="ctr-sec-sub">(tối đa ' + DIARY_MAX_PHOTOS + ' ảnh, tự lưu ngay)</span></h4>' +
       '<div class="dv-photos">' + photosHtml + '</div>' +
+      '<div id="dvPhotoMsg" class="dv-photo-msg"></div>' +
       '<div class="dv-photo-btns">' +
-        '<label class="btn btn-sm" style="cursor:pointer">' + iconPlus() + ' Chụp ảnh<input type="file" id="dvCam" accept="image/*" capture="environment" hidden></label>' +
-        '<label class="btn btn-sm" style="cursor:pointer">' + iconPlus() + ' Chọn ảnh<input type="file" id="dvPick" accept="image/*" multiple hidden></label>' +
+        '<button type="button" class="btn btn-sm" data-dv-photo="dvCamInput">' + iconPlus() + ' Chụp ảnh</button>' +
+        '<button type="button" class="btn btn-sm" data-dv-photo="dvPickInput">' + iconPlus() + ' Chọn ảnh</button>' +
       '</div>' +
 
       '<h4 class="ctr-sec">Vật tư, thiết bị nhập về</h4>' + matsHtml +
@@ -6063,30 +6080,81 @@
       delete diaryStore.entries[date];
       diaryDraft = null; view.diaryDate = ""; renderDiaryScreen();
     };
-    var onFiles = function (input) {
-      var files = Array.prototype.slice.call(input.files || []); input.value = "";
-      if (!files.length) return;
-      var room = DIARY_MAX_PHOTOS - diaryDraft.photos.length;
-      if (room <= 0) { toast("Mỗi ngày tối đa " + DIARY_MAX_PHOTOS + " ảnh."); return; }
-      var batch = files.slice(0, room), key = diaryDraft.projectId + "|" + diaryDraft.date;
-      if (files.length > room) toast("Chỉ nhận thêm " + room + " ảnh (tối đa " + DIARY_MAX_PHOTOS + " / ngày).");
-      toast("Đang tải " + batch.length + " ảnh lên…");
-      batch.reduce(function (chain, f) {
-        return chain.then(function () {
-          return resizeImageFile(f, 1600, 0.8).then(function (blob) {
-            var path = "baogia/diary/" + slug(pid) + "/" + date + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + ".jpg";
-            return uploadToStorage(path, blob, "image/jpeg");
-          }).then(function (url) {
-            if (!diaryDraft || diaryDraft.projectId + "|" + diaryDraft.date !== key) return;
-            diaryDraft.photos.push({ url: url, caption: "", inReport: false });
-            diaryDirty = true; diaryFlushSave();          // ảnh đã lên Storage thì ghi ngay vào nhật ký
-            if (view.screen === "diary" && view.diaryDate === date) renderDiaryEditor();
-          });
-        });
-      }, Promise.resolve()).catch(function (err) { toast("Không tải được ảnh: " + err.message); });
-    };
-    document.getElementById("dvCam").onchange = function () { onFiles(this); };
-    document.getElementById("dvPick").onchange = function () { onFiles(this); };
+    diaryFileInputs();
+    paintDiaryPhotoMsg();
+    document.querySelectorAll("[data-dv-photo]").forEach(function (b) {
+      b.onclick = function () {
+        if (diaryDraft.photos.length >= DIARY_MAX_PHOTOS) { toast("Mỗi ngày tối đa " + DIARY_MAX_PHOTOS + " ảnh."); return; }
+        document.getElementById(b.dataset.dvPhoto).click();
+      };
+    });
+  }
+
+  // Ô chọn file nằm CỐ ĐỊNH ở <body>, ngoài vùng #content: trang nhật ký vẽ lại sau mỗi ảnh, nếu ô chọn file nằm
+  // trong đó thì bị huỷ giữa chừng → Safari iPhone không đọc được các ảnh còn lại (và xoá .value trước khi đọc
+  // xong cũng làm Safari mất file). Bài học 2026-10-01: Nam không tải được ảnh nhật ký.
+  var diaryPhotoMsg = { text: "", err: false };
+  function diaryFileInputs() {
+    [["dvCamInput", true], ["dvPickInput", false]].forEach(function (x) {
+      if (document.getElementById(x[0])) return;
+      var inp = document.createElement("input");
+      inp.type = "file"; inp.id = x[0]; inp.accept = "image/*"; inp.style.display = "none";
+      if (x[1]) inp.setAttribute("capture", "environment"); else inp.multiple = true;
+      inp.addEventListener("change", function () { diaryHandleFiles(inp); });
+      document.body.appendChild(inp);
+    });
+  }
+  function paintDiaryPhotoMsg() {
+    var el = document.getElementById("dvPhotoMsg"); if (!el) return;
+    el.textContent = diaryPhotoMsg.text;
+    el.className = "dv-photo-msg" + (diaryPhotoMsg.err ? " err" : "");
+    el.style.display = diaryPhotoMsg.text ? "" : "none";
+  }
+  function diaryUploadErrText(err) {
+    var code = (err && err.code) || "", msg = (err && err.message) || String(err || "lỗi không rõ");
+    if (/unauthorized|permission/i.test(code + msg)) return "Firebase Storage không cho ghi ảnh (" + code + "). Cần kiểm tra Rules của Storage cho thư mục baogia/diary.";
+    if (/quota/i.test(code)) return "Firebase Storage đã hết dung lượng miễn phí (" + code + ").";
+    if (/network|retry-limit|offline/i.test(code + msg)) return "Mạng yếu / mất mạng, ảnh chưa lên được — thử lại khi có sóng (" + (code || msg) + ").";
+    return (code ? "[" + code + "] " : "") + msg;
+  }
+  // Nén ảnh; không nén được (vd. ảnh HEIC trên máy tính) mà là JPG/PNG/WebP vừa phải thì gửi nguyên file.
+  function diaryPrepareImage(f) {
+    return resizeImageFile(f, 1600, 0.8).then(function (blob) { return { blob: blob, type: "image/jpeg", ext: "jpg" }; }, function () {
+      if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size <= 12 * 1024 * 1024) return { blob: f, type: f.type, ext: f.type.split("/")[1].replace("jpeg", "jpg") };
+      var ext = (String(f.name || "").split(".").pop() || f.type || "?").toUpperCase();
+      throw new Error("Không đọc được ảnh \"" + (f.name || "") + "\" (định dạng " + ext + "). Trên máy tính hãy chọn ảnh JPG/PNG; trên iPhone chọn từ Thư viện ảnh là được.");
+    });
+  }
+  function diaryHandleFiles(input) {
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length || !diaryDraft) { input.value = ""; return; }
+    var pid = diaryDraft.projectId, date = diaryDraft.date, key = pid + "|" + date;
+    var room = DIARY_MAX_PHOTOS - diaryDraft.photos.length;
+    var batch = files.slice(0, Math.max(0, room)), done = 0, failed = [];
+    if (!batch.length) { input.value = ""; toast("Mỗi ngày tối đa " + DIARY_MAX_PHOTOS + " ảnh."); return; }
+    var show = function (t, err) { diaryPhotoMsg = { text: t, err: !!err }; paintDiaryPhotoMsg(); };
+    show("Đang tải ảnh 1/" + batch.length + "…");
+    batch.reduce(function (chain, f, i) {
+      return chain.then(function () {
+        show("Đang tải ảnh " + (i + 1) + "/" + batch.length + "…");
+        return diaryPrepareImage(f).then(function (img) {
+          var path = "baogia/diary/" + slug(pid) + "/" + date + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + "." + img.ext;
+          return uploadToStorage(path, img.blob, img.type);
+        }).then(function (url) {
+          done++;
+          if (!diaryDraft || diaryDraft.projectId + "|" + diaryDraft.date !== key) return;
+          diaryDraft.photos.push({ url: url, caption: "", inReport: false });
+          diaryDirty = true; diaryFlushSave();          // ảnh đã lên Storage thì ghi ngay vào nhật ký
+          if (view.screen === "diary" && view.diaryDate === date) renderDiaryEditor();
+        }, function (err) { failed.push(diaryUploadErrText(err)); });
+      });
+    }, Promise.resolve()).then(function () {
+      input.value = "";                                   // chỉ xoá lựa chọn khi đã đọc xong mọi file
+      if (failed.length) show("Tải được " + done + "/" + batch.length + " ảnh. Lỗi: " + failed[0], true);
+      else show(done ? "Đã tải " + done + " ảnh lên." : "", false);
+      if (!failed.length) setTimeout(function () { if (!diaryPhotoMsg.err) show("", false); }, 4000);
+      if (files.length > batch.length) toast("Chỉ nhận thêm " + batch.length + " ảnh (tối đa " + DIARY_MAX_PHOTOS + " / ngày).");
+    });
   }
 
   /* ---------- Chọn khoảng in ---------- */
@@ -6166,23 +6234,24 @@
     var matTbl = mats.length ? diaryPrintTable(["STT", "Vật tư, thiết bị", "SL", "ĐVT", "Ghi chú"], [6, 46, 10, 10, 28], mats.map(function (m, i) {
       return '<tr><td class="c">' + (i + 1) + '</td><td>' + escapeHtml(m.text) + '</td><td class="num">' + escapeHtml(m.qty || "") + '</td><td class="c">' + escapeHtml(m.unit || "") + '</td><td class="note">' + escapeHtml(m.note || "") + '</td></tr>';
     })) : '<div class="print-ack-text">Không có.</div>';
-    var txt = function (t) { return '<div class="print-ack-text">' + escapeHtml(t || "Không có.") + '</div>'; };
+    var infoRows = [];
+    if (!mats.length) infoRows.push(["Vật tư, thiết bị nhập về", "Không có."]);
+    infoRows.push(["Vướng mắc, sự cố", e.issues || "Không có."], ["An toàn lao động, vệ sinh", e.safety || "Không có."], ["Ý kiến chỉ đạo (Bên A / giám sát)", e.instructions || "Không có."]);
+    var infoTbl = '<table class="print-ack-info">' + infoRows.map(function (r) { return '<tr><td class="lbl">' + escapeHtml(r[0]) + '</td><td style="white-space:pre-wrap;">' + escapeHtml(r[1]) + '</td></tr>'; }).join("") + '</table>';
     var photos = (e.photos || []).length ? '<div class="print-dv-photos">' + e.photos.map(function (ph) {
       return '<figure><img src="' + escapeHtml(ph.url) + '" alt="">' + (ph.caption ? '<figcaption>' + escapeHtml(ph.caption) + '</figcaption>' : "") + '</figure>';
     }).join("") + '</div>' : '<div class="print-ack-text">Không có.</div>';
-    return head +
+    return head + '<div class="print-dv">' +
       '<div class="print-title">Nhật ký thi công</div>' +
       '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + ' · ' + escapeHtml(diaryDayLabel(e.date)) + '</div>' +
-      '<div class="print-ack-h">Thời tiết</div><div class="print-ack-text">' + escapeHtml(wth) + '</div>' +
+      '<div class="print-ack-text print-dv-weather"><b>Thời tiết</b> · ' + escapeHtml(wth) + '</div>' +
       '<div class="print-ack-h">Nhân lực có mặt</div>' + crewTbl +
       '<div class="print-ack-h">Công việc thực hiện</div>' + workTbl +
-      '<div class="print-ack-h">Vật tư, thiết bị nhập về</div>' + matTbl +
-      '<div class="print-ack-h">Vướng mắc, sự cố</div>' + txt(e.issues) +
-      '<div class="print-ack-h">An toàn lao động, vệ sinh</div>' + txt(e.safety) +
-      '<div class="print-ack-h">Ý kiến chỉ đạo (Bên A / giám sát)</div>' + txt(e.instructions) +
-      '<div class="print-ack-h">Ảnh hiện trường</div>' + photos +
+      (mats.length ? '<div class="print-ack-h">Vật tư, thiết bị nhập về</div>' + matTbl : "") +
+      '<div class="print-ack-h">Ghi nhận khác</div>' + infoTbl +
+      ((e.photos || []).length ? '<div class="print-ack-h">Ảnh hiện trường</div>' + photos : "") +
       '<div class="print-ack-signs"><div class="sg"><div class="sg-side">Bên A (Indust Design)</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div>' +
-        '<div class="sg"><div class="sg-side">Đại diện nhà thầu thi công</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div></div>';
+        '<div class="sg"><div class="sg-side">Đại diện nhà thầu thi công</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div></div></div>';
   }
 
   function buildDiaryBookHtml(cfg) {
@@ -6299,15 +6368,10 @@
   function renderDiaryPrint() {
     var cfg = view.printDiary;
     diarySubscribe(cfg.pid);
-    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
-    var html =
-      '<div class="print-toolbar no-print">' +
-        '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
-        '<div class="print-hint">Bấm <b>' + (isMac ? "Cmd + P" : "Ctrl + P") + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
-      '</div>' +
-      (cfg.kind === "book" ? buildDiaryBookHtml(cfg) : buildDiaryWeekHtml(cfg));
+    var html = printToolbarHtml().replace("<!--MODE-->", "") + (cfg.kind === "book" ? buildDiaryBookHtml(cfg) : buildDiaryWeekHtml(cfg));
     document.getElementById("content").innerHTML = html;
     document.getElementById("crumbCurrent").textContent = cfg.kind === "book" ? "Xem trước sổ nhật ký" : "Xem trước báo cáo tuần";
+    wirePrintToolbar();
     document.getElementById("btnBackFromPrint").addEventListener("click", function () { view.screen = "diary"; view.diaryDate = ""; renderDiaryScreen(); renderNav(); });
   }
 
@@ -8033,6 +8097,36 @@
     renderPrintPreview();
   }
 
+  // Trang xem trước là tờ A4 thật (210mm ≈ 794px). Màn hình hẹp hơn (điện thoại) thì THU NHỎ cả tờ cho vừa
+  // thay vì để tràn ra ngoài; khi in thì @media print trả về kích thước thật (zoom: 1).
+  function fitPrintPreview() {
+    var doc = document.querySelector("#content .print-doc"); if (!doc) return;
+    doc.style.zoom = "";
+    doc.classList.remove("fit");
+    var par = doc.parentElement, cs = par ? getComputedStyle(par) : null;
+    var avail = par ? par.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) : window.innerWidth;
+    var pageW = 210 * 96 / 25.4 + 2;
+    if (avail > 0 && avail < pageW) { doc.classList.add("fit"); doc.style.zoom = String(Math.floor(avail / pageW * 1000) / 1000); }
+  }
+  window.addEventListener("resize", function () { if (view.screen === "print") fitPrintPreview(); });
+  function printToolbarHtml() {
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    var isMac = /Mac/.test(navigator.platform || "");
+    var hint = isIOS ? 'Bấm <b>In / Lưu PDF</b> → trong màn in, chạm 2 ngón mở rộng bản xem trước rồi bấm nút Chia sẻ để lưu PDF.'
+      : 'Bấm <b>In / Lưu PDF</b> (hoặc <b>' + (isMac ? "Cmd + P" : "Ctrl + P") + '</b>), chọn "Lưu thành PDF" (Save as PDF).';
+    return '<div class="print-toolbar no-print">' +
+      '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
+      '<button class="btn btn-primary" id="btnDoPrint" type="button">' + iconDownload() + ' In / Lưu PDF</button>' +
+      '<!--MODE-->' +
+      '<div class="print-hint">' + hint + '</div>' +
+    '</div>';
+  }
+  function wirePrintToolbar() {
+    var b = document.getElementById("btnDoPrint");
+    if (b) b.onclick = function () { try { window.print(); } catch (e) { toast("Trình duyệt không mở được hộp thoại in — dùng Ctrl + P."); } };
+    fitPrintPreview();
+  }
+
   function renderPrintPreview() {
     if (view.printKind === "diary" && view.printDiary) { renderDiaryPrint(); return; }
     var isAck = view.printKind === "acceptance", isPrq = view.printKind === "payreq";
@@ -8047,17 +8141,15 @@
     var shortcut = isMac ? "Cmd + P" : "Ctrl + P";
 
     var html =
-      '<div class="print-toolbar no-print">' +
-        '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
+      printToolbarHtml().replace("<!--MODE-->",
         (isAck && ackHasVolumes(jobPrint.acceptance) ? '<div class="print-mode-switch">' +
           '<button class="btn btn-sm' + (jobPrint.acceptance.printMode !== "value" ? " on" : "") + '" data-ack-mode="qty">Nghiệm thu khối lượng</button>' +
-          '<button class="btn btn-sm' + (jobPrint.acceptance.printMode === "value" ? " on" : "") + '" data-ack-mode="value">Nghiệm thu giá trị thanh toán</button></div>' : "") +
-        '<div class="print-hint">Bấm <b>' + shortcut + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
-      '</div>' +
+          '<button class="btn btn-sm' + (jobPrint.acceptance.printMode === "value" ? " on" : "") + '" data-ack-mode="value">Nghiệm thu giá trị thanh toán</button></div>' : "")) +
       (isAck ? buildAcceptancePrintHtml(jobPrint) : isPrq ? buildPayReqPrintHtml(jobPrint, prqPay) : buildPrintHtml(q));
 
     document.getElementById("content").innerHTML = html;
     document.getElementById("crumbCurrent").textContent = isAck ? "Xem trước biên bản nghiệm thu" : isPrq ? "Xem trước phiếu đề nghị thanh toán" : "Xem trước bản in";
+    wirePrintToolbar();
     document.querySelectorAll("[data-ack-mode]").forEach(function (b) {
       b.addEventListener("click", function () {
         if (jobPrint.acceptance.printMode === b.dataset.ackMode) return;
