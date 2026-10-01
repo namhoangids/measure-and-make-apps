@@ -540,6 +540,11 @@
   .ctr-amt { grid-column: 1 / -1; font-size: 12.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .ctr-retention { font-size: 13px; }
   .update-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 95; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; padding: 9px 16px; text-align: center; }
+  .save-error-banner { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 96; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between;
+    background: #B5473F; color: #fff; font-size: 13px; padding: 11px 14px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  .save-error-banner .save-error-msg { display: block; opacity: .85; font-size: 12px; margin-top: 2px; }
+  .save-error-actions { display: flex; gap: 8px; }
+  .save-error-banner button { font-family: inherit; font-weight: 700; font-size: 12.5px; border: 1.5px solid #fff; background: transparent; color: #fff; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
   .update-banner button { margin-left: 10px; font-family: inherit; font-weight: 700; font-size: 12.5px; border: 1.5px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 3px 12px; cursor: pointer; }
   .stat-tile { min-width: 0; }
   .stat-value.sm { font-size: 20px; }
@@ -920,7 +925,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-fix1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-fix2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1098,11 +1103,38 @@
   var MAIN_DOC = db.collection("baogia").doc("main");
 
   var docUnsub = null, saveTimer = null, pendingSave = false, docSizeWarned = false;
-  // Đếm số lần ghi đang bay lên server. Firestore bắn onSnapshot NGAY cho bản ghi của chính mình
-  // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
-  // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
-  var inflightWrites = 0, firstPaintDone = false, repaintPending = false;
+  var firstPaintDone = false, repaintPending = false;
   var remotePending = null; // dữ liệu thay đổi thật từ nơi khác, chờ người dùng rời ô đang gõ mới áp vào
+
+  // ===== LƯU THEO TỪNG PHẦN (2026-10-01) =====
+  // Tài liệu baogia/main gồm nhiều phần độc lập. Mỗi lần lưu CHỈ ghi phần thực sự đổi (merge:true giữ nguyên
+  // phần khác) → mở app ở 2 máy / 2 tab, máy này sửa nhà thầu không ghi đè báo giá máy kia vừa nhập, và
+  // ngược lại. syncedJson[k] = "vân tay" của phần k lần cuối khớp với server (đã nhận về hoặc đã gửi đi).
+  // Phần nào trong máy khác vân tay đó = đang có thay đổi chưa gửi → không nhận bản server đè lên.
+  var DOC_PARTS = [
+    { k: "quotes",         get: function () { return state.quotes; },   set: function (v) { state.quotes = v; } },
+    { k: "priceCatalog",   get: function () { return PRICE_CATALOG; },  set: function (v) { PRICE_CATALOG = v; } },
+    { k: "projects",       get: function () { return PROJECTS; },       set: function (v) { PROJECTS = v; } },
+    { k: "customers",      get: function () { return CUSTOMERS; },      set: function (v) { CUSTOMERS = v; } },
+    { k: "contractors",    get: function () { return CONTRACTORS; },    set: function (v) { CONTRACTORS = v; } },
+    { k: "contractorJobs", get: function () { return CONTRACTOR_JOBS; }, set: function (v) { CONTRACTOR_JOBS = v; } },
+    { k: "warrantyIssues", get: function () { return WARRANTY_ISSUES; }, set: function (v) { WARRANTY_ISSUES = v; } },
+    { k: "calendarSync",   get: function () { return CALENDAR_CFG; },   set: function (v) { CALENDAR_CFG = v; } }
+  ];
+  var syncedJson = {};     // k -> vân tay lần cuối khớp server (null = chưa khớp / lần gửi trước bị lỗi)
+  var inflightPart = {};   // k -> số lần ghi phần này đang bay lên server, chưa có kết quả
+  // Vân tay không phụ thuộc thứ tự key: Firestore trả object với key xếp theo ABC, khác thứ tự trong máy.
+  function canonJson(v) {
+    return JSON.stringify(v, function (key, x) {
+      if (x && typeof x === "object" && !Array.isArray(x)) {
+        var o = {};
+        Object.keys(x).sort().forEach(function (kk) { o[kk] = x[kk]; });
+        return o;
+      }
+      return x;
+    });
+  }
+  function partDirty(p) { return (inflightPart[p.k] || 0) > 0 || canonJson(p.get()) !== syncedJson[p.k]; }
   // Chốt chặn cuối cho lỗi "gõ 1 ký tự là văng khỏi ô": đang đặt con trỏ trong một ô nhập liệu thì
   // KHÔNG vẽ lại #content (vì vẽ lại = thay innerHTML = huỷ luôn ô đang gõ). Hoãn lại, khi nào rời ô
   // hẳn mới vẽ. Đây là lớp bắt mọi nguyên nhân, kể cả nguyên nhân chưa lường tới.
@@ -1123,9 +1155,8 @@
     if (!repaintPending || pointerDown) return;
     if (typingInsideContent()) return; // vẫn đang gõ ở ô khác
     repaintPending = false;
-    // Áp dữ liệu từ nơi khác đã hoãn — trừ khi mình còn thay đổi chưa gửi / đang gửi (dữ liệu trong máy mới hơn,
-    // server sẽ bắn lại bản mới sau khi nhận bản ghi của mình).
-    if (remotePending && !pendingSave && inflightWrites === 0) applyRemoteData(remotePending);
+    // Áp dữ liệu từ nơi khác đã hoãn — vẫn theo quy tắc từng phần: phần nào mình đang sửa dở thì giữ của mình.
+    if (remotePending) mergeRemoteParts(remotePending);
     remotePending = null;
     renderCurrentScreen();
   }
@@ -1135,9 +1166,8 @@
     c.addEventListener("focusout", function () { setTimeout(flushPendingRepaint, 120); });
   })();
 
-  // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng) — báo lỗi qua toast nếu
-  // sau đó thật sự ghi thất bại. Đây là hàm DUY NHẤT lưu dữ liệu — gộp cả quotes, bảng giá vật tư, công
-  // trình, khách hàng vào 1 tài liệu Firestore (giống cơ chế đã dùng cho app FF&E Schedule).
+  // Ghi lên Firestore có debounce 500ms, lạc quan (trả về ngay, không đợi mạng). Đây là hàm DUY NHẤT lưu dữ liệu.
+  // Chỉ gửi những phần đã đổi so với lần khớp server gần nhất (xem DOC_PARTS).
   function saveState() {
     pendingSave = true;
     clearTimeout(saveTimer);
@@ -1146,30 +1176,53 @@
   function flushSave() {
     if (!pendingSave) return;
     pendingSave = false;
-    var payload = {
-      quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES, calendarSync: CALENDAR_CFG
-    };
-    // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp: serverTimestamp làm dữ liệu đổi lần thứ hai
-    // lúc server xác nhận → Firestore bắn thêm 1 snapshot nữa → vẽ lại lần nữa → văng con trỏ.
-    // Trường này chỉ để tham khảo, không nơi nào trong app đọc tới.
+    var payload = {}, sent = [], totalBytes = 0;
+    DOC_PARTS.forEach(function (p) {
+      var j = canonJson(p.get());
+      try { totalBytes += new Blob([j]).size; } catch (e) { totalBytes += j.length; }
+      if (j === syncedJson[p.k]) return;
+      payload[p.k] = p.get();
+      sent.push({ k: p.k, j: j });
+    });
+    // Firestore giới hạn 1MB / tài liệu, mà mọi thứ đang nằm chung 1 tài liệu — báo sớm khi đã gần 70%.
+    if (totalBytes > 700 * 1024 && !docSizeWarned) {
+      docSizeWarned = true;
+      toast("Dữ liệu đã lên " + Math.round(totalBytes / 1024) + "KB (giới hạn 1024KB) — báo Claude để tách bớt trước khi đầy.");
+    }
+    if (!sent.length) { scheduleCalendarSync(); return; }   // không có gì đổi → khỏi ghi
+    // Dùng mốc giờ của máy, KHÔNG dùng serverTimestamp (serverTimestamp làm dữ liệu đổi lần 2 → thêm 1 snapshot).
     payload.updatedAt = Date.now();
     payload.updatedBy = (fbAuth.currentUser && fbAuth.currentUser.email) || null;
-    inflightWrites++;
-    // Firestore giới hạn 1MB / tài liệu, mà mọi thứ đang nằm chung 1 tài liệu — báo sớm khi đã gần 70%.
-    try {
-      var bytes = new Blob([JSON.stringify(payload)]).size;
-      if (bytes > 700 * 1024 && !docSizeWarned) {
-        docSizeWarned = true;
-        toast("Dữ liệu đã lên " + Math.round(bytes / 1024) + "KB (giới hạn 1024KB) — báo Claude để tách bớt trước khi đầy.");
-      }
-    } catch (e) {}
-    // merge:true — tab cũ (chưa biết 2 mảng nhà thầu) ghi đè cũng không xoá mất dữ liệu nhà thầu.
-    MAIN_DOC.set(payload, { merge: true }).then(function () { inflightWrites--; }, function (err) {
-      inflightWrites--;
-      toast("Không lưu được lên server — " + err.message);
+    sent.forEach(function (x) { syncedJson[x.k] = x.j; inflightPart[x.k] = (inflightPart[x.k] || 0) + 1; });
+    MAIN_DOC.set(payload, { merge: true }).then(function () {
+      sent.forEach(function (x) { inflightPart[x.k]--; });
+      hideSaveError();
+    }, function (err) {
+      // Gửi lỗi: đánh dấu các phần này "chưa khớp" để lần lưu sau gửi lại, và KHÔNG nhận bản server đè lên
+      // (dữ liệu trong máy là bản đúng, chưa lên được server).
+      sent.forEach(function (x) { inflightPart[x.k]--; syncedJson[x.k] = null; });
+      showSaveError(err && err.message ? err.message : String(err));
     });
     scheduleCalendarSync(); // nếu danh sách mốc hết bảo hành đã đổi thì gửi lại vào Google Calendar
+  }
+  // Lỗi lưu phải hiện RÕ và ở lại tới khi xử lý xong (toast 2 giây là quá dễ bỏ lỡ).
+  function showSaveError(msg) {
+    var el = document.getElementById("saveErrorBanner");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "saveErrorBanner";
+      el.className = "save-error-banner";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = '<div><b>Không lưu được lên server.</b> Những gì vừa nhập vẫn còn trên máy này — đừng tải lại trang. ' +
+      '<span class="save-error-msg">' + escapeHtml(msg) + '</span></div>' +
+      '<div class="save-error-actions"><button type="button" id="btnSaveRetry">Thử lưu lại</button><button type="button" id="btnSaveErrClose">Đóng</button></div>';
+    document.getElementById("btnSaveRetry").onclick = function () { el.querySelector(".save-error-msg").textContent = "Đang thử lại…"; saveState(); };
+    document.getElementById("btnSaveErrClose").onclick = function () { el.remove(); };
+  }
+  function hideSaveError() {
+    var el = document.getElementById("saveErrorBanner");
+    if (el) { el.remove(); toast("Đã lưu lại được lên server."); }
   }
   window.addEventListener("beforeunload", function () { if (pendingSave) flushSave(); });
 
@@ -1244,28 +1297,38 @@
     renderNav();
   }
 
+  // Dữ liệu server → giá trị chuẩn cho từng phần (khoá giống DOC_PARTS).
   function normalizeRemoteData(d) {
     return {
       quotes: Array.isArray(d.quotes) ? d.quotes : [],
-      catalog: (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice(),
+      priceCatalog: (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice(),
       projects: (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice(),
       customers: Array.isArray(d.customers) ? d.customers : [],
       contractors: Array.isArray(d.contractors) ? d.contractors : [],
-      jobs: Array.isArray(d.contractorJobs) ? d.contractorJobs : [],
-      issues: Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [],
-      cal: Object.assign({}, CALENDAR_CFG_DEFAULT, (d.calendarSync && typeof d.calendarSync === "object") ? d.calendarSync : {})
+      contractorJobs: Array.isArray(d.contractorJobs) ? d.contractorJobs : [],
+      warrantyIssues: Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [],
+      calendarSync: Object.assign({}, CALENDAR_CFG_DEFAULT, (d.calendarSync && typeof d.calendarSync === "object") ? d.calendarSync : {})
     };
   }
-  function applyRemoteData(nd) {
-    state.quotes = nd.quotes;
-    PRICE_CATALOG = nd.catalog;
-    PROJECTS = nd.projects;
-    CUSTOMERS = nd.customers;
-    CONTRACTORS = nd.contractors;
-    CONTRACTOR_JOBS = nd.jobs;
-    WARRANTY_ISSUES = nd.issues;
-    CALENDAR_CFG = nd.cal;
+  // Xét từng phần: giống cái trong máy → chỉ ghi nhận "đã khớp", KHÔNG thay object (màn hình đang giữ tham chiếu
+  // tới chúng — thay mà không vẽ lại thì gõ tiếp sẽ ghi vào object đã bị bỏ, lỗi 2026-10-01). Khác và mình KHÔNG
+  // sửa dở phần đó → nhận bản server. Khác mà mình đang sửa dở / đang gửi → giữ của mình (lần lưu tới sẽ gửi lên).
+  // Trả về danh sách phần sẽ nhận (chưa áp) để quyết định có cần vẽ lại không.
+  function remotePartsToTake(nd) {
+    var take = [];
+    DOC_PARTS.forEach(function (p) {
+      var r = canonJson(nd[p.k]);
+      if (r === canonJson(p.get())) { if (!(inflightPart[p.k] > 0)) syncedJson[p.k] = r; return; }
+      if (partDirty(p)) return;
+      take.push({ p: p, r: r });
+    });
+    return take;
+  }
+  function mergeRemoteParts(nd) {
+    var take = remotePartsToTake(nd);
+    take.forEach(function (t) { t.p.set(nd[t.p.k]); syncedJson[t.p.k] = t.r; });
     if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
+    return take.length;
   }
 
   function startApp() {
@@ -1288,23 +1351,18 @@
         // đang hiện không", chứ không phải "có phải bản mình vừa ghi không". So với bản vừa ghi thì
         // Firestore chuẩn hoá lại dữ liệu (bỏ field rỗng...) là lệch vân tay → tưởng nhầm có thay đổi.
         var nd = normalizeRemoteData(d);
-        var incomingJson = JSON.stringify([nd.quotes, nd.catalog, nd.projects, nd.customers, nd.contractors, nd.jobs, nd.issues, nd.cal]);
-        var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS, WARRANTY_ISSUES, CALENDAR_CFG]);
-        // QUAN TRỌNG: chỉ thay dữ liệu trong máy khi THẬT SỰ cần. Màn hình đang mở giữ tham chiếu tới chính các
-        // object này (vd. báo giá đang sửa) — thay bằng bản mới mà không vẽ lại thì mọi thứ gõ tiếp sau đó ghi vào
-        // object cũ đã bị bỏ, bấm "Thêm dòng / Thêm hạng mục" (vẽ lại) là mất sạch. Đó là lỗi Nam gặp 2026-10-01.
-        if (firstPaintDone) {
-          // Giống hệt cái đang có → không làm gì cả, giữ nguyên object.
-          if (incomingJson === onScreenJson) { remotePending = null; return; }
-          // Bản dội về của chính mình, hoặc mình còn thay đổi chưa gửi: dữ liệu trong máy MỚI HƠN bản này → không đè.
-          // Phải kiểm cả inflightWrites chứ không chỉ hasPendingWrites: Firestore giải quyết promise của
-          // set() TRƯỚC rồi mới bắn snapshot xác nhận (bài học lần vá hụt đầu tiên).
-          if (snap.metadata.hasPendingWrites || inflightWrites > 0 || pendingSave) return;
+        if (!firstPaintDone) {
+          // Lần tải đầu: nhận hết, ghi nhận vân tay từng phần.
+          DOC_PARTS.forEach(function (p) { p.set(nd[p.k]); syncedJson[p.k] = canonJson(nd[p.k]); });
+          if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
+        } else {
+          // Không có phần nào cần nhận (giống hệt, hoặc chỉ khác ở phần mình đang sửa dở) → không đụng gì cả.
+          if (!remotePartsToTake(nd).length) { remotePending = null; return; }
           // Thay đổi thật từ nơi khác mà mình đang gõ dở / đang giữ chuột: hoãn cả việc áp dữ liệu lẫn vẽ lại.
           if (typingInsideContent() || pointerDown) { remotePending = nd; repaintPending = true; return; }
+          mergeRemoteParts(nd);
+          remotePending = null;
         }
-        applyRemoteData(nd);
-        remotePending = null;
         firstPaintDone = true;
         hideAuthOverlay();
         renderUserFoot();
