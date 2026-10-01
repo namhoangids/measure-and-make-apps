@@ -524,6 +524,7 @@
   .visit-line.late { color: var(--accent); font-weight: 600; }
   .pill-late { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
   .late-text { color: var(--accent); }
+  .good-text { color: #2E8B57; }
   .contract-line { font-size: 11.5px; margin-top: 3px; }
   .paybar { height: 4px; border-radius: 4px; background: var(--surface-2); margin-top: 6px; min-width: 70px; overflow: hidden; }
   .paybar i { display: block; height: 100%; background: var(--good); }
@@ -598,6 +599,16 @@
   .print-prq-vol tbody tr:nth-child(even) td { background: #FBF4EF; }
   .print-prq-vol tr { break-inside: avoid; }
   .print-prq-vol tfoot td { font-weight: 700; padding-top: 6px; border-bottom: none; }
+  .prq-vol input.txt { width: 100%; min-width: 150px; text-align: left; }
+  .prq-vol input.unit { width: 56px; text-align: left; }
+  .ack-vol table { min-width: 900px; }
+  .ack-printmode { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12.5px; }
+  .ack-printmode select { font-family: inherit; font-size: 12.5px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--paper); color: var(--ink); }
+  .print-mode-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+  .print-mode-switch .btn.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .print-prq-vol tr.grp td { font-weight: 700; background: transparent !important; padding-top: 7px; }
+  .print-prq-vol td.note { padding-left: 12px; }
+  .print-prq-vol.val { font-size: 11px; }
   .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
   .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
   .toolbar-right { flex-wrap: wrap; }
@@ -925,7 +936,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-fix2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-bbkl1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1898,6 +1909,15 @@
           acc.push(Object.assign(jobLabel(j), { "Đợt": p.label || "", "Số phiếu": p.request.no || "", "Mã": v.code || "", "Nội dung": v.name || "", "ĐVT": v.unit || "",
             "KL hợp đồng": Number(v.contractQty) || 0, "KL kỳ này": Number(v.qty) || 0, "Đơn giá": Number(v.price) || 0, "Thành tiền": prqVolLineAmount(v) }));
         });
+      });
+      return acc;
+    }, []));
+    add("KL nghiem thu", CONTRACTOR_JOBS.reduce(function (acc, j) {
+      if (!j.acceptance || j.acceptance.draft || !ackHasVolumes(j.acceptance)) return acc;
+      j.acceptance.volumes.forEach(function (v) {
+        acc.push(Object.assign(jobLabel(j), { "Số biên bản": j.acceptance.no || "", "Nhóm": v.extra ? "Phát sinh" : (v.group || ""), "Mã": v.code || "", "Nội dung": v.name || "", "ĐVT": v.unit || "",
+          "KL hợp đồng": Number(v.contractQty) || 0, "KL thực tế": Number(v.actualQty) || 0, "Chênh lệch": ackVolDiff(v), "Đơn giá": Number(v.price) || 0,
+          "Giá trị hợp đồng": ackVolValue(v, "hd"), "Giá trị thực tế": ackVolValue(v, "tt"), "Ghi chú": v.note || "" }));
       });
       return acc;
     }, []));
@@ -4536,7 +4556,7 @@
     el.style.zIndex = "68"; // trên hộp thoại hợp đồng
     el.hidden = true;
     el.innerHTML =
-      '<div class="modal-panel" style="max-width:820px;">' +
+      '<div class="modal-panel" style="max-width:1000px;">' +
         '<div class="modal-head"><h3 id="ackModalTitle">Biên bản nghiệm thu</h3><button class="icon-btn" id="ackModalClose" type="button">' + iconClose() + '</button></div>' +
         '<div class="modal-body">' +
           '<div class="ctr-jobline" id="ackJobLine"></div>' +
@@ -4546,6 +4566,8 @@
             '<div class="field" style="grid-column: span 2;"><label>Địa điểm</label><input id="ackPlace"></div>' +
           '</div>' +
           '<div class="field" style="margin-bottom:14px;"><label>Nội dung / phạm vi nghiệm thu</label><textarea id="ackScope" rows="2"></textarea></div>' +
+          '<h4 class="ctr-sec">Khối lượng nghiệm thu <span class="ctr-sec-sub">(KL hợp đồng lấy từ hạng mục báo giá gắn với hợp đồng)</span></h4>' +
+          '<div id="ackVolWrap"></div>' +
           '<h4 class="ctr-sec">Kết quả nghiệm thu</h4>' +
           '<div id="ackResults" class="ack-results"></div>' +
           '<div id="ackDefectsWrap">' +
@@ -4662,6 +4684,8 @@
     rec.no = rec.no || ackSuggestNo(rec.date);
     rec.draft = false;
     rec.participants = (rec.participants || []).filter(function (p) { return p.name || p.title; });
+    rec.volumes = ackVolNormalize(rec.volumes);
+    rec.printMode = rec.printMode === "value" ? "value" : "qty";
     job.acceptance = rec;
     applyAcceptanceToJob(job, prev && !prev.draft ? prev : null);
     saveState();
@@ -4674,7 +4698,8 @@
     ensureAckModal();
     ackJobId = job.id;
     ackDraft = job.acceptance ? cloneJson(job.acceptance) : newAckDraft(job);
-    ["participants", "files"].forEach(function (k) { if (!Array.isArray(ackDraft[k])) ackDraft[k] = []; });
+    ["participants", "files", "volumes"].forEach(function (k) { if (!Array.isArray(ackDraft[k])) ackDraft[k] = []; });
+    if (ackDraft.printMode !== "value") ackDraft.printMode = "qty";
     if (!ackDraft.no) ackDraft.no = ackSuggestNo(ackDraft.date);
     var isSaved = !!(job.acceptance && !job.acceptance.draft);
 
@@ -4689,7 +4714,7 @@
     document.getElementById("ackFix").value = ackDraft.fixDeadline || "";
     document.getElementById("ackNote").value = ackDraft.note || "";
     document.getElementById("ackDelete").style.display = job.acceptance ? "" : "none";
-    paintAckResults(); paintAckPeople(); paintAckFiles(); refreshAckComputed();
+    paintAckResults(); paintAckPeople(); paintAckFiles(); paintAckVolumes(); refreshAckComputed();
 
     var modal = document.getElementById("ackModalOverlay");
     document.getElementById("ackDate").onchange = document.getElementById("ackDate").oninput = function () { readAckForm(); refreshAckComputed(); };
@@ -4766,6 +4791,208 @@
     modal.hidden = false;
   }
 
+  /* ---------- Khối lượng nghiệm thu (bảng KL hợp đồng / KL thực tế trong biên bản) ---------- */
+  // acceptance.volumes = [{ itemId, group, code, name, unit, contractQty, actualQty, price, note, extra }]
+  //   lấy từ các dòng của hạng mục báo giá gắn với hợp đồng (chụp lại lúc lấy); extra = dòng phát sinh nhập tay.
+  // acceptance.printMode = "qty" (nghiệm thu khối lượng) | "value" (nghiệm thu giá trị thanh toán).
+  // Chênh lệch / giá trị / tổng đều TÍNH khi hiện, không lưu.
+  function ackVolDiff(v) { return tkRound2((Number(v.actualQty) || 0) - (Number(v.contractQty) || 0)); }
+  function ackVolValue(v, which) { return Math.round(tkRound2(Number(which === "hd" ? v.contractQty : v.actualQty) || 0) * (Number(v.price) || 0)); }
+  function ackVolTotals(vols) {
+    var t = { hd: 0, tt: 0 };
+    (vols || []).forEach(function (v) { t.hd += ackVolValue(v, "hd"); t.tt += ackVolValue(v, "tt"); });
+    t.diff = t.tt - t.hd;
+    return t;
+  }
+  function fmtQtySigned(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + fmtQty(Math.abs(n)); }
+  function ackHasVolumes(a) { return !!(a && Array.isArray(a.volumes) && a.volumes.length); }
+  function ackTitle(a) {
+    if (!ackHasVolumes(a)) return "Biên bản nghiệm thu";
+    return a.printMode === "value" ? "Biên bản nghiệm thu giá trị thanh toán" : "Biên bản nghiệm thu khối lượng công việc hoàn thành";
+  }
+
+  // Đơn giá gợi ý: đơn giá đã dùng ở phiếu đề nghị gần nhất (theo thứ tự đợt) của dòng đó, không có thì lấy báo giá.
+  function ackVolPriceFor(job, itemId, fallback) {
+    var price = null;
+    ((job.contract && job.contract.payments) || []).forEach(function (p) {
+      if (!prqHasVolumes(p.request)) return;
+      p.request.volumes.forEach(function (v) { if (v.itemId === itemId) price = Math.round(Number(v.price) || 0); });
+    });
+    return price != null ? price : Math.round(Number(fallback) || 0);
+  }
+
+  // Thêm các dòng của hạng mục hợp đồng còn thiếu (KL thực tế = KL hợp đồng). Dòng đã có thì giữ nguyên số đã sửa.
+  function ackVolSyncFromContract(job) {
+    var link = job.contract ? contractLinkedSection(job.contract) : null;
+    if (!link) return 0;
+    var have = {}, added = 0;
+    ackDraft.volumes.forEach(function (v) { have[v.itemId] = true; });
+    // Giữ đúng thứ tự báo giá: dựng lại danh sách theo báo giá, chèn dòng đã có vào đúng chỗ, phát sinh xuống cuối.
+    var byId = {};
+    ackDraft.volumes.forEach(function (v) { byId[v.itemId] = v; });
+    var out = [];
+    link.section.groups.forEach(function (g) {
+      var head = String(g.name || "").trim();
+      g.items.forEach(function (it) {
+        if (!it.name && !it.code && !(Number(it.price) > 0)) return;   // dòng trống chưa điền
+        if (byId[it.id]) { out.push(byId[it.id]); delete byId[it.id]; return; }
+        var cq = tkRound2(Number(it.qty) || 0);
+        out.push({ itemId: it.id, group: head, code: it.code || "", name: it.name || it.detail || "", unit: it.unit || "",
+          contractQty: cq, actualQty: cq, price: ackVolPriceFor(job, it.id, it.price), note: "", extra: false });
+        added++;
+      });
+    });
+    Object.keys(byId).forEach(function (id) { out.push(byId[id]); });
+    ackDraft.volumes = out;
+    return added;
+  }
+
+  function paintAckVolumes() {
+    var wrap = document.getElementById("ackVolWrap"), job = ackJob(); if (!wrap || !job) return;
+    var link = job.contract ? contractLinkedSection(job.contract) : null, vols = ackDraft.volumes;
+    var html = '<div class="prq-vol-tools">' +
+      (link ? '<button type="button" class="btn btn-sm" id="ackVolSync">' + iconSync() + ' Lấy khối lượng từ hợp đồng</button>' : "") +
+      '<button type="button" class="btn btn-sm" id="ackVolAdd">' + iconPlus() + ' Thêm dòng phát sinh</button>' +
+      (vols.length ? '<label class="ack-printmode">Kiểu in: <select id="ackPrintMode"><option value="qty"' + (ackDraft.printMode !== "value" ? " selected" : "") + '>Nghiệm thu khối lượng</option>' +
+        '<option value="value"' + (ackDraft.printMode === "value" ? " selected" : "") + '>Nghiệm thu giá trị thanh toán</option></select></label>' : "") +
+      '</div>';
+    if (!link && !vols.length) {
+      html += '<div class="job-preview" style="margin-bottom:10px;">' + (job.contract
+        ? 'Hợp đồng chưa gắn hạng mục báo giá — mở hợp đồng, chọn <b>Báo giá của công trình</b> và <b>Hạng mục</b> để lấy khối lượng tự động. Hoặc thêm dòng tay.'
+        : 'Gói việc chưa có hợp đồng — lập hợp đồng và gắn hạng mục báo giá để lấy khối lượng tự động. Hoặc thêm dòng tay.') + '</div>';
+    } else if (link && !vols.length) {
+      html += '<div class="job-preview" style="margin-bottom:10px;">Bấm <b>Lấy khối lượng từ hợp đồng</b>: lấy mọi dòng của hạng mục ' + link.letter + '. ' + escapeHtml(link.section.name || "") +
+        ', KL thực tế điền sẵn bằng KL hợp đồng — chỉ cần sửa dòng nào đo thực tế bị lệch.</div>';
+    }
+    if (vols.length) {
+      var lastGroup = null;
+      html += '<div class="table-scroll prq-vol ack-vol"><table><thead><tr><th>#</th><th>Nội dung</th><th>ĐVT</th><th class="num">KL hợp đồng</th><th class="num">KL thực tế</th><th class="num">Chênh lệch</th><th class="num">Đơn giá</th><th>Ghi chú</th><th></th></tr></thead><tbody>' +
+        vols.map(function (v, i) {
+          var grp = "";
+          var g = v.extra ? "Phát sinh ngoài hợp đồng" : (v.group || "");
+          if (g && g !== lastGroup) grp = '<tr class="prq-vol-grp"><td colspan="9">' + escapeHtml(g) + '</td></tr>';
+          lastGroup = g;
+          var nameCell = v.extra
+            ? '<input class="txt" data-av-f="name" data-av-i="' + i + '" value="' + escapeHtml(v.name || "") + '" placeholder="Nội dung công việc phát sinh">'
+            : '<div>' + (v.code ? '<b>' + escapeHtml(v.code) + '</b> · ' : "") + escapeHtml(v.name || "") + '</div>';
+          var unitCell = v.extra ? '<input class="unit" data-av-f="unit" data-av-i="' + i + '" value="' + escapeHtml(v.unit || "") + '" placeholder="ĐVT">' : escapeHtml(v.unit || "");
+          return grp + '<tr>' +
+            '<td class="cell-muted">' + (i + 1) + '</td>' +
+            '<td>' + nameCell + '</td>' +
+            '<td>' + unitCell + '</td>' +
+            '<td class="num">' + (v.extra ? '<span class="cell-muted">—</span>' : fmtQty(v.contractQty)) + '</td>' +
+            '<td class="num"><input data-av-f="actualQty" data-av-i="' + i + '" inputmode="decimal" value="' + (Number(v.actualQty) ? fmtQty(v.actualQty) : "") + '" placeholder="0"></td>' +
+            '<td class="num" data-av-diff="' + i + '"></td>' +
+            '<td class="num"><input class="price" data-av-f="price" data-av-i="' + i + '" inputmode="numeric" value="' + moneyPlain(v.price || 0) + '"></td>' +
+            '<td><input class="txt" data-av-f="note" data-av-i="' + i + '" value="' + escapeHtml(v.note || "") + '"></td>' +
+            '<td><button type="button" class="icon-btn danger" data-av-rm="' + i + '" title="Bỏ dòng này">' + iconTrash() + '</button></td>' +
+          '</tr>';
+        }).join("") +
+        '</tbody><tfoot><tr><td colspan="9" id="ackVolTot"></td></tr></tfoot></table></div>';
+    }
+    wrap.innerHTML = html;
+
+    var sync = document.getElementById("ackVolSync");
+    if (sync) sync.onclick = function () {
+      var n = ackVolSyncFromContract(job);
+      paintAckVolumes();
+      toast(n ? "Đã lấy " + n + " dòng từ hạng mục hợp đồng." : "Đã có đủ các dòng của hạng mục hợp đồng.");
+    };
+    document.getElementById("ackVolAdd").onclick = function () {
+      ackDraft.volumes.push({ itemId: uid("av_"), group: "", code: "", name: "", unit: "", contractQty: 0, actualQty: 0, price: 0, note: "", extra: true });
+      paintAckVolumes();
+      var ins = wrap.querySelectorAll('input[data-av-f="name"]');
+      if (ins.length) ins[ins.length - 1].focus();
+    };
+    var pm = document.getElementById("ackPrintMode");
+    if (pm) pm.onchange = function () { ackDraft.printMode = pm.value; };
+    var tbl = wrap.querySelector(".ack-vol");
+    if (!tbl) return;
+    tbl.oninput = function (e) {
+      var t = e.target, f = t.dataset.avF, v = ackDraft.volumes[Number(t.dataset.avI)]; if (!f || !v) return;
+      if (f === "actualQty") v.actualQty = tkRound2(parsePctInput(t.value));
+      else if (f === "price") v.price = parseMoneyInput(t.value);
+      else v[f] = t.value;
+      refreshAckVolCells();
+    };
+    tbl.onchange = function (e) {
+      var t = e.target, f = t.dataset.avF, v = ackDraft.volumes[Number(t.dataset.avI)]; if (!f || !v) return;
+      if (f === "actualQty") t.value = Number(v.actualQty) ? fmtQty(v.actualQty) : "";
+      else if (f === "price") t.value = moneyPlain(v.price || 0);
+    };
+    tbl.onclick = function (e) {
+      var b = e.target.closest("[data-av-rm]"); if (!b) return;
+      ackDraft.volumes.splice(Number(b.dataset.avRm), 1);
+      paintAckVolumes();
+    };
+    refreshAckVolCells();
+  }
+
+  // Cập nhật cột chênh lệch + dòng tổng mà không vẽ lại bảng (giữ con trỏ trong ô đang gõ).
+  function refreshAckVolCells() {
+    ackDraft.volumes.forEach(function (v, i) {
+      var el = document.querySelector('[data-av-diff="' + i + '"]'); if (!el) return;
+      var d = ackVolDiff(v), cq = Number(v.contractQty) || 0;
+      el.innerHTML = d === 0 ? '<span class="cell-muted">0</span>'
+        : '<span class="' + (d < 0 ? "late-text" : "good-text") + '">' + fmtQtySigned(d) + '</span>' + (cq > 0 ? '<div class="cell-muted">' + (d > 0 ? "+" : "−") + Math.abs(d / cq * 100).toFixed(1).replace(".", ",") + '%</div>' : "");
+    });
+    var tot = document.getElementById("ackVolTot");
+    if (tot) {
+      var t = ackVolTotals(ackDraft.volumes);
+      tot.innerHTML = 'Giá trị theo hợp đồng <b>' + money(t.hd) + '</b> · theo thực tế <b>' + money(t.tt) + '</b> · chênh lệch <b class="' + (t.diff < 0 ? "late-text" : t.diff > 0 ? "good-text" : "") + '">' + moneySigned(t.diff) + '</b>';
+    }
+  }
+
+  // Làm sạch trước khi lưu: bỏ dòng phát sinh trống, làm tròn số.
+  function ackVolNormalize(vols) {
+    return (vols || []).filter(function (v) { return !v.extra || String(v.name || "").trim() || Number(v.actualQty) || Number(v.price); }).map(function (v) {
+      var o = Object.assign({}, v);
+      o.contractQty = tkRound2(Number(o.contractQty) || 0);
+      o.actualQty = tkRound2(Number(o.actualQty) || 0);
+      o.price = Math.round(Number(o.price) || 0);
+      o.name = String(o.name || "").trim(); o.unit = String(o.unit || "").trim(); o.note = String(o.note || "").trim();
+      o.extra = !!o.extra;
+      return o;
+    });
+  }
+
+  // Bảng KL trên bản in biên bản.
+  function buildAckVolPrintHtml(a) {
+    if (!ackHasVolumes(a)) return "";
+    var isVal = a.printMode === "value", lastGroup = null, colspan = isVal ? 9 : 7;
+    var rows = a.volumes.map(function (v, i) {
+      var g = v.extra ? "Phát sinh ngoài hợp đồng" : (v.group || ""), grp = "";
+      if (g && g !== lastGroup) grp = '<tr class="grp"><td colspan="' + colspan + '">' + escapeHtml(g) + '</td></tr>';
+      lastGroup = g;
+      var d = ackVolDiff(v);
+      var name = (v.code ? '<b>' + escapeHtml(v.code) + '</b> · ' : "") + escapeHtml(v.name || "");
+      var base = '<td class="c">' + (i + 1) + '</td><td>' + name + '</td><td class="c">' + escapeHtml(v.unit || "") + '</td>' +
+        '<td class="num">' + (v.extra ? "—" : fmtQty(v.contractQty)) + '</td><td class="num"><b>' + fmtQty(v.actualQty) + '</b></td>';
+      if (isVal) {
+        var hd = ackVolValue(v, "hd"), tt = ackVolValue(v, "tt");
+        return grp + '<tr>' + base + '<td class="num">' + moneyPlain(v.price) + '</td><td class="num">' + moneyPlain(hd) + '</td><td class="num">' + moneyPlain(tt) + '</td>' +
+          '<td class="num">' + (tt - hd ? moneySignedPlain2(tt - hd) : "0") + '</td></tr>';
+      }
+      return grp + '<tr>' + base + '<td class="num">' + (d ? fmtQtySigned(d) : "0") + '</td><td class="note">' + escapeHtml(v.note || "") + '</td></tr>';
+    }).join("");
+    var t = ackVolTotals(a.volumes);
+    var head = isVal
+      ? '<colgroup><col style="width:4%"><col style="width:22%"><col style="width:5%"><col style="width:7%"><col style="width:7%"><col style="width:13%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup>' +
+        '<thead><tr><th>STT</th><th>Nội dung</th><th>ĐVT</th><th>KL hợp đồng</th><th>KL thực tế</th><th>Đơn giá (đ)</th><th>Giá trị hợp đồng (đ)</th><th>Giá trị thực tế (đ)</th><th>Chênh lệch (đ)</th></tr></thead>'
+      : '<colgroup><col style="width:5%"><col style="width:37%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:18%"></colgroup>' +
+        '<thead><tr><th>STT</th><th>Nội dung</th><th>ĐVT</th><th>KL hợp đồng</th><th>KL thực tế</th><th>Chênh lệch</th><th>Ghi chú</th></tr></thead>';
+    var foot = isVal
+      ? '<tfoot><tr><td colspan="6">Cộng</td><td class="num">' + moneyPlain(t.hd) + '</td><td class="num">' + moneyPlain(t.tt) + '</td><td class="num">' + (t.diff ? moneySignedPlain2(t.diff) : "0") + '</td></tr></tfoot>'
+      : "";
+    var html = '<div class="print-ack-h">Khối lượng nghiệm thu</div><table class="print-prq-vol' + (isVal ? " val" : "") + '">' + head + '<tbody>' + rows + '</tbody>' + foot + '</table>';
+    if (isVal) {
+      html += '<div class="print-ack-text" style="margin-top:8px;">Giá trị nghiệm thu theo khối lượng thực tế: <b>' + money(t.tt) + '</b>' +
+        (t.diff ? ' (' + (t.diff > 0 ? "tăng " : "giảm ") + money(Math.abs(t.diff)) + ' so với hợp đồng)' : "") + '.<br>Bằng chữ: ' + escapeHtml(soThanhChu(t.tt)) + '.</div>';
+    }
+    return html;
+  }
+  function moneySignedPlain2(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + moneyPlain(Math.abs(n)); }
+
   /* ---------- Bản in biên bản nghiệm thu ---------- */
   function printAcceptance(jobId) {
     view.screen = "print";
@@ -4826,11 +5053,12 @@
 
     var page =
       printRunHeadHtml(head, "Ngày nghiệm thu") +
-      '<div class="print-title">Biên bản nghiệm thu</div>' +
+      '<div class="print-title">' + escapeHtml(ackTitle(a)) + '</div>' +
       '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + (job.scope ? " · " + escapeHtml(job.scope) : "") + '</div>' +
       infoHtml +
       '<div class="print-ack-h">Thành phần nghiệm thu</div>' + peopleHtml +
       '<div class="print-ack-h">Nội dung nghiệm thu</div><div class="print-ack-text">' + escapeHtml(a.scopeText || job.scope || "—") + '</div>' +
+      buildAckVolPrintHtml(a) +
       '<div class="print-ack-h">Kết luận</div>' + results +
       defects +
       (a.note ? '<div class="print-ack-h">Ý kiến khác</div><div class="print-ack-text">' + escapeHtml(a.note) + '</div>' : "") +
@@ -5160,7 +5388,7 @@
     Object.keys(prqVol ? prqVol.snap : {}).forEach(function (id) {
       if (seen[id]) return;
       var v = prqVol.snap[id];
-      rows.push({ itemId: id, group: "", code: v.code || "", name: (v.name || "—") + " (không còn trong hạng mục đã gắn)", detail: "", unit: v.unit || "", contractQty: tkRound2(Number(v.contractQty) || 0), price: Math.round(Number(v.price) || 0), gone: true });
+      rows.push({ itemId: id, group: "", code: v.code || "", name: (v.name || "—") + (v.extra ? " (phát sinh theo biên bản)" : " (không còn trong hạng mục đã gắn)"), detail: "", unit: v.unit || "", contractQty: tkRound2(Number(v.contractQty) || 0), price: Math.round(Number(v.price) || 0), gone: true, extra: !!v.extra });
     });
     return rows;
   }
@@ -5173,7 +5401,7 @@
       var d = prqVol.map[r.itemId];
       if (!d || !(tkRound2(d.qty) > 0)) return;
       out.push({ itemId: r.itemId, code: r.code, name: r.gone ? (prqVol.snap[r.itemId].name || "") : r.name, unit: r.unit,
-        price: Math.round(d.price != null ? d.price : r.price), qty: tkRound2(d.qty), contractQty: r.contractQty });
+        price: Math.round(d.price != null ? d.price : r.price), qty: tkRound2(d.qty), contractQty: r.contractQty, extra: !!r.extra });
     });
     return out;
   }
@@ -5203,6 +5431,7 @@
       var rows = prqVolRows(job);
       html += '<div class="prq-vol-tools"><button type="button" class="btn btn-sm" id="prqVolFill">Điền hết phần còn lại</button>' +
         '<button type="button" class="btn btn-sm" id="prqVolClear">Xoá khối lượng kỳ này</button>' +
+        (job.acceptance && ackAppliesWarranty(job.acceptance) && ackHasVolumes(job.acceptance) ? '<button type="button" class="btn btn-sm" id="prqVolFromAck">Lấy theo biên bản nghiệm thu</button>' : "") +
         '<span class="cell-muted">Đơn giá lấy từ báo giá, sửa được theo đơn giá hợp đồng.</span></div>' +
         '<div class="table-scroll prq-vol"><table><thead><tr><th>#</th><th>Nội dung</th><th>ĐVT</th><th class="num">KL hợp đồng</th><th class="num">Kỳ trước</th><th class="num">Kỳ này</th><th class="num">Lũy kế</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th></tr></thead><tbody>' +
         rows.map(function (r, i) {
@@ -5249,6 +5478,20 @@
       });
       paintPrqVolumes(); refreshPrqSummary();
     };
+    var fromAck = document.getElementById("prqVolFromAck");
+    if (fromAck) fromAck.onclick = function () {
+      // KL kỳ này = KL thực tế nghiệm thu − lũy kế ở các phiếu khác (không âm); đơn giá theo biên bản.
+      Object.keys(prqVol.map).forEach(function (id) { prqVol.map[id].qty = 0; });
+      var link = contractLinkedSection(job.contract), inSec = {};
+      if (link) link.section.groups.forEach(function (g) { g.items.forEach(function (it) { inSec[it.id] = true; }); });
+      job.acceptance.volumes.forEach(function (v) {
+        var q = Math.max(0, tkRound2((Number(v.actualQty) || 0) - (done.all[v.itemId] || 0)));
+        prqVol.map[v.itemId] = { qty: q, price: Math.round(Number(v.price) || 0) };
+        if (!inSec[v.itemId]) prqVol.snap[v.itemId] = { itemId: v.itemId, code: v.code || "", name: v.name || "", unit: v.unit || "", price: Math.round(Number(v.price) || 0), contractQty: tkRound2(Number(v.contractQty) || 0), extra: !!v.extra };
+      });
+      paintPrqVolumes(); refreshPrqSummary();
+      toast("Đã điền khối lượng kỳ này theo biên bản " + (job.acceptance.no || "") + ".");
+    };
     document.getElementById("prqVolClear").onclick = function () {
       Object.keys(prqVol.map).forEach(function (id) { prqVol.map[id].qty = 0; });
       paintPrqVolumes(); refreshPrqSummary();
@@ -5264,7 +5507,7 @@
       var d = prqVol.map[r.itemId] || {}, qty = tkRound2(d.qty || 0), price = d.price != null ? d.price : r.price;
       var amt = Math.round(qty * price);
       total += amt;
-      var cum = tkRound2((done.prev[r.itemId] || 0) + qty), over = tkRound2((done.all[r.itemId] || 0) + qty) > r.contractQty;
+      var cum = tkRound2((done.prev[r.itemId] || 0) + qty), over = !r.extra && tkRound2((done.all[r.itemId] || 0) + qty) > r.contractQty;
       var cumEl = document.querySelector('[data-vol-cum="' + r.itemId + '"]'), amtEl = document.querySelector('[data-vol-amt="' + r.itemId + '"]');
       if (cumEl) {
         cumEl.innerHTML = fmtQty(cum) + (r.contractQty > 0 ? '<div class="cell-muted">' + Math.round(cum / r.contractQty * 100) + '%</div>' : "");
@@ -7104,12 +7347,23 @@
     var html =
       '<div class="print-toolbar no-print">' +
         '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
+        (isAck && ackHasVolumes(jobPrint.acceptance) ? '<div class="print-mode-switch">' +
+          '<button class="btn btn-sm' + (jobPrint.acceptance.printMode !== "value" ? " on" : "") + '" data-ack-mode="qty">Nghiệm thu khối lượng</button>' +
+          '<button class="btn btn-sm' + (jobPrint.acceptance.printMode === "value" ? " on" : "") + '" data-ack-mode="value">Nghiệm thu giá trị thanh toán</button></div>' : "") +
         '<div class="print-hint">Bấm <b>' + shortcut + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
       '</div>' +
       (isAck ? buildAcceptancePrintHtml(jobPrint) : isPrq ? buildPayReqPrintHtml(jobPrint, prqPay) : buildPrintHtml(q));
 
     document.getElementById("content").innerHTML = html;
     document.getElementById("crumbCurrent").textContent = isAck ? "Xem trước biên bản nghiệm thu" : isPrq ? "Xem trước phiếu đề nghị thanh toán" : "Xem trước bản in";
+    document.querySelectorAll("[data-ack-mode]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (jobPrint.acceptance.printMode === b.dataset.ackMode) return;
+        jobPrint.acceptance.printMode = b.dataset.ackMode;
+        saveState();
+        renderPrintPreview();
+      });
+    });
     document.getElementById("btnBackFromPrint").addEventListener("click", function () {
       if (isAck || isPrq) { view.screen = "contractors"; view.ctab = isAck ? "acceptance" : "payreq"; renderContractorsScreen(); renderNav(); return; }
       view.screen = "detail";
