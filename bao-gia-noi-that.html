@@ -920,7 +920,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-kl1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-fix1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1102,6 +1102,7 @@
   // (latency compensation) rồi bắn LẦN NỮA khi server xác nhận serverTimestamp — nếu cứ thế vẽ lại
   // cả màn thì đang gõ dở là con trỏ văng khỏi ô. Xem thêm ở chỗ đăng ký onSnapshot.
   var inflightWrites = 0, firstPaintDone = false, repaintPending = false;
+  var remotePending = null; // dữ liệu thay đổi thật từ nơi khác, chờ người dùng rời ô đang gõ mới áp vào
   // Chốt chặn cuối cho lỗi "gõ 1 ký tự là văng khỏi ô": đang đặt con trỏ trong một ô nhập liệu thì
   // KHÔNG vẽ lại #content (vì vẽ lại = thay innerHTML = huỷ luôn ô đang gõ). Hoãn lại, khi nào rời ô
   // hẳn mới vẽ. Đây là lớp bắt mọi nguyên nhân, kể cả nguyên nhân chưa lường tới.
@@ -1122,6 +1123,10 @@
     if (!repaintPending || pointerDown) return;
     if (typingInsideContent()) return; // vẫn đang gõ ở ô khác
     repaintPending = false;
+    // Áp dữ liệu từ nơi khác đã hoãn — trừ khi mình còn thay đổi chưa gửi / đang gửi (dữ liệu trong máy mới hơn,
+    // server sẽ bắn lại bản mới sau khi nhận bản ghi của mình).
+    if (remotePending && !pendingSave && inflightWrites === 0) applyRemoteData(remotePending);
+    remotePending = null;
     renderCurrentScreen();
   }
   (function watchBlurToRepaint() {
@@ -1239,6 +1244,30 @@
     renderNav();
   }
 
+  function normalizeRemoteData(d) {
+    return {
+      quotes: Array.isArray(d.quotes) ? d.quotes : [],
+      catalog: (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice(),
+      projects: (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice(),
+      customers: Array.isArray(d.customers) ? d.customers : [],
+      contractors: Array.isArray(d.contractors) ? d.contractors : [],
+      jobs: Array.isArray(d.contractorJobs) ? d.contractorJobs : [],
+      issues: Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [],
+      cal: Object.assign({}, CALENDAR_CFG_DEFAULT, (d.calendarSync && typeof d.calendarSync === "object") ? d.calendarSync : {})
+    };
+  }
+  function applyRemoteData(nd) {
+    state.quotes = nd.quotes;
+    PRICE_CATALOG = nd.catalog;
+    PROJECTS = nd.projects;
+    CUSTOMERS = nd.customers;
+    CONTRACTORS = nd.contractors;
+    CONTRACTOR_JOBS = nd.jobs;
+    WARRANTY_ISSUES = nd.issues;
+    CALENDAR_CFG = nd.cal;
+    if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
+  }
+
   function startApp() {
     showLoading("Đang tải dữ liệu…");
     if (docUnsub) { docUnsub(); docUnsub = null; }
@@ -1258,37 +1287,24 @@
         // Chuẩn hoá TRƯỚC rồi mới so với thứ đang hiện trên màn: câu hỏi đúng phải là "có gì khác cái
         // đang hiện không", chứ không phải "có phải bản mình vừa ghi không". So với bản vừa ghi thì
         // Firestore chuẩn hoá lại dữ liệu (bỏ field rỗng...) là lệch vân tay → tưởng nhầm có thay đổi.
-        var nQuotes = Array.isArray(d.quotes) ? d.quotes : [];
-        var nCatalog = (Array.isArray(d.priceCatalog) && d.priceCatalog.length) ? d.priceCatalog : DEFAULT_PRICE_CATALOG.slice();
-        var nProjects = (Array.isArray(d.projects) && d.projects.length) ? d.projects : DEFAULT_PROJECTS.slice();
-        var nCustomers = Array.isArray(d.customers) ? d.customers : [];
-        var nContractors = Array.isArray(d.contractors) ? d.contractors : [];
-        var nJobs = Array.isArray(d.contractorJobs) ? d.contractorJobs : [];
-        var nIssues = Array.isArray(d.warrantyIssues) ? d.warrantyIssues : [];
-        var nCal = Object.assign({}, CALENDAR_CFG_DEFAULT, (d.calendarSync && typeof d.calendarSync === "object") ? d.calendarSync : {});
-        var incomingJson = JSON.stringify([nQuotes, nCatalog, nProjects, nCustomers, nContractors, nJobs, nIssues, nCal]);
+        var nd = normalizeRemoteData(d);
+        var incomingJson = JSON.stringify([nd.quotes, nd.catalog, nd.projects, nd.customers, nd.contractors, nd.jobs, nd.issues, nd.cal]);
         var onScreenJson = JSON.stringify([state.quotes, PRICE_CATALOG, PROJECTS, CUSTOMERS, CONTRACTORS, CONTRACTOR_JOBS, WARRANTY_ISSUES, CALENDAR_CFG]);
-        state.quotes = nQuotes;
-        PRICE_CATALOG = nCatalog;
-        PROJECTS = nProjects;
-        CUSTOMERS = nCustomers;
-        CONTRACTORS = nContractors;
-        CONTRACTOR_JOBS = nJobs;
-        WARRANTY_ISSUES = nIssues;
-        CALENDAR_CFG = nCal;
-        if (view.editingId && !state.quotes.some(function (q) { return q.id === view.editingId; })) { view.screen = "list"; view.editingId = null; }
-        // Không khác gì cái đang hiện → không việc gì phải vẽ lại, và cũng KHÔNG hẹn vẽ lại.
-        if (firstPaintDone && incomingJson === onScreenJson) return;
-        // Dữ liệu có khác thật, nhưng do CHÍNH MÌNH vừa ghi (Firestore dội bản ghi của mình về):
-        // màn hình đã đúng sẵn, vẽ lại chỉ tổ huỷ ô đang gõ → bỏ qua. Lần vẽ ĐẦU TIÊN luôn phải chạy,
-        // nếu không màn hình sẽ trắng.
-        // Phải kiểm cả inflightWrites chứ không chỉ hasPendingWrites: Firestore giải quyết promise của
-        // set() TRƯỚC rồi mới bắn snapshot xác nhận (bài học lần vá hụt đầu tiên).
+        // QUAN TRỌNG: chỉ thay dữ liệu trong máy khi THẬT SỰ cần. Màn hình đang mở giữ tham chiếu tới chính các
+        // object này (vd. báo giá đang sửa) — thay bằng bản mới mà không vẽ lại thì mọi thứ gõ tiếp sau đó ghi vào
+        // object cũ đã bị bỏ, bấm "Thêm dòng / Thêm hạng mục" (vẽ lại) là mất sạch. Đó là lỗi Nam gặp 2026-10-01.
         if (firstPaintDone) {
-          if (snap.metadata.hasPendingWrites || inflightWrites > 0) return;
-          // Thay đổi thật từ nơi khác mà mình đang gõ dở: hẹn vẽ lại sau, đừng cướp ô đang gõ.
-          if (typingInsideContent()) { repaintPending = true; return; }
+          // Giống hệt cái đang có → không làm gì cả, giữ nguyên object.
+          if (incomingJson === onScreenJson) { remotePending = null; return; }
+          // Bản dội về của chính mình, hoặc mình còn thay đổi chưa gửi: dữ liệu trong máy MỚI HƠN bản này → không đè.
+          // Phải kiểm cả inflightWrites chứ không chỉ hasPendingWrites: Firestore giải quyết promise của
+          // set() TRƯỚC rồi mới bắn snapshot xác nhận (bài học lần vá hụt đầu tiên).
+          if (snap.metadata.hasPendingWrites || inflightWrites > 0 || pendingSave) return;
+          // Thay đổi thật từ nơi khác mà mình đang gõ dở / đang giữ chuột: hoãn cả việc áp dữ liệu lẫn vẽ lại.
+          if (typingInsideContent() || pointerDown) { remotePending = nd; repaintPending = true; return; }
         }
+        applyRemoteData(nd);
+        remotePending = null;
         firstPaintDone = true;
         hideAuthOverlay();
         renderUserFoot();
@@ -5168,7 +5184,7 @@
     };
     document.getElementById("prqVolFill").onclick = function () {
       prqVolRows(job).forEach(function (r) {
-        if (r.gone) return;
+        if (r.gone || (!r.price && !r.code && r.name === "(chưa đặt tên)")) return;   // bỏ dòng trống chưa điền
         var left = tkRound2(r.contractQty - (done.all[r.itemId] || 0));
         var d = prqVol.map[r.itemId] || (prqVol.map[r.itemId] = {});
         if (left > 0 && !(d.qty > 0)) d.qty = left;
