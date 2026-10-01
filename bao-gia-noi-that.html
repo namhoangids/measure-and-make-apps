@@ -696,6 +696,11 @@
   .print-toolbar { flex-wrap: wrap; }
   .dv-photo-msg { font-size: 12.5px; margin: 0 0 8px; color: var(--ink-mute); }
   .dv-photo-msg.err { color: #fff; background: #B5473F; padding: 8px 10px; border-radius: 8px; }
+  .pdf-status { font-size: 13px; line-height: 1.6; word-break: break-word; }
+  .pdf-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .pdf-actions .btn { justify-content: center; padding: 11px 14px; font-size: 14px; }
+  .pdf-warn { margin-top: 8px; color: #fff; background: #B5473F; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; }
+  .pdf-img-ph { display: flex; align-items: center; justify-content: center; background: #EEECE8; color: #8C8178; font-size: 11px; border-radius: 3px; }
   .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
   .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
   .toolbar-right { flex-wrap: wrap; }
@@ -1023,7 +1028,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-nk2"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-pdf1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -6375,6 +6380,217 @@
     document.getElementById("btnBackFromPrint").addEventListener("click", function () { view.screen = "diary"; view.diaryDate = ""; renderDiaryScreen(); renderNav(); });
   }
 
+  /* ===================== XUẤT FILE PDF NGAY TRONG APP (tải về / chia sẻ) ===================== */
+  // In bằng trình duyệt điện thoại (Safari iPhone) hiển thị lệch so với máy tính (không lặp header, không có footer,
+  // tự co giãn…). Nên app TỰ DỰNG file PDF: chụp từng tờ A4 của màn xem trước (đúng bố cục bản máy tính, rộng 794px)
+  // bằng html2canvas rồi ghép vào jsPDF. Tờ dài hơn 1 trang thì cắt ở ranh giới dòng/khối (không cắt ngang chữ),
+  // trang tiếp theo lặp lại header. Footer "measure & make · Page X/Y" vẽ bằng jsPDF.
+  // Chia sẻ phải là 1 cú chạm MỚI sau khi tạo xong (iOS chặn navigator.share nếu cú chạm đã quá vài giây).
+  var PDF_LIBS = [
+    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+  ];
+  var pdfLibsPromise = null, pdfResult = null;
+  function loadScriptOnce(url) {
+    return new Promise(function (resolve, reject) {
+      if (document.querySelector('script[data-src="' + url + '"]')) { resolve(); return; }
+      var sc = document.createElement("script");
+      sc.src = url; sc.dataset.src = url; sc.onload = resolve;
+      sc.onerror = function () { sc.remove(); reject(new Error("Không tải được thư viện tạo PDF (kiểm tra mạng).")); };
+      document.head.appendChild(sc);
+    });
+  }
+  function loadPdfLibs() {
+    if (!pdfLibsPromise) pdfLibsPromise = PDF_LIBS.reduce(function (p, u) { return p.then(function () { return loadScriptOnce(u); }); }, Promise.resolve())
+      .catch(function (e) { pdfLibsPromise = null; throw e; });
+    return pdfLibsPromise;
+  }
+  function isPhoneLike() { return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+  function viNoMark(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D"); }
+  function pdfFileName() {
+    var t = (document.querySelector("#content .print-doc .print-title") || {}).textContent || "Tai lieu";
+    var meta = (document.querySelector("#content .print-doc .print-doc-meta div") || {}).textContent || "";
+    var code = meta.replace(/^Số:\s*/, "").trim();
+    var sub = (document.querySelector("#content .print-doc .print-subtitle") || {}).textContent || "";
+    var base = [t, code && code !== "—" ? code : "", sub.split("·")[0]].filter(Boolean).join("_");
+    return viNoMark(base).replace(/[^A-Za-z0-9_-]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").slice(0, 90) + ".pdf";
+  }
+  // Ảnh ngoài (Firebase Storage) chỉ vẽ được vào canvas nếu máy chủ cho phép (CORS). Thử trước; ảnh nào không
+  // được thì thay bằng ô xám ghi chú, và báo cho Nam biết.
+  function probeImage(src) {
+    return new Promise(function (resolve) {
+      if (/^data:/.test(src)) { resolve(true); return; }
+      var im = new Image(); im.crossOrigin = "anonymous";
+      var done = function (ok) { im.onload = im.onerror = null; resolve(ok); };
+      im.onload = function () { try { var c = document.createElement("canvas"); c.width = 2; c.height = 2; var g = c.getContext("2d"); g.drawImage(im, 0, 0, 2, 2); c.toDataURL(); done(true); } catch (e) { done(false); } };
+      im.onerror = function () { done(false); };
+      setTimeout(function () { done(false); }, 12000);
+      im.src = src;
+    });
+  }
+
+  function makePdfFromPreview(onProgress) {
+    var src = document.querySelector("#content .print-doc");
+    if (!src) return Promise.reject(new Error("Không có bản xem trước để xuất."));
+    var PAGE_W = 794, PAGE_H = 1123, MARGIN_B = 60;          // A4 ở 96dpi; lề dưới 16mm như .print-page
+    var holder = document.createElement("div");
+    holder.className = "pdf-holder";
+    holder.style.cssText = "position:fixed;left:0;top:0;width:" + PAGE_W + "px;z-index:-9999;pointer-events:none;background:#fff;";
+    var clone = src.cloneNode(true);
+    clone.classList.remove("fit"); clone.style.zoom = ""; clone.style.width = PAGE_W + "px"; clone.style.margin = "0";
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+    var pages = Array.prototype.slice.call(clone.querySelectorAll(".print-page"));
+    pages.forEach(function (pg) { pg.style.cssText += ";width:" + PAGE_W + "px;max-width:none;margin:0;border:none;border-radius:0;box-shadow:none;"; });
+    var badImgs = 0;
+    var imgs = Array.prototype.slice.call(clone.querySelectorAll("img"));
+    return loadPdfLibs().then(function () {
+      onProgress && onProgress("Đang kiểm tra ảnh…");
+      return Promise.all(imgs.map(function (im) {
+        return probeImage(im.getAttribute("src") || "").then(function (ok) {
+          if (ok) { im.setAttribute("crossorigin", "anonymous"); return; }
+          badImgs++;
+          var ph = document.createElement("div");
+          ph.className = "pdf-img-ph";
+          ph.textContent = "Ảnh (xem trong app)";
+          ph.style.height = (im.getBoundingClientRect().height || 120) + "px";
+          im.replaceWith(ph);
+        });
+      }));
+    }).then(function () {
+      var jsPDF = window.jspdf.jsPDF;
+      var pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+      var sheets = [];                                     // mỗi phần tử = canvas 1 trang giấy
+      var chain = Promise.resolve();
+      pages.forEach(function (pg, pi) {
+        chain = chain.then(function () {
+          onProgress && onProgress("Đang dựng trang " + (pi + 1) + "/" + pages.length + "…");
+          var h = pg.scrollHeight;
+          var scale = Math.min(2, Math.sqrt(15000000 / (PAGE_W * Math.max(h, PAGE_H))));   // giới hạn bộ nhớ canvas iPhone
+          return window.html2canvas(pg, { scale: scale, useCORS: true, backgroundColor: "#ffffff", windowWidth: 1280, logging: false }).then(function (cv) {
+            var s = cv.width / PAGE_W;
+            var top = pg.getBoundingClientRect().top;
+            var rh = pg.querySelector(".print-runhead");
+            var headH = rh ? Math.ceil(rh.getBoundingClientRect().bottom - top + 24) : 0;
+            // Các điểm được phép cắt trang: đáy của dòng bảng / khối chữ / ảnh / khối ký
+            var cuts = [];
+            pg.querySelectorAll("tr, li, figure, .print-ack-text, .print-ack-signs, .ack-line, .print-dv-job, .print-ack-info, .print-notes .nt-item, .print-signoff, .print-total-block, table")
+              .forEach(function (el) { if (el.closest(".print-ack-signs") && !el.classList.contains("print-ack-signs")) return; cuts.push(Math.round(el.getBoundingClientRect().bottom - top)); });
+            // Thêm đáy các khối cấp 1–3 của tờ (vd. dòng "Cộng", khối tổng) — trừ tiêu đề, để tiêu đề không bị bỏ lại cuối trang.
+            pg.querySelectorAll(":scope > *, :scope > * > *, :scope > * > * > *").forEach(function (el) {
+              if (/^(H\d|THEAD|TBODY|TFOOT)$/.test(el.tagName) || /title|head|-h\b|print-ack-h|subtitle/.test(el.className || "")) return;
+              if (el.closest(".print-ack-signs") && !el.classList.contains("print-ack-signs")) return;
+              var b = el.getBoundingClientRect(); if (b.height > 0) cuts.push(Math.round(b.bottom - top));
+            });
+            cuts.sort(function (a, b) { return a - b; });
+            var inkEnd = lastInkY(cv) / s + 6;                   // đáy nội dung thật (bỏ khoảng trắng min-height 297mm)
+            var total = Math.ceil(cv.height / s), y = 0, first = true;
+            for (var guard = 0; guard < 40; guard++) {
+              var offsetTop = first ? 0 : headH;              // trang tiếp: chừa chỗ lặp header
+              var end = y + (PAGE_H - MARGIN_B - offsetTop);
+              if (end >= total || inkEnd <= end) end = Math.min(total, Math.max(inkEnd, y + 1));   // phần còn lại vừa 1 trang → khỏi cắt
+              else {
+                var best = 0;
+                cuts.forEach(function (c) { if (c > y + 60 && c <= end) best = c; });
+                if (best) end = best;
+              }
+              var sheet = document.createElement("canvas");
+              sheet.width = Math.round(PAGE_W * s); sheet.height = Math.round(PAGE_H * s);
+              var g = sheet.getContext("2d");
+              g.fillStyle = "#ffffff"; g.fillRect(0, 0, sheet.width, sheet.height);
+              if (!first && headH) g.drawImage(cv, 0, 0, cv.width, Math.round(headH * s), 0, 0, sheet.width, Math.round(headH * s));
+              var sy = Math.round(y * s), sh = Math.min(cv.height - sy, Math.round((end - y) * s));
+              if (sh > 0) g.drawImage(cv, 0, sy, cv.width, sh, 0, Math.round(offsetTop * s), sheet.width, sh);
+              sheets.push(sheet);
+              y = end; first = false;
+              // hết nội dung, hoặc phần còn lại chỉ là khoảng trắng (min-height 297mm của tờ xem trước)
+              if (y >= total - 4 || y >= inkEnd - 2 || isBlankBelow(cv, Math.round(y * s))) break;
+            }
+          });
+        });
+      });
+      return chain.then(function () {
+        onProgress && onProgress("Đang ghép file PDF…");
+        sheets.forEach(function (sh, i) {
+          if (i) pdf.addPage();
+          pdf.addImage(sh.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, 210, 297, undefined, "FAST");
+          pdf.setFontSize(6); pdf.setTextColor(79, 95, 104);
+          pdf.text("measure & make", 12, 290);
+          pdf.text("Page " + (i + 1) + "/" + sheets.length, 198, 290, { align: "right" });
+        });
+        var blob = pdf.output("blob");
+        return { blob: blob, name: pdfFileName(), pages: sheets.length, badImgs: badImgs };
+      });
+    }).then(function (r) { holder.remove(); return r; }, function (e) { holder.remove(); throw e; });
+  }
+  // Dòng thấp nhất còn có nét (không trắng) của canvas, tính bằng pixel canvas.
+  function lastInkY(cv) {
+    try {
+      var g = cv.getContext("2d"), w = cv.width;
+      for (var yy = cv.height - 1; yy >= 0; yy -= 2) {
+        var row = g.getImageData(0, yy, w, 1).data;
+        for (var i = 0; i < row.length; i += 12) if (row[i] < 240 || row[i + 1] < 240 || row[i + 2] < 240) return yy + 1;
+      }
+      return 0;
+    } catch (e) { return cv.height; }
+  }
+  // Từ dòng y trở xuống toàn màu trắng? (bỏ trang trắng do min-height 297mm của tờ xem trước)
+  function isBlankBelow(cv, y) {
+    try {
+      var g = cv.getContext("2d"), h = cv.height - y; if (h <= 0) return true;
+      var step = Math.max(1, Math.floor(h / 60)), w = cv.width;
+      for (var yy = y; yy < cv.height; yy += step) {
+        var row = g.getImageData(0, yy, w, 1).data;
+        for (var i = 0; i < row.length; i += 16) if (row[i] < 245 || row[i + 1] < 245 || row[i + 2] < 245) return false;
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function openPdfExport() {
+    var ov = document.getElementById("pdfOverlay");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "pdfOverlay"; ov.className = "modal-overlay"; ov.style.zIndex = "90";
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = '<div class="modal-panel" style="max-width:440px;"><div class="modal-head"><h3>Xuất file PDF</h3><button class="icon-btn" id="pdfClose" type="button">' + iconClose() + '</button></div>' +
+      '<div class="modal-body"><div id="pdfStatus" class="pdf-status">Đang chuẩn bị…</div><div id="pdfActions" class="pdf-actions"></div></div></div>';
+    ov.hidden = false;
+    var closeIt = function () { ov.hidden = true; };
+    document.getElementById("pdfClose").onclick = closeIt;
+    var st = document.getElementById("pdfStatus");
+    pdfResult = null;
+    makePdfFromPreview(function (t) { st.textContent = t; }).then(function (r) {
+      pdfResult = r;
+      var kb = r.blob.size / 1024, size = kb > 1024 ? (kb / 1024).toFixed(1).replace(".", ",") + " MB" : Math.round(kb) + " KB";
+      st.innerHTML = '<b>' + escapeHtml(r.name) + '</b><br>' + r.pages + ' trang · ' + size +
+        (r.badImgs ? '<div class="pdf-warn">' + r.badImgs + ' ảnh chưa đưa được vào PDF (Firebase Storage chưa bật CORS cho trình duyệt) — đã để ô "Ảnh (xem trong app)". Báo Claude để gửi hướng dẫn bật.</div>' : "");
+      var file = null;
+      try { file = new File([r.blob], r.name, { type: "application/pdf" }); } catch (e) {}
+      var canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+      var acts = document.getElementById("pdfActions");
+      acts.innerHTML = (canShare ? '<button class="btn btn-primary" id="pdfShare" type="button">' + iconExternal() + ' Chia sẻ (Zalo, Mail, Lưu vào Tệp…)</button>' : "") +
+        '<button class="btn' + (canShare ? "" : " btn-primary") + '" id="pdfDownload" type="button">' + iconDownload() + ' Tải về máy</button>' +
+        '<button class="btn" id="pdfOpen" type="button">Mở xem</button>';
+      if (canShare) document.getElementById("pdfShare").onclick = function () {
+        navigator.share({ files: [file], title: r.name.replace(/\.pdf$/, "") }).catch(function (e) { if (e && e.name !== "AbortError") toast("Không chia sẻ được: " + e.message + " — dùng Tải về máy."); });
+      };
+      document.getElementById("pdfDownload").onclick = function () {
+        var a = document.createElement("a"), url = URL.createObjectURL(r.blob);
+        a.href = url; a.download = r.name; document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 30000);
+      };
+      document.getElementById("pdfOpen").onclick = function () {
+        var url = URL.createObjectURL(r.blob);
+        var w = window.open(url, "_blank");
+        if (!w) location.href = url;
+      };
+    }, function (e) {
+      st.innerHTML = '<span class="pdf-warn">Không tạo được PDF: ' + escapeHtml(e.message || String(e)) + '</span>';
+    });
+  }
+
   /* ===================== BÁO CÓ BẢN MỚI ===================== */
   // Trình duyệt (nhất là Safari iPhone) hay giữ bản app cũ nên tính năng mới "không thấy đâu" cho tới khi F5.
   // Vài phút một lần và mỗi lần quay lại tab, app tải lại CHÍNH file của nó (bỏ qua bộ nhớ đệm) và so APP_BUILD.
@@ -8111,12 +8327,13 @@
   window.addEventListener("resize", function () { if (view.screen === "print") fitPrintPreview(); });
   function printToolbarHtml() {
     var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    var isMac = /Mac/.test(navigator.platform || "");
-    var hint = isIOS ? 'Bấm <b>In / Lưu PDF</b> → trong màn in, chạm 2 ngón mở rộng bản xem trước rồi bấm nút Chia sẻ để lưu PDF.'
-      : 'Bấm <b>In / Lưu PDF</b> (hoặc <b>' + (isMac ? "Cmd + P" : "Ctrl + P") + '</b>), chọn "Lưu thành PDF" (Save as PDF).';
+    var isMac = /Mac/.test(navigator.platform || ""), phone = isPhoneLike();
+    var hint = phone ? 'Bấm <b>Xuất PDF</b> để tải file về hoặc chia sẻ qua Zalo, Mail, Lưu vào Tệp…'
+      : 'Bấm <b>Tải file PDF</b> để lưu thẳng file, hoặc <b>In</b> (' + (isMac ? "Cmd + P" : "Ctrl + P") + ') để in ra giấy.';
     return '<div class="print-toolbar no-print">' +
       '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
-      '<button class="btn btn-primary" id="btnDoPrint" type="button">' + iconDownload() + ' In / Lưu PDF</button>' +
+      '<button class="btn btn-primary" id="btnMakePdf" type="button">' + iconDownload() + (phone ? ' Xuất PDF' : ' Tải file PDF') + '</button>' +
+      '<button class="btn" id="btnDoPrint" type="button">In</button>' +
       '<!--MODE-->' +
       '<div class="print-hint">' + hint + '</div>' +
     '</div>';
@@ -8124,6 +8341,8 @@
   function wirePrintToolbar() {
     var b = document.getElementById("btnDoPrint");
     if (b) b.onclick = function () { try { window.print(); } catch (e) { toast("Trình duyệt không mở được hộp thoại in — dùng Ctrl + P."); } };
+    var mk = document.getElementById("btnMakePdf");
+    if (mk) mk.onclick = openPdfExport;
     fitPrintPreview();
   }
 
