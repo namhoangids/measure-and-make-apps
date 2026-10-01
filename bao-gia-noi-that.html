@@ -569,7 +569,32 @@
   .print-prq-tbl td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 34%; }
   .print-prq-tbl tr.b td { font-weight: 700; }
   .print-prq-tbl tr.hi td { font-weight: 700; background: #FDEEE6; border-bottom: 1.5px solid var(--print-orange); }
-  .print-prq-amount { font-size: 22px; font-weight: 700; color: var(--print-orange); margin: 4px 0 4px; font-variant-numeric: tabular-nums; }
+  .prq-vol-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; margin-bottom: 8px; cursor: pointer; }
+  .prq-vol-toggle input { width: auto; accent-color: var(--accent); }
+  .prq-vol-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+  .prq-vol { border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 12px; max-height: 440px; overflow: auto; }
+  .prq-vol table { width: 100%; min-width: 840px; border-collapse: collapse; font-size: 12.5px; }
+  .prq-vol th, .prq-vol td { padding: 6px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-soft); }
+  .prq-vol thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); font-size: 11px; }
+  .prq-vol .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .prq-vol input { width: 80px; text-align: right; padding: 4px 6px; font-size: 12.5px; font-family: inherit; border-radius: 6px; border: 1px solid var(--border); background: var(--paper); color: var(--ink); outline: none; }
+  .prq-vol input:focus { border-color: var(--accent); }
+  .prq-vol input.price { width: 112px; }
+  .prq-vol tr.prq-vol-grp td { font-weight: 700; background: var(--zebra); }
+  .prq-vol tr.gone td { opacity: .65; }
+  .prq-vol tfoot td { font-weight: 700; border-bottom: none; position: sticky; bottom: 0; background: var(--surface); }
+  .prq-vol-detail { font-size: 11.5px; }
+  @media (max-width: 640px) { .prq-vol-detail { display: none; } .prq-vol table { min-width: 760px; } }
+  .print-prq-vol { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11.5px; margin-top: 6px; }
+  .print-prq-vol thead th { background: transparent; font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; text-align: center; vertical-align: bottom; padding: 5px 3px 7px; border: none; border-bottom: var(--print-hair) solid var(--print-orange); color: #62707A; white-space: normal; }
+  .print-prq-vol td { padding: 4px 3px; border: none; border-bottom: 1px solid var(--print-dash); vertical-align: top; overflow-wrap: anywhere; }
+  .print-prq-vol td.num { text-align: right; white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; padding-left: 6px; }
+  .print-prq-vol td.c { text-align: center; }
+  .print-prq-vol tbody tr:nth-child(even) td { background: #FBF4EF; }
+  .print-prq-vol tr { break-inside: avoid; }
+  .print-prq-vol tfoot td { font-weight: 700; padding-top: 6px; border-bottom: none; }
+  .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
+  .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
   .toolbar-right { flex-wrap: wrap; }
   @media (max-width: 640px) {
     .toolbar .tabs { flex-wrap: wrap; width: 100%; }
@@ -895,7 +920,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-09-25-pq1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-kl1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1789,6 +1814,16 @@
     add("Dot thanh toan", ctrJobs.reduce(function (acc, j) {
       contractInfo(j).pays.forEach(function (x) {
         acc.push(Object.assign(jobLabel(j), { "Đợt": x.pay.label || "", "Loại": PAY_KINDS[x.pay.kind] || "", "Số tiền": x.amount, "Hạn": x.pay.dueDate || "", "Ngày trả": x.pay.paidDate || "", "Trạng thái": PAY_STATUS[x.status].label, "Số phiếu đề nghị": x.pay.request ? (x.pay.request.no || "") : "", "Ngày lập phiếu": x.pay.request ? (x.pay.request.date || "") : "", "Trạng thái phiếu": x.pay.request ? (PRQ_STATUS[x.pay.request.status] || PRQ_STATUS.draft).label : "" }));
+      });
+      return acc;
+    }, []));
+    add("Khoi luong thuc hien", ctrJobs.reduce(function (acc, j) {
+      (j.contract.payments || []).forEach(function (p) {
+        if (!prqHasVolumes(p.request)) return;
+        p.request.volumes.forEach(function (v) {
+          acc.push(Object.assign(jobLabel(j), { "Đợt": p.label || "", "Số phiếu": p.request.no || "", "Mã": v.code || "", "Nội dung": v.name || "", "ĐVT": v.unit || "",
+            "KL hợp đồng": Number(v.contractQty) || 0, "KL kỳ này": Number(v.qty) || 0, "Đơn giá": Number(v.price) || 0, "Thành tiền": prqVolLineAmount(v) }));
+        });
       });
       return acc;
     }, []));
@@ -3801,7 +3836,9 @@
     var payable = current - retentionAmt;                 // phần trả dần theo các đợt (chưa gồm tiền giữ lại)
     var today = todayIso(), scheduled = 0, paid = 0, nextDue = null, overdueAmt = 0, soonAmt = 0;
     var pays = (c.payments || []).map(function (p) {
-      var amount = p.mode === "percent" ? Math.round(current * (Number(p.value) || 0) / 100) : Math.round(Number(p.value) || 0);
+      var planned = p.mode === "percent" ? Math.round(current * (Number(p.value) || 0) / 100) : Math.round(Number(p.value) || 0);
+      var byVolume = prqHasVolumes(p.request);       // có phiếu đề nghị nhập khối lượng thực hiện → tiền theo khối lượng
+      var amount = byVolume ? prqVolumeAmount(p.request) : planned;
       var st = "planned", days = null;
       if (isoParts(p.paidDate)) st = "paid";
       else if (isoParts(p.dueDate)) {
@@ -3815,7 +3852,7 @@
         if (st === "soon") soonAmt += amount;
         if (isoParts(p.dueDate) && (!nextDue || p.dueDate < nextDue.dueDate)) nextDue = { pay: p, amount: amount, dueDate: p.dueDate, days: days, status: st };
       }
-      return { pay: p, amount: amount, status: st, days: days };
+      return { pay: p, amount: amount, planned: planned, byVolume: byVolume, status: st, days: days };
     });
     var w = warrantyInfo(job);
     var retPaid = isoParts(c.retentionPaidDate);
@@ -4108,6 +4145,7 @@
       if (!box) return;
       var st = PAY_STATUS[x.status];
       box.innerHTML = '<span class="pill ' + st.pill + '">' + st.label + '</span> <b>' + money(x.amount) + '</b>' +
+        (x.byVolume ? ' <span class="cell-muted">theo khối lượng phiếu ' + escapeHtml(x.pay.request.no || "") + ' (dự kiến ' + money(x.planned) + ')</span>' : "") +
         (x.status !== "paid" && x.days != null ? ' <span class="cell-muted">' + escapeHtml(contractPayDueText(x)) + '</span>' : "");
     });
 
@@ -4118,7 +4156,8 @@
       chk.className = "job-preview soon";
       chk.textContent = "Các đợt cộng lại = " + money(ci.scheduled) + ", phần trả theo đợt = " + money(ci.payable) + " → " +
         (ci.unscheduled > 0 ? "còn thiếu " + money(ci.unscheduled) + " chưa chia đợt." : "đang vượt " + money(-ci.unscheduled) + ".") +
-        (Math.abs(ci.unscheduled) <= ci.pays.length ? " (Chênh vài đồng là do làm tròn từng đợt.)" : "");
+        (Math.abs(ci.unscheduled) <= ci.pays.length ? " (Chênh vài đồng là do làm tròn từng đợt.)" : "") +
+        (ci.pays.some(function (x) { return x.byVolume; }) ? " Có đợt tính theo khối lượng thực hiện nên tổng các đợt thay đổi theo khối lượng thực tế." : "");
     }
 
     var ret = ci.retention, box2 = document.getElementById("ctrRetention");
@@ -4155,7 +4194,7 @@
     out.value = Math.round(Number(out.value) || 0);
     out.retentionPct = (out.retentionPct === "" || out.retentionPct == null) ? CONTRACT_RETENTION_DEFAULT : Math.max(0, Number(out.retentionPct) || 0);
     out.addenda = (out.addenda || []).filter(function (a) { return a.no || a.amount || a.reason; }).map(function (a) { a.amount = Math.round(Number(a.amount) || 0); return a; });
-    out.payments = (out.payments || []).filter(function (p) { return p.label || p.value || p.dueDate; }).map(function (p) {
+    out.payments = (out.payments || []).filter(function (p) { return p.label || p.value || p.dueDate || p.request; }).map(function (p) {
       p.value = p.mode === "percent" ? (Number(p.value) || 0) : Math.round(Number(p.value) || 0);
       return p;
     });
@@ -4763,8 +4802,8 @@
   }
 
   // Số liệu của phiếu cho đợt payId: đã trả trước đó = mọi đợt khác đã có ngày trả.
-  function prqInfo(job, payId) {
-    var ci = contractInfo(job);
+  function prqInfo(job, payId, override) {
+    var ci = contractInfo(job, override);
     if (!ci) return null;
     var me = null, prev = 0;
     ci.pays.forEach(function (x) {
@@ -4830,7 +4869,7 @@
           '<td><div class="cell-title">' + escapeHtml(p ? p.name : "(công trình đã xoá)") + '</div><div class="cell-muted">' + escapeHtml(j.scope || "—") + '</div></td>' +
           '<td>' + escapeHtml(c ? c.name : "(nhà thầu đã xoá)") + '</td>' +
           '<td>' + escapeHtml(prqPayLabel(x.pay)) + '<div class="cell-muted">HĐ ' + escapeHtml(j.contract.no || "—") + '</div></td>' +
-          '<td class="cell-money"><b>' + money(x.amount) + '</b></td>' +
+          '<td class="cell-money"><b>' + money(x.amount) + '</b>' + (x.byVolume ? '<div class="cell-muted">theo khối lượng</div>' : "") + '</td>' +
           '<td>' + (isoParts(x.pay.dueDate) ? fmtDate(x.pay.dueDate) : '<span class="cell-muted">—</span>') +
             '<div style="margin-top:4px;"><span class="pill ' + st.pill + '">' + st.label + '</span></div></td>' +
           '<td>' + reqCell + '</td>' +
@@ -4854,7 +4893,7 @@
     el.style.zIndex = "68";
     el.hidden = true;
     el.innerHTML =
-      '<div class="modal-panel" style="max-width:720px;">' +
+      '<div class="modal-panel" style="max-width:1000px;">' +
         '<div class="modal-head"><h3 id="prqModalTitle">Phiếu đề nghị thanh toán</h3><button class="icon-btn" id="prqModalClose" type="button">' + iconClose() + '</button></div>' +
         '<div class="modal-body">' +
           '<div class="ctr-jobline" id="prqJobLine"></div>' +
@@ -4869,6 +4908,8 @@
             '<div class="field"><label>Ngày gửi</label><input id="prqSent" type="date"></div>' +
             '<div class="field"><label>Ngày duyệt</label><input id="prqApproved" type="date"></div>' +
           '</div>' +
+          '<h4 class="ctr-sec">Khối lượng thực hiện</h4>' +
+          '<div id="prqVolWrap"></div>' +
           '<div class="field" style="margin-bottom:6px;"><label>Ghi chú trên phiếu</label><textarea id="prqNote" rows="2" placeholder="vd. Đã nghiệm thu hạng mục sơn, đề nghị thanh toán theo hợp đồng"></textarea></div>' +
           '<h4 class="ctr-sec">Thông tin nhận tiền <span class="ctr-sec-sub">(lưu vào hồ sơ nhà thầu)</span></h4>' +
           '<div class="form-row">' +
@@ -4892,16 +4933,16 @@
   function closePrqEditor() {
     var el = document.getElementById("prqModalOverlay");
     if (el) el.hidden = true;
-    prqJobId = null; prqPayId = null;
+    prqJobId = null; prqPayId = null; prqVol = null;
     if (view.screen === "contractors") renderContractorsScreen();
   }
 
   function refreshPrqSummary() {
     var job = prqJob(); if (!job) return;
-    var f = prqInfo(job, prqPayId), box = document.getElementById("prqSummary");
+    var f = prqInfo(job, prqPayId, prqOverrideContract(job)), box = document.getElementById("prqSummary");
     if (!f) { box.className = "job-preview soon"; box.textContent = "Không tìm thấy đợt thanh toán (có thể đã bị xoá khỏi hợp đồng)."; return; }
     box.className = "job-preview" + (f.over ? " soon" : " active");
-    box.innerHTML = '<b>Đề nghị đợt này: ' + money(f.amount) + '</b> · đã trả trước đó ' + money(f.prev) + ' · lũy kế ' + money(f.cum) +
+    box.innerHTML = '<b>Đề nghị đợt này: ' + money(f.amount) + '</b>' + (f.x.byVolume ? ' (theo khối lượng; đợt trong hợp đồng dự kiến ' + money(f.x.planned) + ')' : "") + ' · đã trả trước đó ' + money(f.prev) + ' · lũy kế ' + money(f.cum) +
       ' · phần trả theo đợt ' + money(f.ci.payable) + ' → <b>còn phải trả ' + money(f.remaining) + '</b>' +
       (f.over ? ' <b class="late-text">· Lũy kế đang vượt phần trả theo đợt ' + money(-f.remaining) + ' — kiểm tra lại các đợt.</b>' : "");
   }
@@ -4937,6 +4978,8 @@
     document.getElementById("prqAcct").value = bank.accountNo || "";
     document.getElementById("prqAcctName").value = bank.accountName || (c ? c.name : "");
     document.getElementById("prqDelete").style.display = req ? "" : "none";
+    prqVolInit(job, pay);
+    paintPrqVolumes();
     refreshPrqSummary();
 
     document.getElementById("prqStatus").onchange = readPrqStatusDates;
@@ -4947,6 +4990,8 @@
       var d = document.getElementById("prqDate").value;
       if (!isoParts(d)) { toast("Cần nhập ngày lập phiếu."); return; }
       readPrqStatusDates();
+      var vols = prqCollectVolumes();
+      if (prqVol && prqVol.on && !vols.length) { toast('Chưa nhập khối lượng kỳ này — nhập ít nhất 1 dòng, hoặc bỏ tích "Tính số tiền theo khối lượng".'); return; }
       pay2.request = {
         no: document.getElementById("prqNo").value.trim() || prqSuggestNo(d),
         date: d,
@@ -4956,6 +5001,7 @@
         approvedDate: document.getElementById("prqApproved").value,
         note: document.getElementById("prqNote").value.trim()
       };
+      if (vols.length) pay2.request.volumes = vols;
       var ct = contractorById(jb.contractorId);
       if (ct) {
         var b = { bankName: document.getElementById("prqBank").value.trim(), accountNo: document.getElementById("prqAcct").value.trim(), accountName: document.getElementById("prqAcctName").value.trim() };
@@ -4970,13 +5016,191 @@
     document.getElementById("prqSavePrint").onclick = function () { save(true); };
     document.getElementById("prqDelete").onclick = function () {
       var jb = prqJob(), pay2 = jb && prqFind(jb, prqPayId); if (!pay2 || !pay2.request) return;
-      if (!confirm("Xoá phiếu đề nghị thanh toán " + (pay2.request.no || "") + "?\n\nĐợt thanh toán trong hợp đồng vẫn giữ nguyên.")) return;
+      if (!confirm("Xoá phiếu đề nghị thanh toán " + (pay2.request.no || "") + "?\n\nĐợt thanh toán trong hợp đồng vẫn giữ nguyên" + (prqHasVolumes(pay2.request) ? " và quay về số tiền dự kiến của đợt (mất khối lượng thực hiện đã nhập)." : "."))) return;
       delete pay2.request;
       saveState();
       closePrqEditor();
       toast("Đã xoá phiếu đề nghị thanh toán.");
     };
     document.getElementById("prqModalOverlay").hidden = false;
+  }
+
+  /* ---------- Khối lượng thực hiện (theo dòng của hạng mục báo giá đã gắn với hợp đồng) ---------- */
+  // request.volumes = [{ itemId, code, name, unit, price, qty, contractQty }] — khối lượng KỲ NÀY của phiếu.
+  // Tên / đơn giá được CHỤP lại lúc lưu: sửa báo giá sau đó không làm đổi số tiền của phiếu đã gửi.
+  // Có volumes → số tiền của đợt = Σ round(KL × đơn giá) từng dòng, thay cho % / số tiền cố định (xem contractInfo).
+  function contractLinkedSection(c) {
+    if (!c || !c.quoteId || !c.sectionId) return null;
+    var q = state.quotes.filter(function (x) { return x.id === c.quoteId; })[0];
+    if (!q) return null;
+    var idx = -1;
+    q.sections.forEach(function (s, i) { if (s.id === c.sectionId) idx = i; });
+    if (idx < 0) return null;
+    return { quote: q, section: q.sections[idx], letter: toAlpha(idx + 1) };
+  }
+  function prqHasVolumes(req) { return !!(req && Array.isArray(req.volumes) && req.volumes.length); }
+  function prqVolLineAmount(v) { return Math.round(tkRound2(Number(v.qty) || 0) * (Number(v.price) || 0)); }
+  function prqVolumeAmount(req) { return req.volumes.reduce(function (s, v) { return s + prqVolLineAmount(v); }, 0); }
+
+  // KL đã làm ở các phiếu khác của cùng hợp đồng, theo itemId: prev = các đợt ĐỨNG TRƯỚC đợt này trong lịch,
+  // all = mọi đợt khác (để cảnh báo vượt khối lượng hợp đồng).
+  function prqDoneOther(c, payId) {
+    var prev = {}, all = {}, before = true;
+    (c.payments || []).forEach(function (p) {
+      if (p.id === payId) { before = false; return; }
+      if (!prqHasVolumes(p.request)) return;
+      p.request.volumes.forEach(function (v) {
+        var q = tkRound2(Number(v.qty) || 0);
+        all[v.itemId] = tkRound2((all[v.itemId] || 0) + q);
+        if (before) prev[v.itemId] = tkRound2((prev[v.itemId] || 0) + q);
+      });
+    });
+    return { prev: prev, all: all };
+  }
+
+  // Bản nháp khối lượng trong hộp thoại phiếu: { on, map: { itemId: { qty, price } } }
+  var prqVol = null;
+
+  function prqVolInit(job, pay) {
+    var link = contractLinkedSection(job.contract), req = pay.request;
+    prqVol = { on: false, map: {}, snap: {} };
+    if (prqHasVolumes(req)) {
+      prqVol.on = true;
+      req.volumes.forEach(function (v) { prqVol.map[v.itemId] = { qty: tkRound2(Number(v.qty) || 0), price: Math.round(Number(v.price) || 0) }; prqVol.snap[v.itemId] = v; });
+    } else if (link && !req) {
+      prqVol.on = pay.kind !== "advance";   // phiếu mới: đợt tạm ứng không có khối lượng, các đợt khác mặc định tính theo KL
+    }
+  }
+
+  // Dòng hiển thị: các dòng hiện có của hạng mục + dòng đã chụp trong phiếu nhưng nay đã bị xoá khỏi báo giá.
+  function prqVolRows(job) {
+    var link = contractLinkedSection(job.contract), rows = [], seen = {};
+    if (link) link.section.groups.forEach(function (g) {
+      var head = String(g.name || "").trim();
+      g.items.forEach(function (it, i) {
+        seen[it.id] = true;
+        rows.push({ itemId: it.id, group: i === 0 ? head : "", code: it.code || "", name: it.name || it.detail || "(chưa đặt tên)", detail: it.name ? (it.detail || "") : "",
+          unit: it.unit || "", contractQty: tkRound2(Number(it.qty) || 0), price: Math.round(Number(it.price) || 0) });
+      });
+    });
+    Object.keys(prqVol ? prqVol.snap : {}).forEach(function (id) {
+      if (seen[id]) return;
+      var v = prqVol.snap[id];
+      rows.push({ itemId: id, group: "", code: v.code || "", name: (v.name || "—") + " (không còn trong hạng mục đã gắn)", detail: "", unit: v.unit || "", contractQty: tkRound2(Number(v.contractQty) || 0), price: Math.round(Number(v.price) || 0), gone: true });
+    });
+    return rows;
+  }
+
+  function prqCollectVolumes() {
+    if (!prqVol || !prqVol.on) return [];
+    var job = prqJob(); if (!job) return [];
+    var out = [];
+    prqVolRows(job).forEach(function (r) {
+      var d = prqVol.map[r.itemId];
+      if (!d || !(tkRound2(d.qty) > 0)) return;
+      out.push({ itemId: r.itemId, code: r.code, name: r.gone ? (prqVol.snap[r.itemId].name || "") : r.name, unit: r.unit,
+        price: Math.round(d.price != null ? d.price : r.price), qty: tkRound2(d.qty), contractQty: r.contractQty });
+    });
+    return out;
+  }
+
+  // Hợp đồng "giả định" có khối lượng đang nhập → contractInfo tính ra số tiền như khi đã lưu.
+  function prqOverrideContract(job) {
+    var c = cloneJson(job.contract);
+    (c.payments || []).forEach(function (p) {
+      if (p.id !== prqPayId) return;
+      p.request = Object.assign({}, p.request || {}, { volumes: prqCollectVolumes() });
+    });
+    return c;
+  }
+
+  function paintPrqVolumes() {
+    var wrap = document.getElementById("prqVolWrap"), job = prqJob(); if (!wrap || !job) return;
+    var link = contractLinkedSection(job.contract);
+    if (!link && !Object.keys(prqVol.snap).length) {
+      wrap.innerHTML = '<div class="job-preview">Hợp đồng chưa gắn hạng mục báo giá nên chưa nhập được khối lượng — số tiền lấy theo đợt đã lập trong hợp đồng. ' +
+        'Mở hợp đồng, chọn <b>Báo giá của công trình</b> và <b>Hạng mục</b> để dùng chức năng này.</div>';
+      return;
+    }
+    var html = '<label class="prq-vol-toggle"><input type="checkbox" id="prqVolOn"' + (prqVol.on ? " checked" : "") + '><span>Tính số tiền theo <b>khối lượng thực hiện kỳ này</b>' +
+      (link ? ' <span class="cell-muted">(hạng mục ' + link.letter + '. ' + escapeHtml(link.section.name || "") + ')</span>' : "") + '</span></label>';
+    if (prqVol.on) {
+      var done = prqDoneOther(job.contract, prqPayId);
+      var rows = prqVolRows(job);
+      html += '<div class="prq-vol-tools"><button type="button" class="btn btn-sm" id="prqVolFill">Điền hết phần còn lại</button>' +
+        '<button type="button" class="btn btn-sm" id="prqVolClear">Xoá khối lượng kỳ này</button>' +
+        '<span class="cell-muted">Đơn giá lấy từ báo giá, sửa được theo đơn giá hợp đồng.</span></div>' +
+        '<div class="table-scroll prq-vol"><table><thead><tr><th>#</th><th>Nội dung</th><th>ĐVT</th><th class="num">KL hợp đồng</th><th class="num">Kỳ trước</th><th class="num">Kỳ này</th><th class="num">Lũy kế</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th></tr></thead><tbody>' +
+        rows.map(function (r, i) {
+          var d = prqVol.map[r.itemId] || {}, price = d.price != null ? d.price : r.price;
+          var grp = r.group ? '<tr class="prq-vol-grp"><td colspan="9">' + escapeHtml(r.group) + '</td></tr>' : "";
+          return grp + '<tr data-vol-row="' + escapeHtml(r.itemId) + '"' + (r.gone ? ' class="gone"' : "") + '>' +
+            '<td class="cell-muted">' + (i + 1) + '</td>' +
+            '<td><div>' + (r.code ? '<b>' + escapeHtml(r.code) + '</b> · ' : "") + escapeHtml(r.name) + '</div>' + (r.detail ? '<div class="cell-muted prq-vol-detail">' + escapeHtml(r.detail) + '</div>' : "") + '</td>' +
+            '<td>' + escapeHtml(r.unit) + '</td>' +
+            '<td class="num">' + fmtQty(r.contractQty) + '</td>' +
+            '<td class="num">' + fmtQty(done.prev[r.itemId] || 0) + '</td>' +
+            '<td class="num"><input data-vol-qty="' + escapeHtml(r.itemId) + '" inputmode="decimal" value="' + (d.qty ? fmtQty(d.qty) : "") + '" placeholder="0"></td>' +
+            '<td class="num" data-vol-cum="' + escapeHtml(r.itemId) + '"></td>' +
+            '<td class="num"><input class="price" data-vol-price="' + escapeHtml(r.itemId) + '" inputmode="numeric" value="' + moneyPlain(price) + '"></td>' +
+            '<td class="num" data-vol-amt="' + escapeHtml(r.itemId) + '"></td>' +
+          '</tr>';
+        }).join("") +
+        '</tbody><tfoot><tr><td colspan="8">Cộng khối lượng kỳ này</td><td class="num" id="prqVolTotal"></td></tr></tfoot></table></div>';
+    }
+    wrap.innerHTML = html;
+
+    document.getElementById("prqVolOn").onchange = function () { prqVol.on = this.checked; paintPrqVolumes(); refreshPrqSummary(); };
+    if (!prqVol.on) return;
+    var tbl = wrap.querySelector(".prq-vol");
+    tbl.oninput = function (e) {
+      var t = e.target, id = t.dataset.volQty || t.dataset.volPrice; if (!id) return;
+      var d = prqVol.map[id] || (prqVol.map[id] = {});
+      if (t.dataset.volQty) d.qty = tkRound2(parsePctInput(t.value));
+      else d.price = parseMoneyInput(t.value);
+      refreshPrqVolCells(); refreshPrqSummary();
+    };
+    tbl.onchange = function (e) {
+      var t = e.target, id = t.dataset.volQty || t.dataset.volPrice; if (!id) return;
+      var d = prqVol.map[id] || {};
+      if (t.dataset.volQty) t.value = d.qty ? fmtQty(d.qty) : "";
+      else t.value = moneyPlain(d.price || 0);
+    };
+    document.getElementById("prqVolFill").onclick = function () {
+      prqVolRows(job).forEach(function (r) {
+        if (r.gone) return;
+        var left = tkRound2(r.contractQty - (done.all[r.itemId] || 0));
+        var d = prqVol.map[r.itemId] || (prqVol.map[r.itemId] = {});
+        if (left > 0 && !(d.qty > 0)) d.qty = left;
+      });
+      paintPrqVolumes(); refreshPrqSummary();
+    };
+    document.getElementById("prqVolClear").onclick = function () {
+      Object.keys(prqVol.map).forEach(function (id) { prqVol.map[id].qty = 0; });
+      paintPrqVolumes(); refreshPrqSummary();
+    };
+    refreshPrqVolCells();
+  }
+
+  // Cập nhật cột Lũy kế / Thành tiền / Cộng mà không vẽ lại bảng (giữ con trỏ trong ô đang gõ).
+  function refreshPrqVolCells() {
+    var job = prqJob(); if (!job || !prqVol || !prqVol.on) return;
+    var done = prqDoneOther(job.contract, prqPayId), total = 0;
+    prqVolRows(job).forEach(function (r) {
+      var d = prqVol.map[r.itemId] || {}, qty = tkRound2(d.qty || 0), price = d.price != null ? d.price : r.price;
+      var amt = Math.round(qty * price);
+      total += amt;
+      var cum = tkRound2((done.prev[r.itemId] || 0) + qty), over = tkRound2((done.all[r.itemId] || 0) + qty) > r.contractQty;
+      var cumEl = document.querySelector('[data-vol-cum="' + r.itemId + '"]'), amtEl = document.querySelector('[data-vol-amt="' + r.itemId + '"]');
+      if (cumEl) {
+        cumEl.innerHTML = fmtQty(cum) + (r.contractQty > 0 ? '<div class="cell-muted">' + Math.round(cum / r.contractQty * 100) + '%</div>' : "");
+        cumEl.classList.toggle("late-text", over);
+        cumEl.title = over ? "Tổng các kỳ vượt khối lượng hợp đồng" : "";
+      }
+      if (amtEl) amtEl.textContent = qty ? moneyPlain(amt) : "";
+    });
+    var tot = document.getElementById("prqVolTotal");
+    if (tot) tot.textContent = money(total);
   }
 
   /* ---------- Bản in phiếu đề nghị thanh toán ---------- */
@@ -5005,13 +5229,31 @@
       return '<tr><td class="lbl">' + escapeHtml(x[0]) + '</td><td>' + escapeHtml(x[1]) + '</td></tr>';
     }).join("") + '</table>';
 
+    var volHtml = "";
+    if (prqHasVolumes(r)) {
+      var done = prqDoneOther(job.contract, pay.id), link = contractLinkedSection(job.contract), live = {}, vt = 0;
+      if (link) link.section.groups.forEach(function (g) { g.items.forEach(function (it) { live[it.id] = it; }); });
+      var vrows = r.volumes.map(function (v, i) {
+        var amt = prqVolLineAmount(v); vt += amt;
+        var cq = live[v.itemId] ? tkRound2(Number(live[v.itemId].qty) || 0) : tkRound2(Number(v.contractQty) || 0);
+        var pv = done.prev[v.itemId] || 0, cum = tkRound2(pv + tkRound2(Number(v.qty) || 0));
+        return '<tr><td class="c">' + (i + 1) + '</td><td>' + (v.code ? '<b>' + escapeHtml(v.code) + '</b> · ' : "") + escapeHtml(v.name || "") + '</td><td class="c">' + escapeHtml(v.unit || "") + '</td>' +
+          '<td class="num">' + fmtQty(cq) + '</td><td class="num">' + fmtQty(pv) + '</td><td class="num"><b>' + fmtQty(v.qty) + '</b></td><td class="num">' + fmtQty(cum) + '</td>' +
+          '<td class="num">' + moneyPlain(v.price) + '</td><td class="num">' + moneyPlain(amt) + '</td></tr>';
+      }).join("");
+      volHtml = '<div class="print-ack-h">Khối lượng thực hiện kỳ này' + (link ? ' · hạng mục ' + link.letter + '. ' + escapeHtml(link.section.name || "") : "") + '</div>' +
+        '<table class="print-prq-vol"><colgroup><col style="width:4%"><col style="width:28%"><col style="width:5%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:15%"><col style="width:16%"></colgroup>' +
+        '<thead><tr><th>STT</th><th>Nội dung</th><th>ĐVT</th><th>KL hợp đồng</th><th>Lũy kế kỳ trước</th><th>Kỳ này</th><th>Lũy kế</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th></tr></thead>' +
+        '<tbody>' + vrows + '</tbody><tfoot><tr><td colspan="8">Cộng khối lượng kỳ này</td><td class="num">' + moneyPlain(vt) + '</td></tr></tfoot></table>';
+    }
+
     var lines = [["Giá trị hợp đồng gốc", money(ci.value), ""]];
     if (ci.addSum) lines.push(["Phụ lục / phát sinh", moneySigned(ci.addSum), ""]);
     lines.push(["Giá trị hợp đồng hiện hành", money(ci.current), "b"]);
     if (ci.retention.status !== "none") lines.push(["Tiền giữ lại bảo hành (" + pctTxt + ")", "− " + money(ci.retention.amount), ""]);
     lines.push(["Phần thanh toán theo các đợt", money(ci.payable), "b"]);
     lines.push(["Đã thanh toán trước đó", money(f.prev), ""]);
-    lines.push(["Đề nghị thanh toán đợt này", money(f.amount), "hi"]);
+    lines.push(["Đề nghị thanh toán đợt này" + (f.x.byVolume ? " (theo khối lượng thực hiện)" : ""), money(f.amount), "hi"]);
     lines.push(["Lũy kế sau đợt này", money(f.cum), ""]);
     lines.push(["Còn phải thanh toán sau đợt này", money(f.remaining), "b"]);
     var tbl = '<table class="print-prq-tbl">' + lines.map(function (l) {
@@ -5037,9 +5279,9 @@
       '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + (job.scope ? " · " + escapeHtml(job.scope) : "") + '</div>' +
       (r.to ? '<div class="print-ack-text" style="margin-top:10px;">Kính gửi: <b>' + escapeHtml(r.to) + '</b></div>' : "") +
       infoHtml +
+      volHtml +
       '<div class="print-ack-h">Tóm tắt hợp đồng và lũy kế thanh toán</div>' + tbl +
-      '<div class="print-ack-h">Số tiền đề nghị thanh toán</div>' +
-      '<div class="print-prq-amount">' + escapeHtml(money(f.amount)) + '</div>' +
+      '<div class="print-prq-amount"><span>Số tiền đề nghị thanh toán:</span> ' + escapeHtml(money(f.amount)) + '</div>' +
       '<div class="print-ack-text">Bằng chữ: ' + escapeHtml(soThanhChu(f.amount)) + '.</div>' +
       '<div class="print-ack-h">Thông tin nhận tiền</div>' + payeeHtml +
       (r.note ? '<div class="print-ack-h">Ghi chú</div><div class="print-ack-text">' + escapeHtml(r.note) + '</div>' : "") +
