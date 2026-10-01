@@ -609,6 +609,77 @@
   .print-prq-vol tr.grp td { font-weight: 700; background: transparent !important; padding-top: 7px; }
   .print-prq-vol td.note { padding-left: 12px; }
   .print-prq-vol.val { font-size: 11px; }
+  /* Nhật ký thi công */
+  .dv-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin: 14px 0 12px; }
+  .dv-top .dv-prj { flex: 1 1 220px; max-width: 360px; }
+  .dv-today { padding: 12px 18px; font-size: 14px; }
+  .dv-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .dv-day { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--surface); color: var(--ink); font-family: inherit; cursor: pointer; font-size: 12px; }
+  .dv-day i { font-style: normal; font-size: 10.5px; color: var(--accent); }
+  .dv-day.on i { color: var(--ink-mute); }
+  .dv-day.on { border-color: var(--line-orange); }
+  .dv-day.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .dv-actions { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+  .dv-actions .field { max-width: 200px; }
+  .dv-list { display: flex; flex-direction: column; gap: 8px; }
+  .dv-item { text-align: left; font-family: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border-soft); border-left: 3px solid var(--accent); border-radius: 9px; padding: 11px 14px; cursor: pointer; }
+  .dv-item-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+  .dv-item-meta { font-size: 12px; color: var(--ink-mute); margin-top: 3px; }
+  .dv-item-works { font-size: 12.5px; margin-top: 4px; }
+  .dv-rules { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre; overflow-x: auto; margin: 6px 0; }
+  .dv-editor { padding-bottom: 90px; max-width: 860px; }
+  .dv-h1 { font-size: 22px; font-weight: 700; margin: 6px 0 2px; }
+  .dv-weather { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .dv-weather > span { width: 44px; font-size: 13px; color: var(--ink-mute); }
+  .dv-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dv-chip { font-family: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .dv-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .dv-editor input, .dv-editor select, .dv-editor textarea { font-family: inherit; font-size: 14px; padding: 9px 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--paper); color: var(--ink); outline: none; min-width: 0; }
+  .dv-editor input:focus, .dv-editor select:focus, .dv-editor textarea:focus { border-color: var(--accent); }
+  .dv-full { width: 100%; margin-bottom: 4px; }
+  .dv-editor textarea { width: 100%; resize: vertical; }
+  .dv-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .dv-row > input, .dv-row > select { flex: 1 1 0; }
+  .dv-row .dv-num { flex: 0 0 76px; text-align: right; }
+  .dv-row .dv-unit { flex: 0 0 64px; }
+  .dv-row-crew > select { flex: 1.4 1 0; }
+  .dv-card { border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px; margin-bottom: 10px; background: var(--surface); }
+  .dv-card-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .dv-card-head select { flex: 1; }
+  .dv-card textarea { margin-bottom: 8px; }
+  .dv-pg { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink-mute); flex: 0 0 auto; }
+  .dv-pg .dv-num { width: 64px; }
+  .dv-bar { height: 4px; background: var(--border-soft); border-radius: 2px; overflow: hidden; }
+  .dv-bar i { display: block; height: 100%; background: var(--accent); }
+  .dv-empty { font-size: 12.5px; margin-bottom: 8px; }
+  .dv-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .dv-photo { position: relative; display: flex; flex-direction: column; gap: 5px; }
+  .dv-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; cursor: zoom-in; background: var(--surface-2); }
+  .dv-photo input { width: 100%; font-size: 12.5px; padding: 6px 8px; }
+  .dv-photo .dv-rm { position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,.9); }
+  .dv-inrep { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-mute); }
+  .dv-inrep input { width: auto; padding: 0; accent-color: var(--accent); }
+  .dv-photo-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dv-savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border-soft); box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+  .dv-savebar #dvStatus { font-size: 12.5px; color: var(--ink-mute); }
+  @media (max-width: 640px) {
+    .dv-row-work, .dv-row-mat, .dv-row-crew { flex-wrap: wrap; }
+    .dv-row-work > input:first-child, .dv-row-mat > input:first-child, .dv-row-crew > select { flex: 1 1 100%; }
+    .dv-row-mat > input:nth-child(4), .dv-row-crew > input:nth-child(3) { flex: 1 1 0; }
+    .dv-chip { padding: 7px 9px; font-size: 12.5px; }
+    .dv-weather > span { width: 38px; font-size: 12px; }
+    .dv-weather { gap: 6px; }
+    .dv-day span { font-size: 10.5px; }
+    .dv-day i { font-size: 9.5px; }
+  }
+  .print-dv-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+  .print-dv-photos figure { margin: 0; break-inside: avoid; }
+  .print-dv-photos img { width: 100%; height: 46mm; object-fit: cover; border-radius: 3px; display: block; }
+  .print-dv-photos figcaption { font-size: 10.5px; color: #62707A; margin-top: 2px; }
+  .print-dv-job { margin: 4px 0 8px; break-inside: avoid; }
+  .print-dv-jobname { font-weight: 700; font-size: 12.5px; }
+  .print-dv-job ul, .print-dv-notes { margin: 3px 0 0 18px; padding: 0; font-size: 12.5px; }
+  .print-dv-job .muted { color: #62707A; }
   .print-prq-amount { font-size: 20px; font-weight: 700; color: var(--print-orange); margin: 14px 0 2px; font-variant-numeric: tabular-nums; }
   .print-prq-amount span { font-size: 13.5px; color: var(--print-ink); }
   .toolbar-right { flex-wrap: wrap; }
@@ -936,7 +1007,7 @@
   ];
   var PROJECTS = DEFAULT_PROJECTS.slice();
   var CONTRACTORS = [];     // nhà thầu thi công — nhập tay trong app (tab "Danh sách nhà thầu"), KHÔNG qua Google Sheet
-  var APP_BUILD = "2026-10-01-bbkl1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
+  var APP_BUILD = "2026-10-01-nk1"; // ĐỔI mỗi lần triển khai — app so với file trên GitHub để báo "có bản mới"
   var CALENDAR_CFG_DEFAULT = { url: "", token: "", auto: true, lastSig: "", lastFailSig: "", lastAt: 0, lastMsg: "" };
   var CALENDAR_CFG = Object.assign({}, CALENDAR_CFG_DEFAULT); // gửi hạn bảo hành sang Google Calendar (xem mục GỬI HẠN BẢO HÀNH)
   var WARRANTY_ISSUES = []; // nhật ký sự cố bảo hành — mỗi sự cố gắn với 1 gói việc (jobId)
@@ -1217,7 +1288,7 @@
     scheduleCalendarSync(); // nếu danh sách mốc hết bảo hành đã đổi thì gửi lại vào Google Calendar
   }
   // Lỗi lưu phải hiện RÕ và ở lại tới khi xử lý xong (toast 2 giây là quá dễ bỏ lỡ).
-  function showSaveError(msg) {
+  function showSaveError(msg, retry) {
     var el = document.getElementById("saveErrorBanner");
     if (!el) {
       el = document.createElement("div");
@@ -1228,7 +1299,7 @@
     el.innerHTML = '<div><b>Không lưu được lên server.</b> Những gì vừa nhập vẫn còn trên máy này — đừng tải lại trang. ' +
       '<span class="save-error-msg">' + escapeHtml(msg) + '</span></div>' +
       '<div class="save-error-actions"><button type="button" id="btnSaveRetry">Thử lưu lại</button><button type="button" id="btnSaveErrClose">Đóng</button></div>';
-    document.getElementById("btnSaveRetry").onclick = function () { el.querySelector(".save-error-msg").textContent = "Đang thử lại…"; saveState(); };
+    document.getElementById("btnSaveRetry").onclick = function () { el.querySelector(".save-error-msg").textContent = "Đang thử lại…"; (retry || saveState)(); };
     document.getElementById("btnSaveErrClose").onclick = function () { el.remove(); };
   }
   function hideSaveError() {
@@ -1304,6 +1375,7 @@
     else if (view.screen === "print") renderPrintPreview();
     else if (view.screen === "projects") renderProjectsScreen();
     else if (view.screen === "contractors") renderContractorsScreen();
+    else if (view.screen === "diary") renderDiaryScreen();
     else renderList();
     renderNav();
   }
@@ -1830,6 +1902,10 @@
   }
   function exportBackupExcel() {
     if (typeof XLSX === "undefined") { toast("Thư viện Excel chưa tải xong, thử lại sau vài giây."); return; }
+    toast("Đang tải nhật ký thi công để sao lưu…");
+    fetchAllDiary().then(function (list) { exportBackupExcelCore(list || []); });
+  }
+  function exportBackupExcelCore(diaryList) {
     var wb = XLSX.utils.book_new();
     var add = function (name, rows) {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{}]), name);
@@ -1925,16 +2001,29 @@
       (j.contract.addenda || []).forEach(function (a) { acc.push(Object.assign(jobLabel(j), { "Số phụ lục": a.no || "", "Ngày": a.date || "", "Số tiền": Number(a.amount) || 0, "Nội dung": a.reason || "" })); });
       return acc;
     }, []));
+    add("Nhat ky thi cong", diaryList.slice().sort(function (a, b) { return String(a.projectId + a.date).localeCompare(String(b.projectId + b.date)); }).map(function (e) {
+      var pr = projectById(e.projectId);
+      return { "Công trình": pr ? pr.name : e.projectId, "Ngày": e.date || "", "Sáng": (e.weather && e.weather.am) || "", "Chiều": (e.weather && e.weather.pm) || "",
+        "Nhân lực": (e.crews || []).filter(function (c) { return c.contractorId; }).map(function (c) { var ct = contractorById(c.contractorId); return (ct ? ct.name : "?") + ": " + (Number(c.count) || 0); }).join("; "),
+        "Tổng người": (e.crews || []).reduce(function (n, c) { return n + (Number(c.count) || 0); }, 0),
+        "Công việc": (e.works || []).filter(function (w) { return w.text; }).map(function (w) { return w.text + (w.progress !== "" && w.progress != null ? " (" + w.progress + "%)" : ""); }).join("; "),
+        "Vật tư về": (e.materials || []).filter(function (m) { return m.text; }).map(function (m) { return m.text + " " + [m.qty, m.unit].filter(Boolean).join(" "); }).join("; "),
+        "Vướng mắc": e.issues || "", "An toàn": e.safety || "", "Ý kiến chỉ đạo": e.instructions || "", "Số ảnh": (e.photos || []).length };
+    }));
     try {
       XLSX.writeFile(wb, "SaoLuu_BaoGiaNoiThat_" + backupStamp() + ".xlsx");
       toast("Đã tải file Excel sao lưu.");
     } catch (e) { toast("Trình duyệt chặn tải file ở đây — " + e.message); }
   }
   function exportBackupJson() {
+    toast("Đang tải nhật ký thi công để sao lưu…");
+    fetchAllDiary().then(function (list) { exportBackupJsonCore(list || []); });
+  }
+  function exportBackupJsonCore(diaryList) {
     var payload = {
       _app: "bao-gia-noi-that", _backupAt: new Date().toISOString(),
       quotes: state.quotes, priceCatalog: PRICE_CATALOG, projects: PROJECTS, customers: CUSTOMERS,
-      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES
+      contractors: CONTRACTORS, contractorJobs: CONTRACTOR_JOBS, warrantyIssues: WARRANTY_ISSUES, diary: diaryList
     };
     try {
       var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1980,7 +2069,7 @@
     document.getElementById("backupSummary").textContent =
       "Sẽ sao lưu: " + state.quotes.length + " báo giá (" + backupLineRows().length + " dòng chi tiết), " +
       PRICE_CATALOG.length + " mã vật tư, " + PROJECTS.length + " công trình, " + CUSTOMERS.length + " khách hàng, " +
-      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng, " + CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).length + " biên bản nghiệm thu, " + CONTRACTOR_JOBS.reduce(function (n, j) { return n + (j.contract ? (j.contract.payments || []).filter(function (p) { return p.request; }).length : 0); }, 0) + " phiếu đề nghị thanh toán).";
+      CONTRACTORS.length + " nhà thầu (" + CONTRACTOR_JOBS.length + " gói việc, " + WARRANTY_ISSUES.length + " sự cố bảo hành, " + CONTRACTOR_JOBS.filter(function (j) { return j.contract; }).length + " hợp đồng, " + CONTRACTOR_JOBS.filter(function (j) { return j.acceptance && !j.acceptance.draft; }).length + " biên bản nghiệm thu, " + CONTRACTOR_JOBS.reduce(function (n, j) { return n + (j.contract ? (j.contract.payments || []).filter(function (p) { return p.request; }).length : 0); }, 0) + " phiếu đề nghị thanh toán), toàn bộ nhật ký thi công.";
   }
   function closeBackupModal() {
     var el = document.getElementById("backupModalOverlay");
@@ -2157,7 +2246,7 @@
     { group: "Công trình", items: [
       { label: "Danh sách công trình", screen: "projects" },
       { label: "% Tiến độ công trình", soon: true },
-      { label: "Nhật ký thi công", soon: true },
+      { label: "Nhật ký thi công", screen: "diary" },
       { label: "Quản lý giao thoa", soon: true },
       { label: "Danh sách khách hàng", screen: "customers" },
       { label: "Danh sách nhà thầu", screen: "contractors" }
@@ -2198,6 +2287,8 @@
         closeSidebar();
         if (btn.dataset.soon === "1") { toast("Mục này đang được phát triển ở giai đoạn tiếp theo."); return; }
         var screen = btn.dataset.screen;
+        if (view.screen === "diary") diaryFlushSave();   // rời trang nhật ký đang sửa → lưu ngay
+        if (screen === "diary") { if (!(view.screen === "diary" && !view.diaryDate)) openDiary(null, ""); return; }
         if (screen === "quotes" && !isNavScreenActive("quotes")) { view.screen = "list"; renderList(); renderNav(); }
         else if (screen === "projects" && view.screen !== "projects") { view.screen = "projects"; renderProjectsScreen(); renderNav(); }
         else if (screen === "customers" && view.screen !== "customers") { view.screen = "customers"; renderCustomersScreen(); renderNav(); }
@@ -2352,6 +2443,7 @@
           '<td class="cell-muted">' + (used.length ? used.length + " báo giá" : "chưa có báo giá") + '</td>' +
           '<td>' + ctrCell + '</td>' +
           '<td><div class="row-actions">' +
+            '<button class="icon-btn" data-prjdiary="' + escapeHtml(p.id) + '" title="Nhật ký thi công">' + iconCalendar() + '</button>' +
             '<button class="icon-btn danger" data-delprj="' + escapeHtml(p.id) + '" title="Xoá công trình">' + iconTrash() + '</button>' +
           '</div></td>' +
         '</tr>';
@@ -2385,6 +2477,9 @@
       });
     });
 
+    document.querySelectorAll("[data-prjdiary]").forEach(function (b) {
+      b.addEventListener("click", function () { openDiary(b.dataset.prjdiary, ""); });
+    });
     document.querySelectorAll("[data-prjjobs]").forEach(function (b) {
       b.addEventListener("click", function () {
         view.cProject = b.dataset.prjjobs; view.ctab = "projects"; view.cSearch = ""; view.cTrade = "";
@@ -5610,6 +5705,612 @@
     '</table></div>';
   }
 
+  /* ===================== NHẬT KÝ THI CÔNG ===================== */
+  // 1 trang / ngày / công trình. Lưu ở collection RIÊNG `baogia_diary` (KHÔNG nằm trong baogia/main — vài công trình
+  // × 1 năm nhật ký sẽ vượt giới hạn 1MB của tài liệu chính). Id tài liệu = <projectId>_<YYYY-MM-DD>, đọc theo công
+  // trình bằng khoảng id (không cần tạo index). Chỉ lắng nghe khi đang mở màn Nhật ký của công trình đó.
+  //   diary = { projectId, date, weather:{am,pm,note}, crews:[{contractorId,count,note}],
+  //             works:[{jobId,text,location,qty,unit,progress}], materials:[{text,qty,unit,note}],
+  //             issues, safety, instructions, photos:[{url,caption,inReport}], updatedAt, updatedBy }
+  var DIARY_COL = db.collection("baogia_diary");
+  var DIARY_WEATHER = ["Nắng", "Nhiều mây", "Mưa nhỏ", "Mưa to"];
+  var DIARY_MAX_PHOTOS = 20;
+  var DIARY_DOW = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+  var DIARY_DOW_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+  var diaryStore = { projectId: null, entries: {}, unsub: null, loaded: false, err: "" };
+  var diaryDraft = null, diarySaveTimer = null, diaryDirty = false, diaryInflight = 0, diaryLastSaved = 0;
+
+  function diaryPrefix(pid) { return String(pid || "").replace(/\//g, "-") + "_"; }
+  function diaryDocId(pid, date) { return diaryPrefix(pid) + date; }
+  function diaryDow(iso) { var p = isoParts(iso); return p ? new Date(p.y, p.m - 1, p.d).getDay() : 0; }
+  function diaryDayLabel(iso) { return DIARY_DOW[diaryDow(iso)] + ", " + fmtDate(iso); }
+  function diaryRememberProject(pid) { try { localStorage.setItem("mm_diary_project", pid); } catch (e) {} }
+  function diaryDefaultProject() {
+    var pid = view.diaryProject;
+    if (!pid) { try { pid = localStorage.getItem("mm_diary_project") || ""; } catch (e) {} }
+    if (!pid || !projectById(pid)) pid = PROJECTS[0] ? PROJECTS[0].id : "";
+    return pid;
+  }
+
+  function diarySubscribe(pid) {
+    if (diaryStore.projectId === pid && diaryStore.unsub) return;
+    if (diaryStore.unsub) diaryStore.unsub();
+    diaryStore = { projectId: pid, entries: {}, unsub: null, loaded: false, err: "" };
+    if (!pid) { diaryStore.loaded = true; return; }
+    var pre = diaryPrefix(pid);
+    diaryStore.unsub = DIARY_COL.orderBy(firebase.firestore.FieldPath.documentId()).startAt(pre).endAt(pre + "").onSnapshot(function (qs) {
+      var m = {};
+      qs.forEach(function (d) { var x = d.data(); if (x && x.projectId === pid && x.date) m[x.date] = x; });
+      diaryStore.entries = m; diaryStore.loaded = true; diaryStore.err = "";
+      // Trang đang sửa giữ bản nháp của mình; chỉ vẽ lại màn danh sách (và không khi đang gõ).
+      if (view.screen === "diary" && !view.diaryDate && !typingInsideContent()) renderDiaryScreen();
+    }, function (err) {
+      diaryStore.loaded = true;
+      diaryStore.err = "[" + (err.code || "") + "] " + err.message;
+      if (view.screen === "diary") renderDiaryScreen();
+    });
+  }
+
+  // Gói việc của công trình đang thi công vào ngày `date`: đã bắt đầu (hoặc chưa ghi ngày bắt đầu) và chưa nghiệm thu
+  // trước ngày đó.
+  function diaryActiveJobs(pid, date) {
+    return CONTRACTOR_JOBS.filter(function (j) {
+      if (j.projectId !== pid || !contractorById(j.contractorId)) return false;
+      if (isoParts(j.startDate) && j.startDate > date) return false;
+      if (isoParts(j.handoverDate) && j.handoverDate < date) return false;
+      return true;
+    });
+  }
+  function diaryProjectJobs(pid) { return CONTRACTOR_JOBS.filter(function (j) { return j.projectId === pid && contractorById(j.contractorId); }); }
+  function diaryJobLabel(j) { var c = contractorById(j.contractorId); return (j.scope || "—") + " · " + (c ? c.name : "?"); }
+  function diaryEntriesBefore(date) {
+    return Object.keys(diaryStore.entries).filter(function (d) { return d < date; }).sort().reverse().map(function (d) { return diaryStore.entries[d]; });
+  }
+  // % tiến độ ghi gần nhất (trước ngày `date`) của gói việc
+  function diaryLastProgress(jobId, date) {
+    var list = diaryEntriesBefore(date);
+    for (var i = 0; i < list.length; i++) {
+      var w = (list[i].works || []).filter(function (x) { return x.jobId === jobId && x.progress !== "" && x.progress != null; })[0];
+      if (w) return w.progress;
+    }
+    return "";
+  }
+
+  function newDiaryEntry(pid, date) {
+    var jobs = diaryActiveJobs(pid, date), seen = {}, crews = [];
+    jobs.forEach(function (j) { if (!seen[j.contractorId]) { seen[j.contractorId] = true; crews.push({ contractorId: j.contractorId, count: "", note: "" }); } });
+    return {
+      projectId: pid, date: date, weather: { am: "", pm: "", note: "" }, crews: crews,
+      works: jobs.map(function (j) { return { jobId: j.id, text: "", location: "", qty: "", unit: "", progress: diaryLastProgress(j.id, date) }; }),
+      materials: [], issues: "", safety: "", instructions: "", photos: []
+    };
+  }
+
+  /* ---------- Lưu 1 trang ---------- */
+  function diaryScheduleSave() {
+    diaryDirty = true;
+    clearTimeout(diarySaveTimer);
+    diarySaveTimer = setTimeout(diaryFlushSave, 700);
+    paintDiaryStatus();
+  }
+  function diaryFlushSave() {
+    clearTimeout(diarySaveTimer);
+    if (!diaryDraft || !diaryDirty) return Promise.resolve();
+    diaryDirty = false;
+    var d = cloneJson(diaryDraft);
+    d.updatedAt = Date.now();
+    d.updatedBy = (fbAuth.currentUser && fbAuth.currentUser.email) || null;
+    var id = diaryDocId(d.projectId, d.date);
+    diaryStore.entries[d.date] = d;           // hiện ngay ở danh sách, không chờ server
+    diaryInflight++;
+    paintDiaryStatus();
+    return DIARY_COL.doc(id).set(d).then(function () {
+      diaryInflight--; diaryLastSaved = Date.now(); paintDiaryStatus(); hideSaveError();
+    }, function (err) {
+      diaryInflight--; diaryDirty = true; paintDiaryStatus();
+      var msg = (err && err.message) || String(err);
+      if (err && err.code === "permission-denied") msg += " — Rules Firestore chưa cho ghi collection baogia_diary (xem hướng dẫn ở màn Nhật ký).";
+      showSaveError(msg, function () { diaryFlushSave(); });
+    });
+  }
+  function paintDiaryStatus() {
+    var el = document.getElementById("dvStatus"); if (!el) return;
+    if (diaryInflight > 0) el.textContent = "Đang lưu…";
+    else if (diaryDirty) el.textContent = "Chưa lưu…";
+    else if (diaryLastSaved) { var t = new Date(diaryLastSaved); el.textContent = "Đã lưu lúc " + String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0"); }
+    else el.textContent = diaryStore.entries[diaryDraft && diaryDraft.date] ? "Đã lưu" : "Chưa có gì để lưu";
+  }
+
+  /* ---------- Màn Nhật ký: danh sách ngày ---------- */
+  function openDiary(pid, date) {
+    if (pid) { view.diaryProject = pid; diaryRememberProject(pid); }
+    view.screen = "diary";
+    view.diaryDate = date || "";
+    renderDiaryScreen(); renderNav();
+  }
+  function renderDiaryScreen() {
+    var pid = diaryDefaultProject();
+    view.diaryProject = pid;
+    diarySubscribe(pid);
+    if (view.diaryDate) { renderDiaryEditor(); return; }
+    diaryDraft = null;
+    var p = projectById(pid), today = todayIso();
+    var prjOpts = PROJECTS.map(function (x) { return '<option value="' + escapeHtml(x.id) + '"' + (x.id === pid ? " selected" : "") + '>' + escapeHtml(x.name) + '</option>'; }).join("");
+    var dates = Object.keys(diaryStore.entries).sort().reverse();
+    var strip = "";
+    for (var k = 6; k >= 0; k--) {
+      var d = addDaysIso(today, -k), has = !!diaryStore.entries[d];
+      strip += '<button type="button" class="dv-day' + (has ? " on" : "") + (d === today ? " today" : "") + '" data-dv-open="' + d + '"><b>' + DIARY_DOW_SHORT[diaryDow(d)] + '</b><span>' + fmtDate(d).slice(0, 5) + '</span><i>' + (has ? "Đã ghi" : "Chưa ghi") + '</i></button>';
+    }
+    var body;
+    if (!pid) body = '<div class="job-preview">Chưa có công trình nào. Thêm công trình trước (Danh sách công trình hoặc app FF&amp;E).</div>';
+    else if (diaryStore.err) {
+      body = '<div class="job-preview soon"><b>Không đọc được nhật ký:</b> ' + escapeHtml(diaryStore.err) +
+        (/permission/i.test(diaryStore.err) ? '<br>Vào Firebase Console → Firestore → Rules, thêm cho phép người đăng nhập đọc/ghi collection <code>baogia_diary</code>:<pre class="dv-rules">match /baogia_diary/{id} {\n  allow read, write: if request.auth != null;\n}</pre>rồi bấm <b>Publish</b>.' : "") + '</div>';
+    }
+    else if (!diaryStore.loaded) body = '<div class="cell-muted">Đang tải nhật ký…</div>';
+    else if (!dates.length) body = '<div class="job-preview">Công trình này chưa có trang nhật ký nào. Bấm <b>Ghi nhật ký hôm nay</b> để bắt đầu.</div>';
+    else body = '<div class="dv-list">' + dates.map(function (d) {
+      var e = diaryStore.entries[d];
+      var men = (e.crews || []).reduce(function (s, c) { return s + (Number(c.count) || 0); }, 0);
+      var works = (e.works || []).filter(function (w) { return w.text; }).map(function (w) { return w.text; });
+      var wth = [e.weather && e.weather.am ? "Sáng " + e.weather.am.toLowerCase() : "", e.weather && e.weather.pm ? "chiều " + e.weather.pm.toLowerCase() : ""].filter(Boolean).join(", ");
+      return '<button type="button" class="dv-item" data-dv-open="' + d + '">' +
+        '<div class="dv-item-head"><b>' + escapeHtml(diaryDayLabel(d)) + '</b><span class="cell-muted">' + escapeHtml(wth || "—") + '</span></div>' +
+        '<div class="dv-item-meta">' + men + ' người · ' + (e.photos || []).length + ' ảnh' + ((e.materials || []).length ? ' · ' + e.materials.length + ' lượt vật tư' : "") + (e.issues ? ' · <b class="late-text">có vướng mắc</b>' : "") + '</div>' +
+        (works.length ? '<div class="dv-item-works">' + escapeHtml(works.slice(0, 3).join(" · ")) + (works.length > 3 ? " …" : "") + '</div>' : "") +
+      '</button>';
+    }).join("") + '</div>';
+
+    var html =
+      '<div class="page-head">' +
+        '<div><h1>Nhật ký thi công</h1><div class="page-sub">Mỗi ngày 1 trang cho mỗi công trình: thời tiết, nhân lực, công việc, vật tư, ảnh, vướng mắc.</div></div>' +
+      '</div>' +
+      '<div class="dv-top">' +
+        '<div class="field dv-prj"><label>Công trình</label><select id="dvProject">' + prjOpts + '</select></div>' +
+        '<button class="btn btn-primary dv-today" id="dvToday" type="button"' + (pid ? "" : " disabled") + '>' + iconPlus() + ' Ghi nhật ký hôm nay</button>' +
+      '</div>' +
+      (pid ? '<div class="dv-strip">' + strip + '</div>' : "") +
+      (pid ? '<div class="dv-actions">' +
+        '<div class="field"><label>Ghi ngày khác</label><input type="date" id="dvOtherDate" max="' + today + '"></div>' +
+        '<button class="btn" id="dvPrintBook" type="button">' + iconDownload() + ' In sổ nhật ký</button>' +
+        '<button class="btn" id="dvPrintWeek" type="button">' + iconDownload() + ' Báo cáo tuần</button>' +
+      '</div>' : "") +
+      body;
+    document.getElementById("content").innerHTML = html;
+    document.getElementById("crumbCurrent").textContent = "Nhật ký thi công" + (p ? " · " + p.name : "");
+    document.getElementById("dvProject").onchange = function () { view.diaryProject = this.value; diaryRememberProject(this.value); renderDiaryScreen(); };
+    var bt = document.getElementById("dvToday"); if (bt) bt.onclick = function () { openDiary(pid, todayIso()); };
+    document.querySelectorAll("[data-dv-open]").forEach(function (b) { b.onclick = function () { openDiary(pid, b.dataset.dvOpen); }; });
+    var od = document.getElementById("dvOtherDate"); if (od) od.onchange = function () { if (isoParts(od.value)) openDiary(pid, od.value); };
+    var pb = document.getElementById("dvPrintBook"); if (pb) pb.onclick = function () { openDiaryPrintModal("book"); };
+    var pw = document.getElementById("dvPrintWeek"); if (pw) pw.onclick = function () { openDiaryPrintModal("week"); };
+  }
+
+  /* ---------- Trang ghi 1 ngày ---------- */
+  function renderDiaryEditor() {
+    var pid = view.diaryProject, date = view.diaryDate, p = projectById(pid);
+    if (!diaryDraft || diaryDraft.projectId !== pid || diaryDraft.date !== date) {
+      var saved = diaryStore.entries[date];
+      diaryDraft = saved ? cloneJson(saved) : newDiaryEntry(pid, date);
+      ["crews", "works", "materials", "photos"].forEach(function (k) { if (!Array.isArray(diaryDraft[k])) diaryDraft[k] = []; });
+      if (!diaryDraft.weather) diaryDraft.weather = { am: "", pm: "", note: "" };
+      diaryDirty = false; diaryLastSaved = 0;
+    }
+    var d = diaryDraft, scrollY = window.scrollY;
+    var jobs = diaryProjectJobs(pid);
+    var ctrIds = {}; jobs.forEach(function (j) { ctrIds[j.contractorId] = true; });
+    var ctrList = CONTRACTORS.slice().sort(function (a, b) { return (ctrIds[b.id] ? 1 : 0) - (ctrIds[a.id] ? 1 : 0) || String(a.name).localeCompare(String(b.name), "vi"); });
+    var chips = function (slot) {
+      return DIARY_WEATHER.map(function (w) { return '<button type="button" class="dv-chip' + (d.weather[slot] === w ? " on" : "") + '" data-dv-weather="' + slot + '" data-v="' + escapeHtml(w) + '">' + w + '</button>'; }).join("");
+    };
+    var inp = function (list, i, f, val, ph, extra) { return '<input data-dv-l="' + list + '" data-i="' + i + '" data-f="' + f + '" value="' + escapeHtml(val == null ? "" : val) + '" placeholder="' + escapeHtml(ph || "") + '"' + (extra || "") + '>'; };
+    var rm = function (list, i) { return '<button type="button" class="icon-btn danger dv-rm" data-dv-rm="' + list + '" data-i="' + i + '" title="Bỏ dòng">' + iconTrash() + '</button>'; };
+    var men = d.crews.reduce(function (s, c) { return s + (Number(c.count) || 0); }, 0);
+
+    var crewsHtml = d.crews.map(function (c, i) {
+      var opts = '<option value="">— chọn nhà thầu —</option>' + ctrList.map(function (x) { return '<option value="' + escapeHtml(x.id) + '"' + (x.id === c.contractorId ? " selected" : "") + '>' + escapeHtml(x.name) + '</option>'; }).join("");
+      return '<div class="dv-row dv-row-crew">' +
+        '<select data-dv-l="crews" data-i="' + i + '" data-f="contractorId">' + opts + '</select>' +
+        inp("crews", i, "count", c.count, "Số người", ' inputmode="numeric" class="dv-num"') +
+        inp("crews", i, "note", c.note, "Ghi chú (tổ, ca…)") + rm("crews", i) + '</div>';
+    }).join("") || '<div class="cell-muted dv-empty">Chưa có nhà thầu nào.</div>';
+
+    var worksHtml = d.works.map(function (w, i) {
+      var opts = '<option value="">Việc khác (không theo gói việc)</option>' + jobs.map(function (j) { return '<option value="' + escapeHtml(j.id) + '"' + (j.id === w.jobId ? " selected" : "") + '>' + escapeHtml(diaryJobLabel(j)) + '</option>'; }).join("");
+      var pg = Math.max(0, Math.min(100, Number(w.progress) || 0));
+      return '<div class="dv-card">' +
+        '<div class="dv-card-head"><select data-dv-l="works" data-i="' + i + '" data-f="jobId">' + opts + '</select>' + rm("works", i) + '</div>' +
+        '<textarea data-dv-l="works" data-i="' + i + '" data-f="text" rows="2" placeholder="Hôm nay làm gì…">' + escapeHtml(w.text || "") + '</textarea>' +
+        '<div class="dv-row dv-row-work">' +
+          inp("works", i, "location", w.location, "Vị trí (tầng, phòng)") +
+          inp("works", i, "qty", w.qty, "KL", ' inputmode="decimal" class="dv-num"') +
+          inp("works", i, "unit", w.unit, "ĐVT", ' class="dv-unit"') +
+          '<label class="dv-pg"><span>Tiến độ</span>' + inp("works", i, "progress", w.progress, "%", ' inputmode="numeric" class="dv-num"') + '%</label>' +
+        '</div>' +
+        '<div class="dv-bar"><i style="width:' + pg + '%"></i></div>' +
+      '</div>';
+    }).join("") || '<div class="cell-muted dv-empty">Chưa có công việc nào.</div>';
+
+    var matsHtml = d.materials.map(function (m, i) {
+      return '<div class="dv-row dv-row-mat">' + inp("materials", i, "text", m.text, "Vật tư / thiết bị") +
+        inp("materials", i, "qty", m.qty, "SL", ' inputmode="decimal" class="dv-num"') + inp("materials", i, "unit", m.unit, "ĐVT", ' class="dv-unit"') +
+        inp("materials", i, "note", m.note, "Ghi chú (nhà cung cấp…)") + rm("materials", i) + '</div>';
+    }).join("") || '<div class="cell-muted dv-empty">Không có vật tư về.</div>';
+
+    var photosHtml = d.photos.map(function (ph, i) {
+      return '<div class="dv-photo"><img src="' + escapeHtml(ph.url) + '" alt="" data-dv-zoom="' + i + '">' +
+        inp("photos", i, "caption", ph.caption, "Chú thích") +
+        '<label class="dv-inrep"><input type="checkbox" data-dv-l="photos" data-i="' + i + '" data-f="inReport"' + (ph.inReport ? " checked" : "") + '> Báo cáo tuần</label>' +
+        rm("photos", i) + '</div>';
+    }).join("");
+
+    var prevDate = diaryEntriesBefore(date)[0];
+    var html =
+      '<div class="dv-editor">' +
+      '<div class="detail-head"><button class="back-btn" id="dvBack">' + iconBack() + ' Danh sách ngày</button><span style="flex:1"></span>' +
+        (prevDate ? '<button class="btn btn-sm" id="dvCopyPrev" type="button">Chép từ ' + fmtDate(prevDate.date).slice(0, 5) + '</button>' : "") + '</div>' +
+      '<h1 class="dv-h1">' + escapeHtml(diaryDayLabel(date)) + '</h1>' +
+      '<div class="page-sub">' + escapeHtml(p ? p.name : "") + '</div>' +
+
+      '<h4 class="ctr-sec">Thời tiết</h4>' +
+      '<div class="dv-weather"><span>Sáng</span><div class="dv-chips">' + chips("am") + '</div></div>' +
+      '<div class="dv-weather"><span>Chiều</span><div class="dv-chips">' + chips("pm") + '</div></div>' +
+      '<input class="dv-full" data-dv-w="note" value="' + escapeHtml(d.weather.note || "") + '" placeholder="Ghi chú thời tiết (nhiệt độ, mất điện…)">' +
+
+      '<h4 class="ctr-sec">Nhân lực <span class="ctr-sec-sub" id="dvMen">' + men + ' người</span></h4>' + crewsHtml +
+      '<button class="btn btn-sm" type="button" data-dv-add="crews">' + iconPlus() + ' Thêm nhà thầu</button>' +
+
+      '<h4 class="ctr-sec">Công việc thực hiện</h4>' + worksHtml +
+      '<button class="btn btn-sm" type="button" data-dv-add="works">' + iconPlus() + ' Thêm công việc</button>' +
+
+      '<h4 class="ctr-sec">Ảnh hiện trường <span class="ctr-sec-sub">(tối đa ' + DIARY_MAX_PHOTOS + ' ảnh, tự lưu ngay)</span></h4>' +
+      '<div class="dv-photos">' + photosHtml + '</div>' +
+      '<div class="dv-photo-btns">' +
+        '<label class="btn btn-sm" style="cursor:pointer">' + iconPlus() + ' Chụp ảnh<input type="file" id="dvCam" accept="image/*" capture="environment" hidden></label>' +
+        '<label class="btn btn-sm" style="cursor:pointer">' + iconPlus() + ' Chọn ảnh<input type="file" id="dvPick" accept="image/*" multiple hidden></label>' +
+      '</div>' +
+
+      '<h4 class="ctr-sec">Vật tư, thiết bị nhập về</h4>' + matsHtml +
+      '<button class="btn btn-sm" type="button" data-dv-add="materials">' + iconPlus() + ' Thêm vật tư</button>' +
+
+      '<h4 class="ctr-sec">Vướng mắc, sự cố</h4><textarea class="dv-full" data-dv-t="issues" rows="2">' + escapeHtml(d.issues || "") + '</textarea>' +
+      '<h4 class="ctr-sec">An toàn lao động, vệ sinh</h4><textarea class="dv-full" data-dv-t="safety" rows="2">' + escapeHtml(d.safety || "") + '</textarea>' +
+      '<h4 class="ctr-sec">Ý kiến chỉ đạo (Bên A / giám sát)</h4><textarea class="dv-full" data-dv-t="instructions" rows="2">' + escapeHtml(d.instructions || "") + '</textarea>' +
+      (diaryStore.entries[date] ? '<div style="margin-top:18px;"><button class="btn btn-danger-ghost" id="dvDelete" type="button">Xoá trang nhật ký này</button></div>' : "") +
+      '</div>' +
+      '<div class="dv-savebar"><span id="dvStatus"></span><button class="btn btn-primary" id="dvDone" type="button">' + iconCheck() + ' Xong</button></div>';
+
+    document.getElementById("content").innerHTML = html;
+    document.getElementById("crumbCurrent").textContent = "Nhật ký thi công · " + fmtDate(date);
+    window.scrollTo(0, scrollY);
+    paintDiaryStatus();
+    document.querySelectorAll(".dv-editor textarea").forEach(autoResizeTextarea);
+
+    var root = document.querySelector(".dv-editor");
+    root.addEventListener("input", function (e) {
+      var t = e.target;
+      if (t.dataset.dvL) {
+        var row = diaryDraft[t.dataset.dvL][Number(t.dataset.i)]; if (!row) return;
+        row[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value;
+        if (t.dataset.dvL === "crews" && t.dataset.f === "count") {
+          var mm = document.getElementById("dvMen");
+          if (mm) mm.textContent = diaryDraft.crews.reduce(function (s, c) { return s + (Number(c.count) || 0); }, 0) + " người";
+        }
+        if (t.dataset.dvL === "works" && t.dataset.f === "progress") {
+          var bar = t.closest(".dv-card").querySelector(".dv-bar i");
+          if (bar) bar.style.width = Math.max(0, Math.min(100, Number(t.value) || 0)) + "%";
+        }
+      } else if (t.dataset.dvT) diaryDraft[t.dataset.dvT] = t.value;
+      else if (t.dataset.dvW) diaryDraft.weather[t.dataset.dvW] = t.value;
+      else return;
+      if (t.tagName === "TEXTAREA") autoResizeTextarea(t);
+      diaryScheduleSave();
+    });
+    root.addEventListener("change", function (e) {
+      var t = e.target;
+      if (t.tagName === "SELECT" || t.type === "checkbox") {
+        if (!t.dataset.dvL) return;
+        var row = diaryDraft[t.dataset.dvL][Number(t.dataset.i)]; if (!row) return;
+        row[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value;
+        // Đổi gói việc → gợi ý % tiến độ lần ghi gần nhất của gói đó
+        if (t.dataset.dvL === "works" && t.dataset.f === "jobId" && (row.progress === "" || row.progress == null)) { row.progress = diaryLastProgress(row.jobId, date); renderDiaryEditor(); }
+        diaryScheduleSave();
+      }
+    });
+    root.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-dv-weather]");
+      if (b) { var slot = b.dataset.dvWeather; diaryDraft.weather[slot] = diaryDraft.weather[slot] === b.dataset.v ? "" : b.dataset.v; diaryScheduleSave(); renderDiaryEditor(); return; }
+      b = e.target.closest("[data-dv-add]");
+      if (b) {
+        var L = b.dataset.dvAdd;
+        if (L === "crews") diaryDraft.crews.push({ contractorId: "", count: "", note: "" });
+        if (L === "works") diaryDraft.works.push({ jobId: "", text: "", location: "", qty: "", unit: "", progress: "" });
+        if (L === "materials") diaryDraft.materials.push({ text: "", qty: "", unit: "", note: "" });
+        renderDiaryEditor();
+        return;
+      }
+      b = e.target.closest("[data-dv-rm]");
+      if (b) {
+        var L2 = b.dataset.dvRm;
+        if (L2 === "photos" && !confirm("Bỏ ảnh này khỏi nhật ký?")) return;
+        diaryDraft[L2].splice(Number(b.dataset.i), 1);
+        diaryScheduleSave();
+        if (L2 === "photos") diaryFlushSave();
+        renderDiaryEditor();
+        return;
+      }
+      b = e.target.closest("[data-dv-zoom]");
+      if (b) openLightbox(b.getAttribute("src"));
+    });
+    document.getElementById("dvBack").onclick = function () { diaryFlushSave(); view.diaryDate = ""; renderDiaryScreen(); };
+    document.getElementById("dvDone").onclick = function () { diaryFlushSave(); view.diaryDate = ""; renderDiaryScreen(); };
+    var cp = document.getElementById("dvCopyPrev");
+    if (cp) cp.onclick = function () {
+      var src = diaryEntriesBefore(date)[0]; if (!src) return;
+      if ((diaryDraft.works.some(function (w) { return w.text; }) || diaryDraft.crews.some(function (c) { return c.count; })) &&
+          !confirm("Thay nhân lực và công việc của trang này bằng của ngày " + fmtDate(src.date) + "?")) return;
+      diaryDraft.crews = (src.crews || []).map(function (c) { return { contractorId: c.contractorId, count: c.count, note: "" }; });
+      diaryDraft.works = (src.works || []).map(function (w) { return { jobId: w.jobId, text: w.text || "", location: w.location || "", qty: "", unit: w.unit || "", progress: w.progress == null ? "" : w.progress }; });
+      diaryScheduleSave(); renderDiaryEditor();
+      toast("Đã chép nhân lực và công việc từ ngày " + fmtDate(src.date) + " — sửa lại cho đúng hôm nay.");
+    };
+    var del = document.getElementById("dvDelete");
+    if (del) del.onclick = function () {
+      if (!confirm("Xoá trang nhật ký " + diaryDayLabel(date) + "?\n\nẢnh trên Storage không bị xoá.")) return;
+      clearTimeout(diarySaveTimer); diaryDirty = false;
+      DIARY_COL.doc(diaryDocId(pid, date)).delete().then(function () { toast("Đã xoá trang nhật ký."); }, function (err) { toast("Không xoá được: " + err.message); });
+      delete diaryStore.entries[date];
+      diaryDraft = null; view.diaryDate = ""; renderDiaryScreen();
+    };
+    var onFiles = function (input) {
+      var files = Array.prototype.slice.call(input.files || []); input.value = "";
+      if (!files.length) return;
+      var room = DIARY_MAX_PHOTOS - diaryDraft.photos.length;
+      if (room <= 0) { toast("Mỗi ngày tối đa " + DIARY_MAX_PHOTOS + " ảnh."); return; }
+      var batch = files.slice(0, room), key = diaryDraft.projectId + "|" + diaryDraft.date;
+      if (files.length > room) toast("Chỉ nhận thêm " + room + " ảnh (tối đa " + DIARY_MAX_PHOTOS + " / ngày).");
+      toast("Đang tải " + batch.length + " ảnh lên…");
+      batch.reduce(function (chain, f) {
+        return chain.then(function () {
+          return resizeImageFile(f, 1600, 0.8).then(function (blob) {
+            var path = "baogia/diary/" + slug(pid) + "/" + date + "/" + Date.now() + "_" + Math.round(Math.random() * 1e4) + ".jpg";
+            return uploadToStorage(path, blob, "image/jpeg");
+          }).then(function (url) {
+            if (!diaryDraft || diaryDraft.projectId + "|" + diaryDraft.date !== key) return;
+            diaryDraft.photos.push({ url: url, caption: "", inReport: false });
+            diaryDirty = true; diaryFlushSave();          // ảnh đã lên Storage thì ghi ngay vào nhật ký
+            if (view.screen === "diary" && view.diaryDate === date) renderDiaryEditor();
+          });
+        });
+      }, Promise.resolve()).catch(function (err) { toast("Không tải được ảnh: " + err.message); });
+    };
+    document.getElementById("dvCam").onchange = function () { onFiles(this); };
+    document.getElementById("dvPick").onchange = function () { onFiles(this); };
+  }
+
+  /* ---------- Chọn khoảng in ---------- */
+  function mondayOf(iso) { var dw = diaryDow(iso); return addDaysIso(iso, dw === 0 ? -6 : 1 - dw); }
+  function openDiaryPrintModal(kind) {
+    var el = document.getElementById("dvPrintOverlay");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "dvPrintOverlay"; el.className = "modal-overlay"; el.style.zIndex = "68";
+      document.body.appendChild(el);
+      el.addEventListener("click", function (e) { if (e.target === el) el.hidden = true; });
+    }
+    var today = todayIso();
+    var body = kind === "book"
+      ? '<div class="form-row"><div class="field"><label>Từ ngày</label><input type="date" id="dvpFrom" value="' + addDaysIso(today, -6) + '"></div>' +
+        '<div class="field"><label>Đến ngày</label><input type="date" id="dvpTo" value="' + today + '"></div></div>' +
+        '<div class="cell-muted" style="font-size:12px;">Mỗi ngày có nhật ký in 1 trang, có chỗ ký Bên A và đại diện nhà thầu. Ngày không ghi sẽ bỏ qua.</div>'
+      : '<div class="field" style="max-width:240px;"><label>Chọn 1 ngày trong tuần cần báo cáo</label><input type="date" id="dvpWeek" value="' + today + '"></div>' +
+        '<div class="cell-muted" style="font-size:12px;" id="dvpWeekHint"></div>';
+    el.innerHTML = '<div class="modal-panel" style="max-width:480px;">' +
+      '<div class="modal-head"><h3>' + (kind === "book" ? "In sổ nhật ký thi công" : "Báo cáo tuần gửi chủ đầu tư") + '</h3><button class="icon-btn" id="dvpClose" type="button">' + iconClose() + '</button></div>' +
+      '<div class="modal-body">' + body + '</div>' +
+      '<div class="modal-actions"><button class="btn" id="dvpCancel" type="button">Đóng</button><button class="btn btn-primary" id="dvpGo" type="button">' + iconDownload() + ' Xem bản in</button></div></div>';
+    el.hidden = false;
+    var close = function () { el.hidden = true; };
+    document.getElementById("dvpClose").onclick = close;
+    document.getElementById("dvpCancel").onclick = close;
+    var wk = document.getElementById("dvpWeek");
+    var hint = function () { var m = mondayOf(wk.value || today); document.getElementById("dvpWeekHint").textContent = "Tuần từ Thứ 2 " + fmtDate(m) + " đến Chủ nhật " + fmtDate(addDaysIso(m, 6)) + "."; };
+    if (wk) { wk.onchange = hint; hint(); }
+    document.getElementById("dvpGo").onclick = function () {
+      var pid = view.diaryProject;
+      if (kind === "book") {
+        var f = document.getElementById("dvpFrom").value, t = document.getElementById("dvpTo").value;
+        if (!isoParts(f) || !isoParts(t) || f > t) { toast("Chọn khoảng ngày hợp lệ."); return; }
+        var n = Object.keys(diaryStore.entries).filter(function (d) { return d >= f && d <= t; }).length;
+        if (!n) { toast("Không có trang nhật ký nào trong khoảng này."); return; }
+        close();
+        view.printDiary = { kind: "book", pid: pid, from: f, to: t };
+      } else {
+        var m = mondayOf(wk.value || today);
+        close();
+        view.printDiary = { kind: "week", pid: pid, from: m, to: addDaysIso(m, 6) };
+      }
+      view.screen = "print"; view.printKind = "diary";
+      renderPrintPreview();
+    };
+  }
+
+  /* ---------- Bản in ---------- */
+  function diaryPrjCode(p) { return "NKTC-" + String((p && (p.code || p.id)) || "").toUpperCase().slice(0, 16); }
+  function diaryPrintTable(cols, widths, rows, footRow) {
+    return '<table class="print-prq-vol"><colgroup>' + widths.map(function (w) { return '<col style="width:' + w + '%">'; }).join("") + '</colgroup>' +
+      '<thead><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join("") + '</tr></thead><tbody>' + rows.join("") + '</tbody>' +
+      (footRow ? '<tfoot>' + footRow + '</tfoot>' : "") + '</table>';
+  }
+  function diaryJobName(jobId) {
+    var j = CONTRACTOR_JOBS.filter(function (x) { return x.id === jobId; })[0];
+    return j ? diaryJobLabel(j) : (jobId ? "(gói việc đã xoá)" : "Việc khác");
+  }
+  function diaryHasWork(w) { return !!(w.text || w.qty || w.location); }
+
+  function buildDiaryDayPage(e, p, head) {
+    var wth = ["Sáng: " + (e.weather && e.weather.am || "—"), "Chiều: " + (e.weather && e.weather.pm || "—")].join(" · ") + (e.weather && e.weather.note ? " · " + e.weather.note : "");
+    var crews = (e.crews || []).filter(function (c) { return c.contractorId && (Number(c.count) || c.note); });
+    var men = crews.reduce(function (s, c) { return s + (Number(c.count) || 0); }, 0);
+    var crewTbl = crews.length ? diaryPrintTable(["STT", "Nhà thầu", "Số người", "Ghi chú"], [6, 50, 12, 32], crews.map(function (c, i) {
+      var ct = contractorById(c.contractorId);
+      return '<tr><td class="c">' + (i + 1) + '</td><td>' + escapeHtml(ct ? ct.name : "(đã xoá)") + '</td><td class="num">' + (Number(c.count) || 0) + '</td><td class="note">' + escapeHtml(c.note || "") + '</td></tr>';
+    }), '<tr><td colspan="2">Tổng cộng</td><td class="num">' + men + '</td><td></td></tr>') : '<div class="print-ack-text">—</div>';
+    var works = (e.works || []).filter(diaryHasWork);
+    var workTbl = works.length ? diaryPrintTable(["STT", "Gói việc / nhà thầu", "Nội dung công việc", "Vị trí", "KL", "Tiến độ"], [5, 24, 37, 14, 10, 10], works.map(function (w, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td>' + escapeHtml(diaryJobName(w.jobId)) + '</td><td>' + escapeHtml(w.text || "") + '</td><td>' + escapeHtml(w.location || "") + '</td>' +
+        '<td class="num">' + escapeHtml([w.qty, w.unit].filter(Boolean).join(" ")) + '</td><td class="num">' + (w.progress !== "" && w.progress != null ? escapeHtml(String(w.progress)) + "%" : "") + '</td></tr>';
+    })) : '<div class="print-ack-text">—</div>';
+    var mats = (e.materials || []).filter(function (m) { return m.text; });
+    var matTbl = mats.length ? diaryPrintTable(["STT", "Vật tư, thiết bị", "SL", "ĐVT", "Ghi chú"], [6, 46, 10, 10, 28], mats.map(function (m, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td>' + escapeHtml(m.text) + '</td><td class="num">' + escapeHtml(m.qty || "") + '</td><td class="c">' + escapeHtml(m.unit || "") + '</td><td class="note">' + escapeHtml(m.note || "") + '</td></tr>';
+    })) : '<div class="print-ack-text">Không có.</div>';
+    var txt = function (t) { return '<div class="print-ack-text">' + escapeHtml(t || "Không có.") + '</div>'; };
+    var photos = (e.photos || []).length ? '<div class="print-dv-photos">' + e.photos.map(function (ph) {
+      return '<figure><img src="' + escapeHtml(ph.url) + '" alt="">' + (ph.caption ? '<figcaption>' + escapeHtml(ph.caption) + '</figcaption>' : "") + '</figure>';
+    }).join("") + '</div>' : '<div class="print-ack-text">Không có.</div>';
+    return head +
+      '<div class="print-title">Nhật ký thi công</div>' +
+      '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + ' · ' + escapeHtml(diaryDayLabel(e.date)) + '</div>' +
+      '<div class="print-ack-h">Thời tiết</div><div class="print-ack-text">' + escapeHtml(wth) + '</div>' +
+      '<div class="print-ack-h">Nhân lực có mặt</div>' + crewTbl +
+      '<div class="print-ack-h">Công việc thực hiện</div>' + workTbl +
+      '<div class="print-ack-h">Vật tư, thiết bị nhập về</div>' + matTbl +
+      '<div class="print-ack-h">Vướng mắc, sự cố</div>' + txt(e.issues) +
+      '<div class="print-ack-h">An toàn lao động, vệ sinh</div>' + txt(e.safety) +
+      '<div class="print-ack-h">Ý kiến chỉ đạo (Bên A / giám sát)</div>' + txt(e.instructions) +
+      '<div class="print-ack-h">Ảnh hiện trường</div>' + photos +
+      '<div class="print-ack-signs"><div class="sg"><div class="sg-side">Bên A (Indust Design)</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div>' +
+        '<div class="sg"><div class="sg-side">Đại diện nhà thầu thi công</div><div class="sg-sub">(Ký, ghi rõ họ tên)</div></div></div>';
+  }
+
+  function buildDiaryBookHtml(cfg) {
+    var p = projectById(cfg.pid);
+    var dates = Object.keys(diaryStore.entries).filter(function (d) { return d >= cfg.from && d <= cfg.to; }).sort();
+    var meta = { code: diaryPrjCode(p), metaLine: "Từ " + fmtDate(cfg.from) + " đến " + fmtDate(cfg.to) };
+    var head = printRunHeadHtml(meta, "");
+    var pages = dates.map(function (d) { return '<tr><td><section class="print-page">' + buildDiaryDayPage(diaryStore.entries[d], p, head) + '</section></td></tr>'; });
+    return '<div class="print-doc"><table class="print-sheet"><thead><tr><td>' + head + '</td></tr></thead><tbody>' + pages.join("") + '</tbody></table></div>';
+  }
+
+  function buildDiaryWeekHtml(cfg) {
+    var p = projectById(cfg.pid), days = [];
+    for (var i = 0; i < 7; i++) days.push(addDaysIso(cfg.from, i));
+    var entries = days.map(function (d) { return diaryStore.entries[d] || null; });
+    var have = entries.filter(Boolean);
+    var meta = { code: "BCT-" + String((p && (p.code || p.id)) || "").toUpperCase().slice(0, 12), metaLine: "Tuần " + fmtDate(cfg.from) + " – " + fmtDate(cfg.to) };
+    var head = printRunHeadHtml(meta, "");
+
+    // Nhân lực: nhà thầu × ngày
+    var ctrIds = [];
+    have.forEach(function (e) { (e.crews || []).forEach(function (c) { if (c.contractorId && Number(c.count) && ctrIds.indexOf(c.contractorId) === -1) ctrIds.push(c.contractorId); }); });
+    var colTot = days.map(function () { return 0; }), grand = 0;
+    var crewRows = ctrIds.map(function (cid) {
+      var ct = contractorById(cid), sum = 0;
+      var cells = entries.map(function (e, k) {
+        var n = 0;
+        if (e) (e.crews || []).forEach(function (c) { if (c.contractorId === cid) n += Number(c.count) || 0; });
+        sum += n; colTot[k] += n;
+        return '<td class="num">' + (n || "") + '</td>';
+      }).join("");
+      grand += sum;
+      return '<tr><td>' + escapeHtml(ct ? ct.name : "(đã xoá)") + '</td>' + cells + '<td class="num"><b>' + sum + '</b></td></tr>';
+    });
+    var crewTbl = crewRows.length ? diaryPrintTable(["Nhà thầu"].concat(days.map(function (d) { return DIARY_DOW_SHORT[diaryDow(d)] + "<br>" + fmtDate(d).slice(0, 5); })).concat(["Tổng công"]),
+      [30, 8, 8, 8, 8, 8, 8, 8, 14], crewRows,
+      '<tr><td>Tổng</td>' + colTot.map(function (n) { return '<td class="num">' + (n || "") + '</td>'; }).join("") + '<td class="num">' + grand + '</td></tr>') : '<div class="print-ack-text">Không có số liệu nhân lực.</div>';
+
+    // Công việc gộp theo gói việc
+    var byJob = {}, jobOrder = [];
+    have.forEach(function (e) {
+      (e.works || []).filter(diaryHasWork).forEach(function (w) {
+        var k = w.jobId || "_other";
+        if (!byJob[k]) { byJob[k] = []; jobOrder.push(k); }
+        byJob[k].push('<li><b>' + fmtDate(e.date).slice(0, 5) + ':</b> ' + escapeHtml(w.text || "") + (w.location ? ' <span class="muted">(' + escapeHtml(w.location) + ')</span>' : "") + (w.qty ? ' — ' + escapeHtml([w.qty, w.unit].filter(Boolean).join(" ")) : "") + '</li>');
+      });
+    });
+    var worksHtml = jobOrder.length ? jobOrder.map(function (k) {
+      return '<div class="print-dv-job"><div class="print-dv-jobname">' + escapeHtml(diaryJobName(k === "_other" ? "" : k)) + '</div><ul>' + byJob[k].join("") + '</ul></div>';
+    }).join("") : '<div class="print-ack-text">Không có.</div>';
+
+    // Tiến độ đầu tuần → cuối tuần
+    var pgJobs = [];
+    have.forEach(function (e) { (e.works || []).forEach(function (w) { if (w.jobId && w.progress !== "" && w.progress != null && pgJobs.indexOf(w.jobId) === -1) pgJobs.push(w.jobId); }); });
+    var lastIn = function (jobId) {
+      for (var k = have.length - 1; k >= 0; k--) { var w = (have[k].works || []).filter(function (x) { return x.jobId === jobId && x.progress !== "" && x.progress != null; })[0]; if (w) return Number(w.progress) || 0; }
+      return null;
+    };
+    var firstIn = function (jobId) {
+      for (var k = 0; k < have.length; k++) { var w = (have[k].works || []).filter(function (x) { return x.jobId === jobId && x.progress !== "" && x.progress != null; })[0]; if (w) return Number(w.progress) || 0; }
+      return null;
+    };
+    var pgRows = pgJobs.map(function (jid) {
+      var before = diaryLastProgress(jid, cfg.from), end = lastIn(jid);
+      var start = before === "" ? firstIn(jid) : Number(before) || 0;   // chưa có số trước tuần → lấy số ghi đầu tiên trong tuần
+      var inc = end != null ? end - (start || 0) : null;
+      return '<tr><td>' + escapeHtml(diaryJobName(jid)) + '</td><td class="num">' + (start == null ? "—" : start + "%") + '</td><td class="num"><b>' + (end == null ? "—" : end + "%") + '</b></td><td class="num">' + (inc == null ? "" : (inc > 0 ? "+" : "") + inc + "%") + '</td></tr>';
+    });
+    var pgTbl = pgRows.length ? diaryPrintTable(["Gói việc / nhà thầu", "Đầu tuần", "Cuối tuần", "Tăng"], [55, 15, 15, 15], pgRows) : '<div class="print-ack-text">Chưa ghi tiến độ.</div>';
+
+    var matRows = [];
+    have.forEach(function (e) { (e.materials || []).filter(function (m) { return m.text; }).forEach(function (m) {
+      matRows.push('<tr><td class="c">' + fmtDate(e.date).slice(0, 5) + '</td><td>' + escapeHtml(m.text) + '</td><td class="num">' + escapeHtml([m.qty, m.unit].filter(Boolean).join(" ")) + '</td><td class="note">' + escapeHtml(m.note || "") + '</td></tr>');
+    }); });
+    var matTbl = matRows.length ? diaryPrintTable(["Ngày", "Vật tư, thiết bị", "Số lượng", "Ghi chú"], [10, 50, 15, 25], matRows) : '<div class="print-ack-text">Không có.</div>';
+
+    var notes = [];
+    have.forEach(function (e) {
+      if (e.issues) notes.push('<li><b>' + fmtDate(e.date).slice(0, 5) + ' · Vướng mắc:</b> ' + escapeHtml(e.issues) + '</li>');
+      if (e.instructions) notes.push('<li><b>' + fmtDate(e.date).slice(0, 5) + ' · Ý kiến chỉ đạo:</b> ' + escapeHtml(e.instructions) + '</li>');
+    });
+    var notesHtml = notes.length ? '<ul class="print-dv-notes">' + notes.join("") + '</ul>' : '<div class="print-ack-text">Không có.</div>';
+
+    var pics = [];
+    have.forEach(function (e) { (e.photos || []).forEach(function (ph) { if (ph.inReport) pics.push({ ph: ph, d: e.date }); }); });
+    if (!pics.length) have.forEach(function (e) { if ((e.photos || [])[0]) pics.push({ ph: e.photos[0], d: e.date }); });
+    pics = pics.slice(0, 9);
+    var picsHtml = pics.length ? '<div class="print-dv-photos">' + pics.map(function (x) {
+      return '<figure><img src="' + escapeHtml(x.ph.url) + '" alt=""><figcaption>' + fmtDate(x.d).slice(0, 5) + (x.ph.caption ? " · " + escapeHtml(x.ph.caption) : "") + '</figcaption></figure>';
+    }).join("") + '</div>' : '<div class="print-ack-text">Không có ảnh.</div>';
+
+    var nPhotos = have.reduce(function (s, e) { return s + (e.photos || []).length; }, 0);
+    var page = head +
+      '<div class="print-title">Báo cáo tuần</div>' +
+      '<div class="print-subtitle">' + escapeHtml(p ? p.name : "") + ' · Tuần ' + fmtDate(cfg.from) + ' – ' + fmtDate(cfg.to) + '</div>' +
+      (p && p.client ? '<div class="print-ack-text">Kính gửi: <b>Chủ đầu tư ' + escapeHtml(p.client) + '</b></div>' : "") +
+      '<div class="print-ack-text" style="margin-top:6px;">Indust Design báo cáo tình hình thi công trong tuần: <b>' + have.length + '/7</b> ngày có nhật ký, tổng <b>' + grand + '</b> công, <b>' + nPhotos + '</b> ảnh hiện trường.</div>' +
+      '<div class="print-ack-h">Nhân lực theo ngày</div>' + crewTbl +
+      '<div class="print-ack-h">Công việc đã thực hiện</div>' + worksHtml +
+      '<div class="print-ack-h">Tiến độ các gói việc</div>' + pgTbl +
+      '<div class="print-ack-h">Vật tư, thiết bị nhập về</div>' + matTbl +
+      '<div class="print-ack-h">Vướng mắc và ý kiến chỉ đạo</div>' + notesHtml +
+      '<div class="print-ack-h">Ảnh nổi bật</div>' + picsHtml +
+      '<div class="print-ack-signs"><div class="sg"><div class="sg-side">Indust Design</div><div class="sg-sub">(Người lập báo cáo)</div></div></div>';
+    return '<div class="print-doc"><table class="print-sheet"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td><section class="print-page">' + page + '</section></td></tr></tbody></table></div>';
+  }
+
+  // Sao lưu: tải mọi trang nhật ký (mọi công trình) — dùng cho Excel / JSON.
+  function fetchAllDiary() {
+    return DIARY_COL.get().then(function (qs) { var out = []; qs.forEach(function (d) { out.push(d.data()); }); return out; },
+      function (err) { toast("Không tải được nhật ký để sao lưu: " + err.message); return null; });
+  }
+
+  function renderDiaryPrint() {
+    var cfg = view.printDiary;
+    diarySubscribe(cfg.pid);
+    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+    var html =
+      '<div class="print-toolbar no-print">' +
+        '<button class="btn" id="btnBackFromPrint">' + iconBack() + ' Quay lại</button>' +
+        '<div class="print-hint">Bấm <b>' + (isMac ? "Cmd + P" : "Ctrl + P") + '</b> để mở hộp thoại in của trình duyệt, sau đó chọn "Lưu thành PDF" (Save as PDF).</div>' +
+      '</div>' +
+      (cfg.kind === "book" ? buildDiaryBookHtml(cfg) : buildDiaryWeekHtml(cfg));
+    document.getElementById("content").innerHTML = html;
+    document.getElementById("crumbCurrent").textContent = cfg.kind === "book" ? "Xem trước sổ nhật ký" : "Xem trước báo cáo tuần";
+    document.getElementById("btnBackFromPrint").addEventListener("click", function () { view.screen = "diary"; view.diaryDate = ""; renderDiaryScreen(); renderNav(); });
+  }
+
   /* ===================== BÁO CÓ BẢN MỚI ===================== */
   // Trình duyệt (nhất là Safari iPhone) hay giữ bản app cũ nên tính năng mới "không thấy đâu" cho tới khi F5.
   // Vài phút một lần và mỗi lần quay lại tab, app tải lại CHÍNH file của nó (bỏ qua bộ nhớ đệm) và so APP_BUILD.
@@ -7192,7 +7893,7 @@
       '</div>' +
       '<div class="print-doc-meta">' +
         '<div>Số: ' + escapeHtml(q.code || "—") + '</div>' +
-        '<div>' + (dateLabel || "Ngày lập") + ': ' + fmtDate(q.createdDate) + '</div>' +
+        '<div>' + (q.metaLine ? escapeHtml(q.metaLine) : (dateLabel || "Ngày lập") + ': ' + fmtDate(q.createdDate)) + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -7333,6 +8034,7 @@
   }
 
   function renderPrintPreview() {
+    if (view.printKind === "diary" && view.printDiary) { renderDiaryPrint(); return; }
     var isAck = view.printKind === "acceptance", isPrq = view.printKind === "payreq";
     var jobPrint = (isAck || isPrq) ? CONTRACTOR_JOBS.filter(function (x) { return x.id === view.printJobId; })[0] : null;
     var prqPay = isPrq ? prqFind(jobPrint, view.printPayId) : null;
