@@ -181,6 +181,9 @@
   .nav-item.active { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
   .nav-item.disabled { cursor: default; opacity: .62; }
   .nav-item.disabled:hover { background: transparent; color: var(--sidebar-text); }
+  a.nav-item { text-decoration: none; }
+  .nav-item .ext { font-size: 12px; opacity: .55; }
+  .nav-item:hover .ext { opacity: .9; }
   .nav-item .soon {
     font-size: 9.5px;
     padding: 1px 6px;
@@ -2267,6 +2270,10 @@
 
   /* ===================== SIDEBAR NAV ===================== */
 
+  // App sơ đồ nguyên lý tủ điện (repo Spec-FFE, triển khai trên Vercel).
+  // Đang dùng bản xem trước của nhánh; đổi sang link chính sau khi merge PR #1 của Spec-FFE vào main.
+  var SO_DO_NGUYEN_LY_URL = "https://spec-ffe-git-claude-tu-dien-so-do-nguyen-ly-4ynx0d-nam-coi.vercel.app/dien/app/";
+
   var NAV = [
     { group: "Báo giá & Hợp đồng", items: [
       { label: "Báo giá nội thất", screen: "quotes" },
@@ -2284,6 +2291,11 @@
       { label: "Quản lý giao thoa", soon: true },
       { label: "Danh sách khách hàng", screen: "customers" },
       { label: "Danh sách nhà thầu", screen: "contractors" }
+    ]},
+    // Mục có href: app riêng, mở ở tab mới
+    { group: "Thiết kế kỹ thuật", items: [
+      { label: "Sơ đồ nguyên lý tủ điện", href: SO_DO_NGUYEN_LY_URL },
+      { label: "FF&E Specification", href: "ffe-schedule-app.html" }
     ]},
     { group: "Nhân sự & Lương", items: [
       { label: "Bảng lương", soon: true },
@@ -2306,6 +2318,11 @@
     NAV.forEach(function (grp) {
       html += '<div class="nav-group"><div class="nav-group-label">' + escapeHtml(grp.group) + '</div>';
       grp.items.forEach(function (it) {
+        if (it.href) {
+          html += '<a class="nav-item" href="' + escapeHtml(it.href) + '" target="_blank" rel="noopener" title="Mở ở tab mới">' +
+            '<span>' + escapeHtml(it.label) + '</span><span class="ext" aria-hidden="true">↗</span></a>';
+          return;
+        }
         var active = it.screen && isNavScreenActive(it.screen);
         var cls = "nav-item" + (active ? " active" : "") + (it.soon ? " disabled" : "");
         html += '<button class="' + cls + '" data-soon="' + (it.soon ? "1" : "0") + '" data-screen="' + (it.screen || "") + '">' +
@@ -2316,7 +2333,8 @@
       html += '</div>';
     });
     el.innerHTML = html;
-    el.querySelectorAll(".nav-item").forEach(function (btn) {
+    el.querySelectorAll("a.nav-item").forEach(function (a) { a.addEventListener("click", closeSidebar); });
+    el.querySelectorAll("button.nav-item").forEach(function (btn) {
       btn.addEventListener("click", function () {
         closeSidebar();
         if (btn.dataset.soon === "1") { toast("Mục này đang được phát triển ở giai đoạn tiếp theo."); return; }
